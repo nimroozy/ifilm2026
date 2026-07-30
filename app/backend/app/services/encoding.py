@@ -1,4 +1,8 @@
-"""Encoding orchestration. Workers call into this service."""
+"""Encoding orchestration.
+
+IMPORTANT: Current output is placeholder HLS packaging only.
+It does not run real ffmpeg multi-bitrate encoding and is not production-ready.
+"""
 
 from __future__ import annotations
 

@@ -1,4 +1,3 @@
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import FileResponse
@@ -18,7 +17,7 @@ def get_stream_manifest(
     content_id: int,
     db: DbSession,
     _: OptionalSubscriber,
-    episode_id: Optional[int] = Query(None),
+    episode_id: int | None = Query(None),
 ):
     if content_type not in {"movie", "series", "episode"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid content type")

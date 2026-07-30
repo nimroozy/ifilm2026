@@ -1,13 +1,16 @@
-"""HLS packaging helpers and playlist delivery."""
+"""HLS packaging helpers and playlist delivery.
+
+Current packages are placeholders for foundation testing only.
+This is not a production media packaging pipeline.
+"""
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, List
 
 from app.core.config import get_settings
 from app.services.storage import hls_dir
-
 
 DEFAULT_QUALITIES = ["1080p", "720p", "480p", "360p"]
 
@@ -62,7 +65,7 @@ def _resolution(quality: str) -> str:
 def write_placeholder_package(
     content_type: str,
     content_id: int,
-    qualities: List[str] | None = None,
+    qualities: list[str] | None = None,
     episode_id: int | None = None,
 ) -> str:
     root = content_hls_dir(content_type, content_id, episode_id)

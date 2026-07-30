@@ -1,4 +1,3 @@
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import or_
@@ -18,8 +17,8 @@ def _serialize(movie: Movie) -> MovieOut:
 @router.get("/movies", response_model=Page[MovieOut])
 def list_movies(
     db: DbSession,
-    q: Optional[str] = None,
-    genre: Optional[str] = None,
+    q: str | None = None,
+    genre: str | None = None,
     sort: str = Query("newest", pattern="^(newest|rating|popular|title)$"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),

@@ -1,12 +1,17 @@
+"""Explicit development seed helpers.
+
+Never invoked automatically on API startup.
+"""
+
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.runtime import require_admin_bootstrap_password
 from app.core.security import hash_password
 from app.models.admin import AdminRole, AdminUser
 from app.models.cdn import Branch, CDNNode
 from app.models.content import Movie, Series
 from app.models.user import Subscriber
-
 
 SUPER_PERMISSIONS = [
     "dashboard",
@@ -22,8 +27,9 @@ SUPER_PERMISSIONS = [
 ]
 
 
-def bootstrap_data(db: Session) -> None:
+def seed_development_data(db: Session, *, include_demo_catalog: bool = True) -> None:
     settings = get_settings()
+    admin_password = require_admin_bootstrap_password(settings)
 
     role = db.query(AdminRole).filter(AdminRole.name == "Super Admin").one_or_none()
     if role is None:
@@ -37,27 +43,40 @@ def bootstrap_data(db: Session) -> None:
             username=settings.admin_bootstrap_username,
             email=settings.admin_bootstrap_email,
             full_name="iFilm Admin",
-            hashed_password=hash_password(settings.admin_bootstrap_password),
+            hashed_password=hash_password(admin_password),
             role_id=role.id,
             is_active=True,
         )
         db.add(admin)
+    else:
+        admin.hashed_password = hash_password(admin_password)
+        admin.role_id = role.id
+        admin.is_active = True
+        db.add(admin)
 
-    if db.query(Subscriber).filter(Subscriber.username == "mobin_user_001").one_or_none() is None:
-        db.add(
-            Subscriber(
-                username="mobin_user_001",
-                hashed_password=hash_password("password"),
-                name="Ahmad Karimi",
-                branch="Kabul",
-                status="active",
-                package="Premium 50Mbps",
-                expiration="2026-12-31",
-                radius_synced=True,
-            )
-        )
+    # Optional subscriber mirror of the first mock Radius fixture (if configured).
+    fixtures = settings.radius_mock_users or []
+    if fixtures:
+        fixture = fixtures[0]
+        username = fixture.get("username")
+        password = fixture.get("password")
+        if username and password:
+            subscriber = db.query(Subscriber).filter(Subscriber.username == username).one_or_none()
+            if subscriber is None:
+                db.add(
+                    Subscriber(
+                        username=username,
+                        hashed_password=hash_password(password),
+                        name=fixture.get("name") or username,
+                        branch=fixture.get("branch") or "Kabul",
+                        status="active",
+                        package=fixture.get("package") or "Standard",
+                        expiration=fixture.get("expiration") or "",
+                        radius_synced=True,
+                    )
+                )
 
-    if db.query(CDNNode).count() == 0:
+    if include_demo_catalog and db.query(CDNNode).count() == 0:
         db.add_all(
             [
                 CDNNode(
@@ -87,7 +106,7 @@ def bootstrap_data(db: Session) -> None:
             ]
         )
 
-    if db.query(Branch).count() == 0:
+    if include_demo_catalog and db.query(Branch).count() == 0:
         db.add(
             Branch(
                 name="Kabul",
@@ -98,7 +117,7 @@ def bootstrap_data(db: Session) -> None:
             )
         )
 
-    if db.query(Movie).count() == 0:
+    if include_demo_catalog and db.query(Movie).count() == 0:
         db.add(
             Movie(
                 title="The Last Caravan",
@@ -124,7 +143,7 @@ def bootstrap_data(db: Session) -> None:
             )
         )
 
-    if db.query(Series).count() == 0:
+    if include_demo_catalog and db.query(Series).count() == 0:
         db.add(
             Series(
                 title="The Bazaar",

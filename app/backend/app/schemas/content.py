@@ -1,4 +1,3 @@
-from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -12,18 +11,18 @@ class MovieBase(BaseModel):
     duration: int = 0
     rating: float = 0.0
     age_rating: str = "PG"
-    genres: List[str] = Field(default_factory=list)
+    genres: list[str] = Field(default_factory=list)
     country: str = ""
     language: str = ""
     director: str = ""
-    cast: List[str] = Field(default_factory=list)
+    cast: list[str] = Field(default_factory=list)
     description: str = ""
     poster: str = ""
     backdrop: str = ""
-    audio: List[str] = Field(default_factory=list)
-    subtitles: List[str] = Field(default_factory=list)
-    qualities: List[str] = Field(default_factory=list)
-    dubbed: List[str] = Field(default_factory=list)
+    audio: list[str] = Field(default_factory=list)
+    subtitles: list[str] = Field(default_factory=list)
+    qualities: list[str] = Field(default_factory=list)
+    dubbed: list[str] = Field(default_factory=list)
     featured: bool = False
     published: bool = True
 
@@ -33,34 +32,34 @@ class MovieCreate(MovieBase):
 
 
 class MovieUpdate(BaseModel):
-    title: Optional[str] = None
-    original_title: Optional[str] = None
-    year: Optional[int] = None
-    duration: Optional[int] = None
-    rating: Optional[float] = None
-    age_rating: Optional[str] = None
-    genres: Optional[List[str]] = None
-    country: Optional[str] = None
-    language: Optional[str] = None
-    director: Optional[str] = None
-    cast: Optional[List[str]] = None
-    description: Optional[str] = None
-    poster: Optional[str] = None
-    backdrop: Optional[str] = None
-    audio: Optional[List[str]] = None
-    subtitles: Optional[List[str]] = None
-    qualities: Optional[List[str]] = None
-    dubbed: Optional[List[str]] = None
-    featured: Optional[bool] = None
-    published: Optional[bool] = None
-    hls_path: Optional[str] = None
+    title: str | None = None
+    original_title: str | None = None
+    year: int | None = None
+    duration: int | None = None
+    rating: float | None = None
+    age_rating: str | None = None
+    genres: list[str] | None = None
+    country: str | None = None
+    language: str | None = None
+    director: str | None = None
+    cast: list[str] | None = None
+    description: str | None = None
+    poster: str | None = None
+    backdrop: str | None = None
+    audio: list[str] | None = None
+    subtitles: list[str] | None = None
+    qualities: list[str] | None = None
+    dubbed: list[str] | None = None
+    featured: bool | None = None
+    published: bool | None = None
+    hls_path: str | None = None
 
 
 class MovieOut(MovieBase, ORMModel):
     id: int
     views: int = 0
     type: str = "movie"
-    hls_path: Optional[str] = None
+    hls_path: str | None = None
 
 
 class SeriesBase(BaseModel):
@@ -69,7 +68,7 @@ class SeriesBase(BaseModel):
     year: int = 0
     rating: float = 0.0
     age_rating: str = "PG"
-    genres: List[str] = Field(default_factory=list)
+    genres: list[str] = Field(default_factory=list)
     country: str = ""
     language: str = ""
     seasons: int = 1
@@ -78,9 +77,9 @@ class SeriesBase(BaseModel):
     description: str = ""
     poster: str = ""
     backdrop: str = ""
-    audio: List[str] = Field(default_factory=list)
-    subtitles: List[str] = Field(default_factory=list)
-    dubbed: List[str] = Field(default_factory=list)
+    audio: list[str] = Field(default_factory=list)
+    subtitles: list[str] = Field(default_factory=list)
+    dubbed: list[str] = Field(default_factory=list)
     new_episode: bool = False
     published: bool = True
 
@@ -90,25 +89,25 @@ class SeriesCreate(SeriesBase):
 
 
 class SeriesUpdate(BaseModel):
-    title: Optional[str] = None
-    original_title: Optional[str] = None
-    year: Optional[int] = None
-    rating: Optional[float] = None
-    age_rating: Optional[str] = None
-    genres: Optional[List[str]] = None
-    country: Optional[str] = None
-    language: Optional[str] = None
-    seasons: Optional[int] = None
-    episode_count: Optional[int] = None
-    status: Optional[str] = None
-    description: Optional[str] = None
-    poster: Optional[str] = None
-    backdrop: Optional[str] = None
-    audio: Optional[List[str]] = None
-    subtitles: Optional[List[str]] = None
-    dubbed: Optional[List[str]] = None
-    new_episode: Optional[bool] = None
-    published: Optional[bool] = None
+    title: str | None = None
+    original_title: str | None = None
+    year: int | None = None
+    rating: float | None = None
+    age_rating: str | None = None
+    genres: list[str] | None = None
+    country: str | None = None
+    language: str | None = None
+    seasons: int | None = None
+    episode_count: int | None = None
+    status: str | None = None
+    description: str | None = None
+    poster: str | None = None
+    backdrop: str | None = None
+    audio: list[str] | None = None
+    subtitles: list[str] | None = None
+    dubbed: list[str] | None = None
+    new_episode: bool | None = None
+    published: bool | None = None
 
 
 class SeriesOut(SeriesBase, ORMModel):
@@ -166,5 +165,5 @@ class EpisodeOut(ORMModel):
     duration: int
     description: str
     thumbnail: str
-    hls_path: Optional[str] = None
+    hls_path: str | None = None
     published: bool = True

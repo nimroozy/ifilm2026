@@ -1,4 +1,3 @@
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import or_
@@ -14,8 +13,8 @@ router = APIRouter(tags=["series"])
 @router.get("/series", response_model=Page[SeriesOut])
 def list_series(
     db: DbSession,
-    q: Optional[str] = None,
-    genre: Optional[str] = None,
+    q: str | None = None,
+    genre: str | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ):
@@ -39,7 +38,7 @@ def get_series(series_id: int, db: DbSession):
 
 
 @router.get("/series/{series_id}/episodes", response_model=list[EpisodeOut])
-def list_episodes(series_id: int, db: DbSession, season: Optional[int] = None):
+def list_episodes(series_id: int, db: DbSession, season: int | None = None):
     series = db.get(Series, series_id)
     if not series:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Series not found")

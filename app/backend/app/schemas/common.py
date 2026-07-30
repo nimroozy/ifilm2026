@@ -1,4 +1,4 @@
-from typing import Generic, List, Optional, TypeVar
+from typing import Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict
 
@@ -14,7 +14,7 @@ class Message(BaseModel):
 
 
 class Page(BaseModel, Generic[T]):
-    items: List[T]
+    items: list[T]
     total: int
     page: int = 1
     page_size: int = 20

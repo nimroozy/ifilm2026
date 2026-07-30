@@ -1,7 +1,7 @@
-from app.models.admin import AdminUser, AdminRole
+from app.models.admin import AdminRole, AdminUser
+from app.models.cdn import Branch, CDNNode, CDNSyncJob
 from app.models.content import Episode, Movie, Series
 from app.models.media import EncodingJob, UploadJob
-from app.models.cdn import Branch, CDNNode, CDNSyncJob
 from app.models.user import Device, Subscriber, WatchHistory, WatchlistItem
 
 __all__ = [

@@ -1,4 +1,3 @@
-from typing import List, Optional
 
 from pydantic import BaseModel
 
@@ -8,7 +7,7 @@ from app.schemas.common import ORMModel
 class UploadCreate(BaseModel):
     filename: str
     content_type: str = "movie"
-    content_id: Optional[int] = None
+    content_id: int | None = None
     size_bytes: int = 0
 
 
@@ -16,12 +15,12 @@ class UploadOut(ORMModel):
     id: int
     filename: str
     content_type: str
-    content_id: Optional[int]
+    content_id: int | None
     size_bytes: int
-    stored_path: Optional[str]
+    stored_path: str | None
     status: str
     progress: int
-    error: Optional[str]
+    error: str | None
 
 
 class EncodingOut(ORMModel):
@@ -29,23 +28,23 @@ class EncodingOut(ORMModel):
     title: str
     source_file: str
     content_type: str
-    content_id: Optional[int]
+    content_id: int | None
     progress: int
     stage: str
     worker: str
-    qualities: List[str]
+    qualities: list[str]
     status: str
-    output_hls_path: Optional[str]
-    error: Optional[str]
-    eta_seconds: Optional[int]
+    output_hls_path: str | None
+    error: str | None
+    eta_seconds: int | None
 
 
 class StreamManifest(BaseModel):
     content_type: str
     content_id: int
-    episode_id: Optional[int] = None
+    episode_id: int | None = None
     title: str
-    qualities: List[str]
+    qualities: list[str]
     playlist_url: str
-    cdn_node: Optional[str] = None
+    cdn_node: str | None = None
     skip_intro_seconds: int = 0

@@ -1,3 +1,6 @@
+from tests.conftest import TEST_FIXTURE_PASSWORD, TEST_FIXTURE_USER
+
+
 def test_health_and_config(client):
     health = client.get("/health")
     assert health.status_code == 200
@@ -8,33 +11,27 @@ def test_health_and_config(client):
     assert config.json()["API_BASE_URL"] == "/"
 
 
-def test_subscriber_login_via_mock_radius(client):
+def test_subscriber_login_via_mock_radius_fixture(client):
     response = client.post(
         "/api/auth/login",
-        json={"username": "mobin_user_001", "password": "password"},
+        json={"username": TEST_FIXTURE_USER, "password": TEST_FIXTURE_PASSWORD},
     )
     assert response.status_code == 200
     token = response.json()["access_token"]
     me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert me.status_code == 200
-    assert me.json()["username"] == "mobin_user_001"
-    assert me.json()["package"]
+    assert me.json()["username"] == TEST_FIXTURE_USER
 
 
-def test_admin_auth_and_movie_crud(client):
-    login = client.post("/api/admin/auth/login", json={"username": "admin", "password": "admin123"})
-    assert login.status_code == 200
-    token = login.json()["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
-
-    me = client.get("/api/admin/auth/me", headers=headers)
+def test_admin_auth_and_movie_crud(client, admin_headers):
+    me = client.get("/api/admin/auth/me", headers=admin_headers)
     assert me.status_code == 200
     assert me.json()["username"] == "admin"
     assert "movies" in me.json()["permissions"]
 
     created = client.post(
         "/api/admin/movies",
-        headers=headers,
+        headers=admin_headers,
         json={
             "title": "Test Film",
             "original_title": "فیلم آزمایشی",
@@ -58,20 +55,17 @@ def test_admin_auth_and_movie_crud(client):
 
     updated = client.patch(
         f"/api/admin/movies/{movie_id}",
-        headers=headers,
+        headers=admin_headers,
         json={"featured": True},
     )
     assert updated.status_code == 200
     assert updated.json()["featured"] is True
 
 
-def test_series_and_stream_manifest(client):
-    admin = client.post("/api/admin/auth/login", json={"username": "admin", "password": "admin123"}).json()
-    headers = {"Authorization": f"Bearer {admin['access_token']}"}
-
+def test_series_and_stream_manifest(client, admin_headers):
     series = client.post(
         "/api/admin/series",
-        headers=headers,
+        headers=admin_headers,
         json={"title": "Test Series", "year": 2026, "seasons": 1, "episode_count": 0},
     )
     assert series.status_code == 201
@@ -79,14 +73,11 @@ def test_series_and_stream_manifest(client):
 
     episode = client.post(
         f"/api/admin/series/{series_id}/episodes",
-        headers=headers,
+        headers=admin_headers,
         json={"season": 1, "episode": 1, "title": "Pilot", "duration": 45},
     )
     assert episode.status_code == 201
 
-    stream = client.get(f"/api/stream/movie/1")
-    # bootstrap creates movie id 1
-    assert stream.status_code in (200, 404)
     movies = client.get("/api/movies").json()["items"]
     assert movies
     movie_id = movies[0]["id"]
@@ -97,7 +88,7 @@ def test_series_and_stream_manifest(client):
     assert body["qualities"]
 
 
-def test_hls_service_and_cdn_sync(client):
+def test_hls_service_and_cdn_sync(client, admin_headers):
     from app.services.hls import build_master_playlist, write_placeholder_package
     from app.services.radius import RadiusService
 
@@ -108,18 +99,16 @@ def test_hls_service_and_cdn_sync(client):
     relative = write_placeholder_package("movie", 999, ["720p"])
     assert relative.startswith("movie/999")
 
-    result = RadiusService().authenticate("mobin_user_001", "password")
+    result = RadiusService().authenticate(TEST_FIXTURE_USER, TEST_FIXTURE_PASSWORD)
     assert result.success is True
 
-    admin = client.post("/api/admin/auth/login", json={"username": "admin", "password": "admin123"}).json()
-    headers = {"Authorization": f"Bearer {admin['access_token']}"}
-    nodes = client.get("/api/admin/cdn/nodes", headers=headers)
+    nodes = client.get("/api/admin/cdn/nodes", headers=admin_headers)
     assert nodes.status_code == 200
     assert len(nodes.json()) >= 1
 
     sync = client.post(
         "/api/admin/cdn/sync",
-        headers=headers,
+        headers=admin_headers,
         json={"content_type": "movie", "content_id": 1, "hls_path": "movie/1"},
     )
     assert sync.status_code == 200

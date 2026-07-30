@@ -1,4 +1,4 @@
-from typing import Annotated, Optional
+from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -13,7 +13,7 @@ bearer = HTTPBearer(auto_error=False)
 DbSession = Annotated[Session, Depends(get_db)]
 
 
-def _token_payload(credentials: Optional[HTTPAuthorizationCredentials]) -> dict:
+def _token_payload(credentials: HTTPAuthorizationCredentials | None) -> dict:
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     try:
@@ -24,7 +24,7 @@ def _token_payload(credentials: Optional[HTTPAuthorizationCredentials]) -> dict:
 
 def get_current_admin(
     db: DbSession,
-    credentials: Annotated[Optional[HTTPAuthorizationCredentials], Depends(bearer)] = None,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)] = None,
 ) -> AdminUser:
     payload = _token_payload(credentials)
     if payload.get("typ") != "admin":
@@ -37,7 +37,7 @@ def get_current_admin(
 
 def get_current_subscriber(
     db: DbSession,
-    credentials: Annotated[Optional[HTTPAuthorizationCredentials], Depends(bearer)] = None,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)] = None,
 ) -> Subscriber:
     payload = _token_payload(credentials)
     if payload.get("typ") != "subscriber":
@@ -50,8 +50,8 @@ def get_current_subscriber(
 
 def get_optional_subscriber(
     db: DbSession,
-    credentials: Annotated[Optional[HTTPAuthorizationCredentials], Depends(bearer)] = None,
-) -> Optional[Subscriber]:
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)] = None,
+) -> Subscriber | None:
     if credentials is None:
         return None
     try:
@@ -62,4 +62,4 @@ def get_optional_subscriber(
 
 CurrentAdmin = Annotated[AdminUser, Depends(get_current_admin)]
 CurrentSubscriber = Annotated[Subscriber, Depends(get_current_subscriber)]
-OptionalSubscriber = Annotated[Optional[Subscriber], Depends(get_optional_subscriber)]
+OptionalSubscriber = Annotated[Subscriber | None, Depends(get_optional_subscriber)]

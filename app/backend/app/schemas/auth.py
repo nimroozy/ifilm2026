@@ -1,4 +1,3 @@
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -22,7 +21,7 @@ class AdminOut(ORMModel):
     email: str
     full_name: str
     is_active: bool
-    role_name: Optional[str] = None
+    role_name: str | None = None
     permissions: list[str] = Field(default_factory=list)
 
 

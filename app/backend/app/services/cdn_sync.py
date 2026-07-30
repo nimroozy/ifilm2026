@@ -1,9 +1,9 @@
-"""CDN edge synchronization."""
+"""Experimental CDN edge synchronization (not production-ready)."""
 
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 from sqlalchemy.orm import Session
@@ -23,7 +23,7 @@ def enqueue_sync(
     node_id: int | None = None,
 ) -> list[CDNSyncJob]:
     settings = get_settings()
-    if not settings.cdn_sync_enabled:
+    if not settings.enable_cdn_sync:
         return []
 
     query = db.query(CDNNode).filter(CDNNode.status == "online")
@@ -62,11 +62,10 @@ def run_sync_job(db: Session, job: CDNSyncJob) -> CDNSyncJob:
         db.refresh(job)
         return job
 
-    # Foundation behavior: if node has no base_url, mark completed locally.
     if not node.base_url:
         job.status = "completed"
-        job.detail = "Local/no-op sync (node base_url empty)"
-        node.last_sync = datetime.now(timezone.utc)
+        job.detail = "Experimental local/no-op sync (node base_url empty)"
+        node.last_sync = datetime.now(UTC)
         node.cached_titles = (node.cached_titles or 0) + 1
         db.add(node)
         db.add(job)
@@ -86,7 +85,7 @@ def run_sync_job(db: Session, job: CDNSyncJob) -> CDNSyncJob:
             response.raise_for_status()
         job.status = "completed"
         job.detail = f"Synced via HTTP {response.status_code}"
-        node.last_sync = datetime.now(timezone.utc)
+        node.last_sync = datetime.now(UTC)
         node.cached_titles = (node.cached_titles or 0) + 1
         db.add(node)
     except Exception as exc:

@@ -1,23 +1,27 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, status
-from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.deps import CurrentSubscriber, DbSession
-from app.core.security import create_access_token, hash_password, verify_password
+from app.core.features import require_feature
+from app.core.security import create_access_token, hash_password
 from app.models.user import Subscriber
 from app.schemas.auth import LoginRequest, SubscriberOut
 from app.schemas.common import Message, TokenResponse
-from app.services.radius import RadiusService
+from app.services.radius import GENERIC_FAILURE, RadiusService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: DbSession):
-    radius = RadiusService().authenticate(payload.username, payload.password)
+    settings = get_settings()
+    require_feature("enable_radius_login", settings)
+
+    radius = RadiusService(settings).authenticate(payload.username, payload.password)
     if not radius.success:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=radius.message)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=GENERIC_FAILURE)
 
     user = db.query(Subscriber).filter(Subscriber.username == payload.username).one_or_none()
     if user is None:
@@ -33,15 +37,13 @@ def login(payload: LoginRequest, db: DbSession):
         )
         db.add(user)
     else:
-        if user.hashed_password and not verify_password(payload.password, user.hashed_password):
-            # Radius accepted; refresh local hash to keep offline fallback in sync.
-            user.hashed_password = hash_password(payload.password)
+        user.hashed_password = hash_password(payload.password)
         user.branch = radius.branch or user.branch
         user.package = radius.package or user.package
         user.expiration = radius.expiration or user.expiration
         user.status = "active"
         user.radius_synced = True
-        user.last_activity = datetime.now(timezone.utc)
+        user.last_activity = datetime.now(UTC)
         db.add(user)
 
     db.commit()

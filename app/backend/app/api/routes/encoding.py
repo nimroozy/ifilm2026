@@ -1,6 +1,8 @@
 from fastapi import APIRouter, HTTPException, status
 
+from app.core.config import get_settings
 from app.core.deps import CurrentAdmin, DbSession
+from app.core.features import require_feature
 from app.models.media import EncodingJob
 from app.schemas.media import EncodingOut
 from app.services.cdn_sync import enqueue_sync, run_sync_job
@@ -11,11 +13,14 @@ router = APIRouter(prefix="/admin/encoding", tags=["encoding"])
 
 @router.get("/jobs", response_model=list[EncodingOut])
 def list_jobs(db: DbSession, _: CurrentAdmin):
+    require_feature("enable_encoding")
     return db.query(EncodingJob).order_by(EncodingJob.id.desc()).limit(100).all()
 
 
 @router.post("/jobs/{job_id}/retry", response_model=EncodingOut)
 def retry_job(job_id: int, db: DbSession, _: CurrentAdmin):
+    settings = get_settings()
+    require_feature("enable_encoding", settings)
     job = db.get(EncodingJob, job_id)
     if not job:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Encoding job not found")
@@ -25,9 +30,10 @@ def retry_job(job_id: int, db: DbSession, _: CurrentAdmin):
     job.error = None
     db.add(job)
     db.commit()
+    # Placeholder packaging only — not production HLS encoding.
     mark_processing(db, job)
     job = complete_encoding(db, job)
-    if job.output_hls_path and job.content_id:
+    if settings.enable_cdn_sync and job.output_hls_path and job.content_id:
         for sync_job in enqueue_sync(
             db,
             content_type=job.content_type,

@@ -14,7 +14,10 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 settings = get_settings()
-config.set_main_option("sqlalchemy.url", os.getenv("DATABASE_URL", settings.database_url))
+database_url = os.getenv("DATABASE_URL") or settings.database_url
+if not database_url:
+    raise RuntimeError("DATABASE_URL must be set for Alembic")
+config.set_main_option("sqlalchemy.url", database_url)
 
 
 def run_migrations_offline() -> None:

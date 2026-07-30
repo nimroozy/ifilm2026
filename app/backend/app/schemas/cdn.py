@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel
 
@@ -18,7 +17,7 @@ class CDNNodeOut(ORMModel):
     network_usage: int
     current_viewers: int
     cached_titles: int
-    last_sync: Optional[datetime]
+    last_sync: datetime | None
     health_score: int
     cache_hit_rate: float
     branch: str
@@ -37,7 +36,7 @@ class BranchOut(ORMModel):
 
 
 class CDNSyncRequest(BaseModel):
-    node_id: Optional[int] = None
+    node_id: int | None = None
     content_type: str = "movie"
     content_id: int
     hls_path: str
@@ -50,4 +49,4 @@ class CDNSyncOut(ORMModel):
     content_id: int
     hls_path: str
     status: str
-    detail: Optional[str]
+    detail: str | None

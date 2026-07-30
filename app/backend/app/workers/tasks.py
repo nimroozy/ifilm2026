@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from app.db.session import SessionLocal
+from app.db.session import SessionLocal, get_engine
 from app.models.media import EncodingJob, UploadJob
 from app.services.cdn_sync import enqueue_sync, run_sync_job
 from app.services.encoding import complete_encoding, fail_encoding, mark_processing
@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 async def process_encoding_job(ctx, job_id: int):
+    get_engine()
     db = SessionLocal()
     try:
         job = db.get(EncodingJob, job_id)
@@ -43,6 +44,7 @@ async def process_encoding_job(ctx, job_id: int):
 
 
 async def process_cdn_sync_job(ctx, sync_job_id: int):
+    get_engine()
     db = SessionLocal()
     try:
         from app.models.cdn import CDNSyncJob
@@ -57,6 +59,7 @@ async def process_cdn_sync_job(ctx, sync_job_id: int):
 
 
 async def finalize_upload_job(ctx, upload_job_id: int, create_encoding: bool = True):
+    get_engine()
     db = SessionLocal()
     try:
         upload = db.get(UploadJob, upload_job_id)

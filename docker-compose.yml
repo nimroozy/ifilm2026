@@ -2,15 +2,15 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: ifilm
-      POSTGRES_USER: ifilm
-      POSTGRES_PASSWORD: ifilm
+      POSTGRES_DB: ${POSTGRES_DB:-ifilm}
+      POSTGRES_USER: ${POSTGRES_USER:-ifilm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in your environment}
     ports:
       - "5432:5432"
     volumes:
       - ifilm_pg:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ifilm -d ifilm"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -28,16 +28,24 @@ services:
   api:
     build:
       context: ./app/backend
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-    env_file:
-      - ./app/backend/.env.example
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     environment:
-      DATABASE_URL: postgresql+psycopg2://ifilm:ifilm@postgres:5432/ifilm
+      APP_ENV: development
+      DEBUG: "false"
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-ifilm}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ifilm}
       REDIS_URL: redis://redis:6379/0
+      REDIS_REQUIRED: "true"
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in your environment}
       MEDIA_ROOT: /data/media
       HLS_PUBLIC_BASE_URL: http://localhost:8000/media/hls
-      RADIUS_ENABLED: "false"
-      RADIUS_MODE: mock
+      ENABLE_UPLOADS: ${ENABLE_UPLOADS:-false}
+      ENABLE_ENCODING: ${ENABLE_ENCODING:-false}
+      ENABLE_CDN_SYNC: ${ENABLE_CDN_SYNC:-false}
+      ENABLE_RADIUS_LOGIN: ${ENABLE_RADIUS_LOGIN:-false}
+      RADIUS_ENABLED: ${RADIUS_ENABLED:-false}
+      RADIUS_MODE: ${RADIUS_MODE:-live}
+      RADIUS_SECRET: ${RADIUS_SECRET:-}
+      RADIUS_MOCK_USERS: ${RADIUS_MOCK_USERS:-[]}
     volumes:
       - ./app/backend:/app
       - ifilm_media:/data/media
@@ -53,13 +61,19 @@ services:
     build:
       context: ./app/backend
     command: arq app.workers.tasks.WorkerSettings
-    env_file:
-      - ./app/backend/.env.example
     environment:
-      DATABASE_URL: postgresql+psycopg2://ifilm:ifilm@postgres:5432/ifilm
+      APP_ENV: development
+      DEBUG: "false"
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-ifilm}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ifilm}
       REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in your environment}
       MEDIA_ROOT: /data/media
-      RADIUS_MODE: mock
+      ENABLE_UPLOADS: ${ENABLE_UPLOADS:-false}
+      ENABLE_ENCODING: ${ENABLE_ENCODING:-false}
+      ENABLE_CDN_SYNC: ${ENABLE_CDN_SYNC:-false}
+      ENABLE_RADIUS_LOGIN: ${ENABLE_RADIUS_LOGIN:-false}
+      RADIUS_MODE: ${RADIUS_MODE:-live}
+      RADIUS_SECRET: ${RADIUS_SECRET:-}
     volumes:
       - ./app/backend:/app
       - ifilm_media:/data/media
