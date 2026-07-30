@@ -7,7 +7,20 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import Index from '@/pages/Index';
 import { MoviesPage, SeriesPage, MovieDetailsPage, SeriesDetailsPage, PlayerPage, SearchPage } from '@/pages/Browse';
 import { LoginPage, ProfilePage, DevicesPage, WatchlistPage, HistoryPage } from '@/pages/Account';
-import AdminPage from '@/pages/Admin';
+import RequireAdmin from '@/pages/admin/RequireAdmin';
+import AdminLayout from '@/pages/admin/AdminLayout';
+import AdminLoginPage from '@/pages/admin/AdminLoginPage';
+import DashboardPage from '@/pages/admin/DashboardPage';
+import MoviesListPage from '@/pages/admin/MoviesListPage';
+import MovieFormPage from '@/pages/admin/MovieFormPage';
+import SeriesListPage from '@/pages/admin/SeriesListPage';
+import SeriesFormPage from '@/pages/admin/SeriesFormPage';
+import SeasonsPage from '@/pages/admin/SeasonsPage';
+import SeasonFormPage from '@/pages/admin/SeasonFormPage';
+import EpisodesPage from '@/pages/admin/EpisodesPage';
+import EpisodeFormPage from '@/pages/admin/EpisodeFormPage';
+import GenresPage from '@/pages/admin/GenresPage';
+import AdminPlaceholderPage from '@/pages/admin/AdminPlaceholderPage';
 
 const queryClient = new QueryClient();
 
@@ -32,8 +45,34 @@ const AppRoutes = () => (
     <Route path="/history" element={<CustomerRoute><HistoryPage /></CustomerRoute>} />
     {/* Player - fullscreen, no layout */}
     <Route path="/player/:id" element={<PlayerPage />} />
+
     {/* Admin */}
-    <Route path="/admin" element={<AdminPage />} />
+    <Route path="/admin/login" element={<AdminLoginPage />} />
+    <Route
+      path="/admin"
+      element={
+        <RequireAdmin>
+          <AdminLayout />
+        </RequireAdmin>
+      }
+    >
+      <Route index element={<DashboardPage />} />
+      <Route path="movies" element={<MoviesListPage />} />
+      <Route path="movies/new" element={<MovieFormPage />} />
+      <Route path="movies/:id/edit" element={<MovieFormPage />} />
+      <Route path="series" element={<SeriesListPage />} />
+      <Route path="series/new" element={<SeriesFormPage />} />
+      <Route path="series/:id/edit" element={<SeriesFormPage />} />
+      <Route path="series/:id/seasons" element={<SeasonsPage />} />
+      <Route path="seasons/:id/edit" element={<SeasonFormPage />} />
+      <Route path="seasons/:id/episodes" element={<EpisodesPage />} />
+      <Route path="episodes/:id/edit" element={<EpisodeFormPage />} />
+      <Route path="genres" element={<GenresPage />} />
+      <Route path="tools/upload" element={<AdminPlaceholderPage section="upload" />} />
+      <Route path="tools/encoding" element={<AdminPlaceholderPage section="encoding" />} />
+      <Route path="tools/cdn" element={<AdminPlaceholderPage section="cdn" />} />
+      <Route path="tools/users" element={<AdminPlaceholderPage section="users" />} />
+    </Route>
   </Routes>
 );
 
