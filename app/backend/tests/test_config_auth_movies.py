@@ -40,11 +40,12 @@ def test_admin_auth_and_movie_crud(client, admin_headers):
         json={
             "title": "Test Film",
             "original_title": "فیلم آزمایشی",
-            "year": 2026,
-            "duration": 100,
-            "rating": 8.0,
-            "genres": ["Drama"],
+            "release_year": 2026,
+            "duration_minutes": 100,
+            "imdb_rating": 8.0,
+            "genre_ids": [],
             "description": "Test",
+            "status": "published",
         },
     )
     assert created.status_code == 201
@@ -52,7 +53,9 @@ def test_admin_auth_and_movie_crud(client, admin_headers):
 
     listed = client.get("/api/movies")
     assert listed.status_code == 200
-    assert listed.json()["total"] >= 1
+    body = listed.json()
+    assert body["meta"]["total"] >= 1
+    assert isinstance(body["data"], list)
 
     detail = client.get(f"/api/movies/{movie_id}")
     assert detail.status_code == 200
@@ -61,29 +64,39 @@ def test_admin_auth_and_movie_crud(client, admin_headers):
     updated = client.patch(
         f"/api/admin/movies/{movie_id}",
         headers=admin_headers,
-        json={"featured": True},
+        json={"is_featured": True},
     )
     assert updated.status_code == 200
     assert updated.json()["featured"] is True
+    assert updated.json()["is_featured"] is True
 
 
-def test_series_and_stream_manifest(client, admin_headers):
+def test_series_seasons_episodes_and_stream(client, admin_headers):
     series = client.post(
         "/api/admin/series",
         headers=admin_headers,
-        json={"title": "Test Series", "year": 2026, "seasons": 1, "episode_count": 0},
+        json={"title": "Test Series", "release_year": 2026, "status": "published"},
     )
     assert series.status_code == 201
     series_id = series.json()["id"]
 
-    episode = client.post(
-        f"/api/admin/series/{series_id}/episodes",
+    season = client.post(
+        f"/api/admin/series/{series_id}/seasons",
         headers=admin_headers,
-        json={"season": 1, "episode": 1, "title": "Pilot", "duration": 45},
+        json={"season_number": 1, "title": "Season 1", "status": "published"},
+    )
+    assert season.status_code == 201
+    season_id = season.json()["id"]
+
+    episode = client.post(
+        f"/api/admin/seasons/{season_id}/episodes",
+        headers=admin_headers,
+        json={"episode_number": 1, "title": "Pilot", "duration_minutes": 45, "status": "published"},
     )
     assert episode.status_code == 201
+    assert episode.json()["series_id"] == series_id
 
-    movies = client.get("/api/movies").json()["items"]
+    movies = client.get("/api/movies").json()["data"]
     assert movies
     movie_id = movies[0]["id"]
     stream = client.get(f"/api/stream/movie/{movie_id}")
@@ -91,6 +104,30 @@ def test_series_and_stream_manifest(client, admin_headers):
     body = stream.json()
     assert body["playlist_url"].endswith("master.m3u8")
     assert body["qualities"]
+
+
+def test_genres_and_dashboard_stats(client, admin_headers):
+    created = client.post(
+        "/api/admin/genres",
+        headers=admin_headers,
+        json={"name": "Thriller", "description": "Suspense"},
+    )
+    assert created.status_code == 201
+    genre_id = created.json()["id"]
+
+    genres = client.get("/api/genres")
+    assert genres.status_code == 200
+    assert genres.json()["meta"]["total"] >= 1
+
+    stats = client.get("/api/admin/dashboard/stats", headers=admin_headers)
+    assert stats.status_code == 200
+    payload = stats.json()
+    assert payload["total_genres"] >= 1
+    assert "total_movies" in payload
+
+    # Genre with no assignments can be deleted
+    deleted = client.delete(f"/api/admin/genres/{genre_id}", headers=admin_headers)
+    assert deleted.status_code == 200
 
 
 def test_hls_service_and_cdn_sync(client, admin_headers):

@@ -1,169 +1,591 @@
+from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from datetime import date, datetime
+from typing import Any
 
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from app.models.enums import CATALOG_STATUSES
 from app.schemas.common import ORMModel
+from app.utils.slug import normalize_slug
 
 
-class MovieBase(BaseModel):
+def _trim(value: Any) -> Any:
+    if isinstance(value, str):
+        return value.strip()
+    return value
+
+
+class GenreBase(BaseModel):
+    name: str
+    slug: str | None = None
+    description: str = ""
+
+    @field_validator("name", "description", mode="before")
+    @classmethod
+    def trim_text(cls, value: Any) -> Any:
+        return _trim(value)
+
+    @field_validator("name")
+    @classmethod
+    def name_required(cls, value: str) -> str:
+        if not value:
+            raise ValueError("name must not be empty")
+        return value
+
+
+class GenreCreate(GenreBase):
+    pass
+
+
+class GenreUpdate(BaseModel):
+    name: str | None = None
+    slug: str | None = None
+    description: str | None = None
+
+    @field_validator("name", "slug", "description", mode="before")
+    @classmethod
+    def trim_text(cls, value: Any) -> Any:
+        return _trim(value)
+
+
+class GenreOut(ORMModel):
+    id: int
+    name: str
+    slug: str
+    description: str
+    movie_count: int = 0
+    series_count: int = 0
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class CatalogFieldsMixin(BaseModel):
     title: str
     original_title: str = ""
-    year: int = 0
-    duration: int = 0
-    rating: float = 0.0
-    age_rating: str = "PG"
-    genres: list[str] = Field(default_factory=list)
-    country: str = ""
+    slug: str | None = None
+    description: str = ""
+    short_description: str = ""
+    release_year: int | None = None
+    age_rating: str = ""
     language: str = ""
+    country: str = ""
+    imdb_id: str | None = None
+    imdb_rating: float | None = None
+    poster_url: str = ""
+    backdrop_url: str = ""
+    trailer_url: str = ""
+    status: str = "draft"
+    is_featured: bool = False
+    is_trending: bool = False
+    genre_ids: list[int] = Field(default_factory=list)
+
+    @field_validator(
+        "title",
+        "original_title",
+        "slug",
+        "description",
+        "short_description",
+        "age_rating",
+        "language",
+        "country",
+        "imdb_id",
+        "poster_url",
+        "backdrop_url",
+        "trailer_url",
+        mode="before",
+    )
+    @classmethod
+    def trim_text(cls, value: Any) -> Any:
+        return _trim(value)
+
+    @field_validator("title")
+    @classmethod
+    def title_required(cls, value: str) -> str:
+        if not value:
+            raise ValueError("title must not be empty")
+        return value
+
+    @field_validator("release_year")
+    @classmethod
+    def validate_year(cls, value: int | None) -> int | None:
+        if value is None:
+            return value
+        if value < 1888 or value > 2100:
+            raise ValueError("release_year must be between 1888 and 2100")
+        return value
+
+    @field_validator("imdb_rating")
+    @classmethod
+    def validate_rating(cls, value: float | None) -> float | None:
+        if value is None:
+            return value
+        if value < 0 or value > 10:
+            raise ValueError("imdb_rating must be between 0 and 10")
+        return value
+
+    @field_validator("poster_url", "backdrop_url", "trailer_url")
+    @classmethod
+    def validate_url(cls, value: str) -> str:
+        if not value:
+            return value
+        if not (value.startswith("http://") or value.startswith("https://")):
+            raise ValueError("URL must start with http:// or https://")
+        return value
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str) -> str:
+        if value not in CATALOG_STATUSES:
+            raise ValueError(f"status must be one of {', '.join(CATALOG_STATUSES)}")
+        return value
+
+    @field_validator("slug")
+    @classmethod
+    def validate_slug(cls, value: str | None) -> str | None:
+        if value is None or value == "":
+            return None
+        normalized = normalize_slug(value)
+        if not normalized:
+            raise ValueError("slug is invalid")
+        return normalized
+
+    @field_validator("imdb_id")
+    @classmethod
+    def validate_imdb_id(cls, value: str | None) -> str | None:
+        if value is None or value == "":
+            return None
+        return value
+
+
+class MovieCreate(CatalogFieldsMixin):
+    release_date: date | None = None
+    duration_minutes: int | None = Field(default=None, ge=0, le=10000)
     director: str = ""
     cast: list[str] = Field(default_factory=list)
-    description: str = ""
-    poster: str = ""
-    backdrop: str = ""
     audio: list[str] = Field(default_factory=list)
     subtitles: list[str] = Field(default_factory=list)
     qualities: list[str] = Field(default_factory=list)
     dubbed: list[str] = Field(default_factory=list)
-    featured: bool = False
-    published: bool = True
-
-
-class MovieCreate(MovieBase):
-    pass
 
 
 class MovieUpdate(BaseModel):
     title: str | None = None
     original_title: str | None = None
-    year: int | None = None
-    duration: int | None = None
-    rating: float | None = None
+    slug: str | None = None
+    description: str | None = None
+    short_description: str | None = None
+    release_year: int | None = None
+    release_date: date | None = None
+    duration_minutes: int | None = Field(default=None, ge=0, le=10000)
     age_rating: str | None = None
-    genres: list[str] | None = None
-    country: str | None = None
     language: str | None = None
+    country: str | None = None
+    imdb_id: str | None = None
+    imdb_rating: float | None = None
+    poster_url: str | None = None
+    backdrop_url: str | None = None
+    trailer_url: str | None = None
+    status: str | None = None
+    is_featured: bool | None = None
+    is_trending: bool | None = None
+    genre_ids: list[int] | None = None
     director: str | None = None
     cast: list[str] | None = None
-    description: str | None = None
-    poster: str | None = None
-    backdrop: str | None = None
     audio: list[str] | None = None
     subtitles: list[str] | None = None
     qualities: list[str] | None = None
     dubbed: list[str] | None = None
-    featured: bool | None = None
-    published: bool | None = None
     hls_path: str | None = None
 
+    @field_validator(
+        "title",
+        "original_title",
+        "slug",
+        "description",
+        "short_description",
+        "age_rating",
+        "language",
+        "country",
+        "imdb_id",
+        "poster_url",
+        "backdrop_url",
+        "trailer_url",
+        "director",
+        mode="before",
+    )
+    @classmethod
+    def trim_text(cls, value: Any) -> Any:
+        return _trim(value)
 
-class MovieOut(MovieBase, ORMModel):
+    @field_validator("title")
+    @classmethod
+    def title_not_empty(cls, value: str | None) -> str | None:
+        if value is not None and not value:
+            raise ValueError("title must not be empty")
+        return value
+
+    @field_validator("release_year")
+    @classmethod
+    def validate_year(cls, value: int | None) -> int | None:
+        if value is None:
+            return value
+        if value < 1888 or value > 2100:
+            raise ValueError("release_year must be between 1888 and 2100")
+        return value
+
+    @field_validator("imdb_rating")
+    @classmethod
+    def validate_rating(cls, value: float | None) -> float | None:
+        if value is None:
+            return value
+        if value < 0 or value > 10:
+            raise ValueError("imdb_rating must be between 0 and 10")
+        return value
+
+    @field_validator("poster_url", "backdrop_url", "trailer_url")
+    @classmethod
+    def validate_url(cls, value: str | None) -> str | None:
+        if value is None or value == "":
+            return value
+        if not (value.startswith("http://") or value.startswith("https://")):
+            raise ValueError("URL must start with http:// or https://")
+        return value
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        if value not in CATALOG_STATUSES:
+            raise ValueError(f"status must be one of {', '.join(CATALOG_STATUSES)}")
+        return value
+
+    @field_validator("slug")
+    @classmethod
+    def validate_slug(cls, value: str | None) -> str | None:
+        if value is None or value == "":
+            return value
+        normalized = normalize_slug(value)
+        if not normalized:
+            raise ValueError("slug is invalid")
+        return normalized
+
+
+class MovieOut(ORMModel):
     id: int
+    title: str
+    original_title: str = ""
+    slug: str
+    description: str = ""
+    short_description: str = ""
+    release_year: int | None = None
+    release_date: date | None = None
+    duration_minutes: int | None = None
+    age_rating: str = ""
+    language: str = ""
+    country: str = ""
+    imdb_id: str | None = None
+    imdb_rating: float | None = None
+    poster_url: str = ""
+    backdrop_url: str = ""
+    trailer_url: str = ""
+    status: str
+    is_featured: bool = False
+    is_trending: bool = False
+    published_at: datetime | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    genres: list[GenreOut] = Field(default_factory=list)
+    director: str = ""
+    cast: list[str] = Field(default_factory=list)
+    audio: list[str] = Field(default_factory=list)
+    subtitles: list[str] = Field(default_factory=list)
+    qualities: list[str] = Field(default_factory=list)
+    dubbed: list[str] = Field(default_factory=list)
     views: int = 0
     type: str = "movie"
     hls_path: str | None = None
 
-
-class SeriesBase(BaseModel):
-    title: str
-    original_title: str = ""
-    year: int = 0
-    rating: float = 0.0
-    age_rating: str = "PG"
-    genres: list[str] = Field(default_factory=list)
-    country: str = ""
-    language: str = ""
-    seasons: int = 1
-    episode_count: int = 0
-    status: str = "Ongoing"
-    description: str = ""
+    # Compatibility aliases for existing frontend mappers
+    year: int | None = None
+    duration: int | None = None
+    rating: float | None = None
     poster: str = ""
     backdrop: str = ""
+    featured: bool = False
+
+
+class SeriesCreate(CatalogFieldsMixin):
+    end_year: int | None = None
+    airing_status: str = "Ongoing"
     audio: list[str] = Field(default_factory=list)
     subtitles: list[str] = Field(default_factory=list)
     dubbed: list[str] = Field(default_factory=list)
     new_episode: bool = False
-    published: bool = True
+
+    @field_validator("end_year")
+    @classmethod
+    def validate_end_year(cls, value: int | None) -> int | None:
+        if value is None:
+            return value
+        if value < 1888 or value > 2100:
+            raise ValueError("end_year must be between 1888 and 2100")
+        return value
 
 
-class SeriesCreate(SeriesBase):
-    pass
-
-
-class SeriesUpdate(BaseModel):
-    title: str | None = None
-    original_title: str | None = None
-    year: int | None = None
-    rating: float | None = None
-    age_rating: str | None = None
-    genres: list[str] | None = None
-    country: str | None = None
-    language: str | None = None
-    seasons: int | None = None
-    episode_count: int | None = None
-    status: str | None = None
-    description: str | None = None
-    poster: str | None = None
-    backdrop: str | None = None
-    audio: list[str] | None = None
-    subtitles: list[str] | None = None
-    dubbed: list[str] | None = None
+class SeriesUpdate(MovieUpdate):
+    end_year: int | None = None
+    airing_status: str | None = None
     new_episode: bool | None = None
-    published: bool | None = None
 
 
-class SeriesOut(SeriesBase, ORMModel):
+class SeriesOut(ORMModel):
     id: int
+    title: str
+    original_title: str = ""
+    slug: str
+    description: str = ""
+    short_description: str = ""
+    release_year: int | None = None
+    end_year: int | None = None
+    age_rating: str = ""
+    language: str = ""
+    country: str = ""
+    imdb_id: str | None = None
+    imdb_rating: float | None = None
+    poster_url: str = ""
+    backdrop_url: str = ""
+    trailer_url: str = ""
+    status: str
+    airing_status: str = "Ongoing"
+    is_featured: bool = False
+    is_trending: bool = False
+    published_at: datetime | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    genres: list[GenreOut] = Field(default_factory=list)
+    season_count: int = 0
+    episode_count: int = 0
+    audio: list[str] = Field(default_factory=list)
+    subtitles: list[str] = Field(default_factory=list)
+    dubbed: list[str] = Field(default_factory=list)
+    new_episode: bool = False
     views: int = 0
     type: str = "series"
-    episodes: int = 0
 
+    year: int | None = None
+    seasons: int = 0
+    episodes: int = 0
+    rating: float | None = None
+    poster: str = ""
+    backdrop: str = ""
+    featured: bool = False
+
+
+class SeasonCreate(BaseModel):
+    season_number: int = Field(ge=0, le=500)
+    title: str = ""
+    description: str = ""
+    poster_url: str = ""
+    release_year: int | None = None
+    status: str = "draft"
+
+    @field_validator("title", "description", "poster_url", mode="before")
     @classmethod
-    def from_orm_series(cls, obj):
-        data = {
-            "id": obj.id,
-            "title": obj.title,
-            "original_title": obj.original_title,
-            "year": obj.year,
-            "rating": obj.rating,
-            "age_rating": obj.age_rating,
-            "genres": obj.genres or [],
-            "country": obj.country,
-            "language": obj.language,
-            "seasons": obj.seasons,
-            "episode_count": obj.episode_count,
-            "episodes": obj.episode_count,
-            "status": obj.status,
-            "description": obj.description,
-            "poster": obj.poster,
-            "backdrop": obj.backdrop,
-            "audio": obj.audio or [],
-            "subtitles": obj.subtitles or [],
-            "dubbed": obj.dubbed or [],
-            "new_episode": obj.new_episode,
-            "published": obj.published,
-            "views": obj.views,
-            "type": "series",
-        }
-        return cls.model_validate(data)
+    def trim_text(cls, value: Any) -> Any:
+        return _trim(value)
+
+    @field_validator("poster_url")
+    @classmethod
+    def validate_url(cls, value: str) -> str:
+        if not value:
+            return value
+        if not (value.startswith("http://") or value.startswith("https://")):
+            raise ValueError("URL must start with http:// or https://")
+        return value
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str) -> str:
+        if value not in CATALOG_STATUSES:
+            raise ValueError(f"status must be one of {', '.join(CATALOG_STATUSES)}")
+        return value
+
+    @field_validator("release_year")
+    @classmethod
+    def validate_year(cls, value: int | None) -> int | None:
+        if value is None:
+            return value
+        if value < 1888 or value > 2100:
+            raise ValueError("release_year must be between 1888 and 2100")
+        return value
+
+
+class SeasonUpdate(BaseModel):
+    season_number: int | None = Field(default=None, ge=0, le=500)
+    title: str | None = None
+    description: str | None = None
+    poster_url: str | None = None
+    release_year: int | None = None
+    status: str | None = None
+
+    @field_validator("title", "description", "poster_url", mode="before")
+    @classmethod
+    def trim_text(cls, value: Any) -> Any:
+        return _trim(value)
+
+    @field_validator("poster_url")
+    @classmethod
+    def validate_url(cls, value: str | None) -> str | None:
+        if value is None or value == "":
+            return value
+        if not (value.startswith("http://") or value.startswith("https://")):
+            raise ValueError("URL must start with http:// or https://")
+        return value
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        if value not in CATALOG_STATUSES:
+            raise ValueError(f"status must be one of {', '.join(CATALOG_STATUSES)}")
+        return value
+
+
+class SeasonOut(ORMModel):
+    id: int
+    series_id: int
+    season_number: int
+    title: str = ""
+    description: str = ""
+    poster_url: str = ""
+    release_year: int | None = None
+    status: str
+    episode_count: int = 0
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 class EpisodeCreate(BaseModel):
-    season: int = 1
-    episode: int = 1
+    episode_number: int = Field(ge=0, le=10000)
     title: str
-    duration: int = 0
     description: str = ""
-    thumbnail: str = ""
-    published: bool = True
+    duration_minutes: int | None = Field(default=None, ge=0, le=10000)
+    release_date: date | None = None
+    thumbnail_url: str = ""
+    status: str = "draft"
+
+    @field_validator("title", "description", "thumbnail_url", mode="before")
+    @classmethod
+    def trim_text(cls, value: Any) -> Any:
+        return _trim(value)
+
+    @field_validator("title")
+    @classmethod
+    def title_required(cls, value: str) -> str:
+        if not value:
+            raise ValueError("title must not be empty")
+        return value
+
+    @field_validator("thumbnail_url")
+    @classmethod
+    def validate_url(cls, value: str) -> str:
+        if not value:
+            return value
+        if not (value.startswith("http://") or value.startswith("https://")):
+            raise ValueError("URL must start with http:// or https://")
+        return value
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str) -> str:
+        if value not in CATALOG_STATUSES:
+            raise ValueError(f"status must be one of {', '.join(CATALOG_STATUSES)}")
+        return value
+
+
+class EpisodeUpdate(BaseModel):
+    episode_number: int | None = Field(default=None, ge=0, le=10000)
+    title: str | None = None
+    description: str | None = None
+    duration_minutes: int | None = Field(default=None, ge=0, le=10000)
+    release_date: date | None = None
+    thumbnail_url: str | None = None
+    status: str | None = None
+
+    @field_validator("title", "description", "thumbnail_url", mode="before")
+    @classmethod
+    def trim_text(cls, value: Any) -> Any:
+        return _trim(value)
+
+    @field_validator("title")
+    @classmethod
+    def title_not_empty(cls, value: str | None) -> str | None:
+        if value is not None and not value:
+            raise ValueError("title must not be empty")
+        return value
+
+    @field_validator("thumbnail_url")
+    @classmethod
+    def validate_url(cls, value: str | None) -> str | None:
+        if value is None or value == "":
+            return value
+        if not (value.startswith("http://") or value.startswith("https://")):
+            raise ValueError("URL must start with http:// or https://")
+        return value
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        if value not in CATALOG_STATUSES:
+            raise ValueError(f"status must be one of {', '.join(CATALOG_STATUSES)}")
+        return value
 
 
 class EpisodeOut(ORMModel):
     id: int
+    season_id: int
     series_id: int
-    season: int
-    episode: int
+    episode_number: int
     title: str
-    duration: int
-    description: str
-    thumbnail: str
+    description: str = ""
+    duration_minutes: int | None = None
+    release_date: date | None = None
+    thumbnail_url: str = ""
+    status: str
+    published_at: datetime | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
     hls_path: str | None = None
-    published: bool = True
+
+    # Compatibility
+    season: int | None = None
+    episode: int | None = None
+    duration: int | None = None
+    thumbnail: str = ""
+
+
+class DashboardStats(BaseModel):
+    total_movies: int
+    published_movies: int
+    draft_movies: int
+    total_series: int
+    published_series: int
+    total_seasons: int
+    total_episodes: int
+    total_genres: int
+
+
+class PublishAction(BaseModel):
+    detail: str = "ok"
+    status: str
+
+
+# Ensure model rebuild for forward refs if needed
+GenreOut.model_rebuild()
+MovieOut.model_rebuild()
+SeriesOut.model_rebuild()

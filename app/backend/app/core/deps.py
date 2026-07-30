@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
@@ -33,6 +34,39 @@ def get_current_admin(
     if not admin or not admin.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin not found")
     return admin
+
+
+def admin_permissions(admin: AdminUser) -> set[str]:
+    role = admin.role
+    if role is None:
+        return set()
+    return set(role.permissions or [])
+
+
+def require_permissions(*required: str) -> Callable[..., AdminUser]:
+    """Require any matching permission, including legacy coarse keys from PR #2."""
+
+    aliases = {
+        "movies.read": {"movies", "movies.read", "movies.manage"},
+        "movies.manage": {"movies", "movies.manage"},
+        "series.read": {"series", "series.read", "series.manage"},
+        "series.manage": {"series", "series.manage"},
+        "genres.read": {"genres", "genres.read", "genres.manage", "movies", "series"},
+        "genres.manage": {"genres", "genres.manage"},
+    }
+
+    def _dependency(admin: Annotated[AdminUser, Depends(get_current_admin)]) -> AdminUser:
+        perms = admin_permissions(admin)
+        for need in required:
+            allowed = aliases.get(need, {need})
+            if perms.isdisjoint(allowed):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Insufficient permissions",
+                )
+        return admin
+
+    return _dependency
 
 
 def get_current_subscriber(
