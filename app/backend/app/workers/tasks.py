@@ -93,14 +93,18 @@ async def finalize_upload_job(ctx, upload_job_id: int, create_encoding: bool = T
         db.close()
 
 
+def _worker_queue_name() -> str:
+    from app.core.config import get_settings
+
+    return get_settings().worker_queue_name
+
+
 class WorkerSettings:
     functions = [process_encoding_job, process_cdn_sync_job, finalize_upload_job]
     redis_settings = redis_settings()
-    queue_name = None  # resolved at runtime via settings if needed
+    # arq requires queue_name at import/startup; None makes the worker exit immediately
+    queue_name = _worker_queue_name()
 
     @classmethod
     def on_startup(cls, ctx):
-        from app.core.config import get_settings
-
-        cls.queue_name = get_settings().worker_queue_name
         ctx["worker_name"] = "arq-worker"

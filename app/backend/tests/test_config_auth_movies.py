@@ -6,6 +6,11 @@ def test_health_and_config(client):
     assert health.status_code == 200
     assert health.json()["status"] == "ok"
 
+    assert client.get("/api/health").status_code == 200
+    assert client.get("/api/health/live").status_code == 200
+    ready = client.get("/api/health/ready")
+    assert ready.status_code in (200, 503)
+
     config = client.get("/api/config")
     assert config.status_code == 200
     assert config.json()["API_BASE_URL"] == "/"
