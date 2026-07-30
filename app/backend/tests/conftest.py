@@ -68,6 +68,10 @@ from app.main import create_app
 
 @pytest.fixture()
 def client():
+    # Isolate from integration tests that may swap engines or cached settings.
+    get_settings.cache_clear()
+    session_module.reset_engine_for_tests(engine)
+
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     db = TestingSessionLocal()

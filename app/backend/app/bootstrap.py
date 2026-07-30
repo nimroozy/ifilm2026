@@ -58,6 +58,12 @@ def seed_development_data(db: Session, *, include_demo_catalog: bool = True) -> 
         role = AdminRole(name="Super Admin", permissions=SUPER_PERMISSIONS)
         db.add(role)
         db.flush()
+    else:
+        # Merge newly introduced catalog permissions into existing Super Admin roles.
+        merged = list(dict.fromkeys([*(role.permissions or []), *SUPER_PERMISSIONS]))
+        role.permissions = merged
+        db.add(role)
+        db.flush()
 
     admin = db.query(AdminUser).filter(AdminUser.username == settings.admin_bootstrap_username).one_or_none()
     if admin is None:

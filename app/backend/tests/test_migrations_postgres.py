@@ -73,12 +73,14 @@ def test_postgresql_migration_succeeds(postgres_url):
     engine.dispose()
     assert "movies" in tables
     assert "admin_users" in tables
+    assert "genres" in tables
+    assert "seasons" in tables
     assert "alembic_version" in tables
 
 
 def test_postgresql_migration_from_previous_revision(postgres_url):
     _reset_schema(postgres_url)
-    first = _run_alembic(postgres_url, "upgrade", "001_initial")
+    first = _run_alembic(postgres_url, "upgrade", "002_movies_title_idx")
     assert first.returncode == 0, first.stdout + first.stderr
     second = _run_alembic(postgres_url, "upgrade", "head")
     assert second.returncode == 0, second.stdout + second.stderr
@@ -91,7 +93,18 @@ def test_postgresql_migration_from_previous_revision(postgres_url):
                 text("SELECT indexname FROM pg_indexes WHERE schemaname='public'")
             )
         }
+        columns = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_schema='public' AND table_name='movies'"
+                )
+            )
+        }
         version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
     engine.dispose()
     assert "ix_movies_title" in indexes
-    assert version == "002_movies_title_idx"
+    assert "slug" in columns
+    assert "status" in columns
+    assert version == "003_catalog_admin"
