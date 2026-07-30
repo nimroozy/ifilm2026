@@ -1,0 +1,15 @@
+from fastapi import APIRouter
+
+from app.api.routes import admin_auth, auth, cdn, config, encoding, movies, search, series, stream, upload
+
+api_router = APIRouter()
+api_router.include_router(config.router)
+api_router.include_router(auth.router)
+api_router.include_router(admin_auth.router)
+api_router.include_router(movies.router)
+api_router.include_router(series.router)
+api_router.include_router(search.router)
+api_router.include_router(upload.router)
+api_router.include_router(encoding.router)
+api_router.include_router(cdn.router)
+api_router.include_router(stream.router)
