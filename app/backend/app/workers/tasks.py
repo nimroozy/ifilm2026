@@ -99,12 +99,13 @@ def _worker_queue_name() -> str:
     return get_settings().worker_queue_name
 
 
+async def on_startup(ctx):
+    ctx["worker_name"] = "arq-worker"
+
+
 class WorkerSettings:
     functions = [process_encoding_job, process_cdn_sync_job, finalize_upload_job]
     redis_settings = redis_settings()
     # arq requires queue_name at import/startup; None makes the worker exit immediately
     queue_name = _worker_queue_name()
-
-    @classmethod
-    def on_startup(cls, ctx):
-        ctx["worker_name"] = "arq-worker"
+    on_startup = on_startup
