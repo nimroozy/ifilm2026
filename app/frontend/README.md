@@ -1,65 +1,52 @@
-# Shadcn-UI Template Usage Instructions
+# iFilm Frontend
 
-## technology stack
+Customer-facing streaming UI for the iFilm platform (Vite + React + TypeScript + Tailwind + shadcn/ui).
 
-This project is built with:
+## Prerequisites
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+- Node.js 22+
+- [pnpm](https://pnpm.io/) 10+
 
-All shadcn/ui components have been downloaded under `@/components/ui`.
+## Setup
 
-## File Structure
-
-- `index.html` - HTML entry point
-- `vite.config.ts` - Vite configuration file
-- `tailwind.config.ts` - Tailwind CSS configuration file
-- `package.json` - NPM dependencies and scripts
-- `src/main.tsx` - Project entry point
-- `src/App.tsx` - Router shell (imports pages and sets up routes)
-- `src/pages/Index.tsx` - Main page entry point for `/` by default; replace the placeholder page here unless you explicitly reroute `/` elsewhere
-- `src/index.css` - Existing CSS configuration
-
-## Components
-
-- All shadcn/ui components are pre-downloaded and available at `@/components/ui`
-
-## Styling
-
-- Add global styles to `src/index.css` or create new CSS files as needed
-- Use Tailwind classes for styling components
-
-## Development
-
-- Import components from `@/components/ui` in your React components
-- Customize the UI by modifying the Tailwind configuration
-- Do not stop after editing isolated components or only `src/App.tsx`. The default template homepage lives in `src/pages/Index.tsx`, and leaving `Welcome to Atoms` there means the app is still unfinished.
-- Completion check: either replace `src/pages/Index.tsx` with your real homepage, or update the `/` route in `src/App.tsx` so the live homepage no longer renders the default placeholder page.
-
-## Note
-
-- The `@/` path alias points to the `src/` directory
-- Do NOT modify the title, description, and logo in `index.html` — they are managed by the overview system via `data-mgx-overview` markers.
-
-# Commands
-
-**Install Dependencies**
-
-```shell
-pnpm i
+```bash
+cd app/frontend
+cp .env.example .env
+pnpm install
 ```
 
-**Start Preview**
+## Scripts
 
-```shell
-pnpm run dev
-```
+| Command | Description |
+| --- | --- |
+| `pnpm dev` | Start the Vite dev server (default port `3000`) |
+| `pnpm lint` | ESLint over `src/` |
+| `pnpm typecheck` | TypeScript project build (`tsc -b`) |
+| `pnpm test` | Unit tests (Vitest) |
+| `pnpm build` | Production build to `dist/` |
+| `pnpm preview` | Preview the production build |
 
-**To build**
+## Environment
 
-```shell
-pnpm run build
-```
+See `.env.example` for supported variables.
+
+- `VITE_API_BASE_URL` — fallback API origin when `/api/config` is unavailable
+- `VITE_PORT` — local dev server port
+- `BACKEND_PORT` — Vite proxy target for `/api` requests
+
+Runtime config is loaded from `/api/config` when available (`src/lib/config.ts`). Without a backend, the UI uses mock data and defaults.
+
+## Structure
+
+- `src/pages/` — route pages (home, browse, account, admin, player)
+- `src/components/` — layout, error boundary, and shared UI
+- `src/components/ui/` — shadcn/ui primitives
+- `src/data/mockData.ts` — local mock content / translations
+- `src/lib/` — config, API client helpers, utilities
+- `prerender/` — blog prerender / sitemap helpers
+
+## Notes
+
+- The app currently runs against mock auth/content; no backend is required for local UI work.
+- An `ErrorBoundary` wraps the root app tree to catch render failures.
+- CI runs install, lint, typecheck, test, and build via `.github/workflows/frontend-ci.yml`.

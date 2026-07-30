@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin, type ResolvedConfig } from 'vite';
 import react from '@vitejs/plugin-react-swc';
 import fs from 'node:fs';
 import path from 'path';
@@ -24,12 +24,12 @@ process.env.VITE_APP_TITLE = escapeHtmlAttr(process.env.VITE_APP_TITLE);
 process.env.VITE_APP_DESCRIPTION = escapeHtmlAttr(process.env.VITE_APP_DESCRIPTION);
 process.env.VITE_APP_LOGO_URL ??= process.env.OVERVIEW_LOGO_URL ?? 'https://public-frontend-cos.metadl.com/mgx/img/favicon_atoms.ico';
 
-function ensureBuildOutDir() {
+function ensureBuildOutDir(): Plugin {
   let outDir = path.resolve(__dirname, 'dist');
 
   return {
     name: 'ensure-build-out-dir',
-    configResolved(config) {
+    configResolved(config: ResolvedConfig) {
       outDir = path.resolve(config.root, config.build.outDir);
     },
     writeBundle() {
