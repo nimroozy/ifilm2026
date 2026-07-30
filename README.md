@@ -7,7 +7,25 @@ Official repository for the iFilm streaming platform.
 | Path | Description |
 | --- | --- |
 | [`app/frontend`](./app/frontend) | Customer + admin UI (Vite / React) |
-| [`app/backend`](./app/backend) | FastAPI backend foundation (not production-ready) |
+| [`app/backend`](./app/backend) | FastAPI backend (catalog admin foundation; not production-ready media) |
+
+## Catalog administration
+
+Authorized admins can manage movies, series, seasons, episodes, genres, artwork URLs, publishing status, and featured/trending flags.
+
+Docs:
+
+- [docs/catalog/ARCHITECTURE.md](./docs/catalog/ARCHITECTURE.md)
+- [docs/catalog/DATA_MODEL.md](./docs/catalog/DATA_MODEL.md)
+- [docs/catalog/API_REFERENCE.md](./docs/catalog/API_REFERENCE.md)
+- [docs/catalog/ADMIN_WORKFLOWS.md](./docs/catalog/ADMIN_WORKFLOWS.md)
+- [docs/catalog/FRONTEND_INTEGRATION.md](./docs/catalog/FRONTEND_INTEGRATION.md)
+- [docs/catalog/TEST_REPORT.md](./docs/catalog/TEST_REPORT.md)
+
+Frontend data mode:
+
+- `VITE_DATA_MODE=mock` (default) — local fixtures
+- `VITE_DATA_MODE=api` — real FastAPI catalog (no silent mock fallback)
 
 ## Security and readiness
 
@@ -46,6 +64,10 @@ pnpm dev
 ```
 
 The Vite dev server proxies `/api` to `BACKEND_PORT` (default `8000`).
+
+## Explicitly deferred
+
+Real FFmpeg encoding, ABR ladders, subtitles/DRM, signed streaming URLs, live SAS Radius, CDN replication, binary artwork uploads, watch-history sync, recommendations, payments/subscriptions, and production deployment are out of scope for this milestone.
 
 ## CI
 

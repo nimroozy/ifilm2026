@@ -30,16 +30,20 @@ def test_application_readiness_with_postgres_and_redis(monkeypatch):
     # Rebuild engine against Postgres for this test process.
     session_module._engine = None
     engine = session_module.get_engine()
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
+    try:
+        Base.metadata.drop_all(bind=engine)
+        Base.metadata.create_all(bind=engine)
 
-    app = create_app()
-    with TestClient(app) as client:
-        health = client.get("/health")
-        assert health.status_code == 200
-        ready = client.get("/ready")
-        assert ready.status_code == 200, ready.text
-        body = ready.json()
-        assert body["status"] == "ready"
-        assert body["database"]["ok"] is True
-        assert body["redis"]["ok"] is True
+        app = create_app()
+        with TestClient(app) as client:
+            health = client.get("/health")
+            assert health.status_code == 200
+            ready = client.get("/ready")
+            assert ready.status_code == 200, ready.text
+            body = ready.json()
+            assert body["status"] == "ready"
+            assert body["database"]["ok"] is True
+            assert body["redis"]["ok"] is True
+    finally:
+        session_module._engine = None
+        get_settings.cache_clear()
