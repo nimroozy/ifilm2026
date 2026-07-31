@@ -5,6 +5,8 @@ import { translations } from '@/data/mockData';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
+import { api, tokenStore } from '@/lib/api';
+import { isMockMode } from '@/lib/dataMode';
 
 // ============ LANGUAGE CONTEXT ============
 type Lang = 'en' | 'fa' | 'ps';
@@ -71,15 +73,22 @@ const mockUser: AuthUser = {
 };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(mockUser);
-  const [isLoggedIn, setIsLoggedIn] = useState(true);
+  const mockMode = isMockMode();
+  const [user, setUser] = useState<AuthUser | null>(() => (mockMode ? mockUser : null));
+  const [isLoggedIn, setIsLoggedIn] = useState(mockMode);
 
   useEffect(() => {
+    if (mockMode) return;
     let cancelled = false;
     (async () => {
+      if (!tokenStore.get()) {
+        if (!cancelled) {
+          setUser(null);
+          setIsLoggedIn(false);
+        }
+        return;
+      }
       try {
-        const { api, tokenStore } = await import('@/lib/api');
-        if (!tokenStore.get()) return;
         const me = await api.me();
         if (cancelled) return;
         setUser({
@@ -91,46 +100,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
         setIsLoggedIn(true);
       } catch {
-        // Keep mock session when API is unavailable.
+        tokenStore.clear();
+        if (!cancelled) {
+          setUser(null);
+          setIsLoggedIn(false);
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [mockMode]);
 
   const login = async (username?: string, password?: string, rememberDevice = false) => {
-    if (username && password) {
-      try {
-        const { api } = await import('@/lib/api');
-        await api.login(username, password, rememberDevice);
-        const me = await api.me();
-        setUser({
-          name: me.name || me.username,
-          username: me.username,
-          branch: me.branch,
-          package: me.package,
-          expiration: me.expiration,
-        });
-        setIsLoggedIn(true);
-        return;
-      } catch {
-        // Fall through to local demo credentials when backend is offline.
-        if (!(username === 'mobin_user_001' && password === 'password')) {
-          throw new Error('Invalid username or password');
-        }
+    if (mockMode) {
+      if (username && password && !(username === 'mobin_user_001' && password === 'password')) {
+        throw new Error('Invalid username or password');
       }
+      setUser(mockUser);
+      setIsLoggedIn(true);
+      return;
     }
-    setUser(mockUser);
-    setIsLoggedIn(true);
+
+    if (!username || !password) throw new Error('Username and password are required');
+    try {
+      await api.login(username, password, rememberDevice);
+      const me = await api.me();
+      setUser({
+        name: me.name || me.username,
+        username: me.username,
+        branch: me.branch,
+        package: me.package,
+        expiration: me.expiration,
+      });
+      setIsLoggedIn(true);
+    } catch (error) {
+      tokenStore.clear();
+      setUser(null);
+      setIsLoggedIn(false);
+      throw error;
+    }
   };
 
   const logout = async () => {
-    try {
-      const { api } = await import('@/lib/api');
-      await api.logout();
-    } catch {
-      // ignore offline logout errors
+    if (!mockMode) {
+      try {
+        await api.logout();
+      } catch {
+        tokenStore.clear();
+      }
     }
     setIsLoggedIn(false);
     setUser(null);
@@ -148,7 +166,7 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
   const { t, lang, setLang, dir } = useLang();
   const location = useLocation();
   const navigate = useNavigate();
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, logout } = useAuth();
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -230,7 +248,13 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
                     <DropdownMenuItem onClick={() => navigate('/devices')}>{t.profile.devices}</DropdownMenuItem>
                     <DropdownMenuItem onClick={() => navigate('/watchlist')}>{t.profile.watchlist}</DropdownMenuItem>
                     <DropdownMenuItem onClick={() => navigate('/history')}>{t.profile.history}</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => navigate('/login')}>{t.profile.logout}</DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        void logout().finally(() => navigate('/login'));
+                      }}
+                    >
+                      {t.profile.logout}
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               ) : (

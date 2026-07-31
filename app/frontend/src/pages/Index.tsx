@@ -4,10 +4,10 @@ import { Play, Info, Star, Clock, ChevronLeft, ChevronRight } from 'lucide-react
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useLang } from '@/components/CustomerLayout';
+import { useAuth, useLang } from '@/components/CustomerLayout';
 import { watchHistory } from '@/data/mockData';
 import { fetchHomeCatalog, type CatalogMovie, type CatalogSeries } from '@/lib/catalogData';
-import { ApiError } from '@/lib/api';
+import { api, ApiError, tokenStore, type WatchProgressDto } from '@/lib/api';
 import { isMockMode } from '@/lib/dataMode';
 
 type HomeData = Awaited<ReturnType<typeof fetchHomeCatalog>>;
@@ -210,9 +210,70 @@ function ContentRow({
 
 function ContinueWatchingRow() {
   const { t } = useLang();
+  const { isLoggedIn } = useAuth();
   const navigate = useNavigate();
-  if (!isMockMode()) return null;
-  const items = watchHistory.filter((h) => h.progress < 100);
+  const mockMode = isMockMode();
+  const [apiItems, setApiItems] = useState<WatchProgressDto[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
+
+  useEffect(() => {
+    if (mockMode || !isLoggedIn || !tokenStore.get()) {
+      setApiItems(null);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    void api
+      .listContinueWatching()
+      .then((items) => {
+        if (!cancelled) setApiItems(items);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setApiItems([]);
+          setError('Unable to load Continue Watching.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoggedIn, mockMode, reload]);
+
+  if (!mockMode && (!isLoggedIn || !tokenStore.get())) return null;
+  if (!mockMode && loading) {
+    return (
+      <section className="container mx-auto px-4 py-4 sm:px-6 lg:px-8" aria-label={t.sections.continueWatching}>
+        <Skeleton className="mb-3 h-6 w-48" />
+        <div className="flex gap-3">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <Skeleton key={index} className="aspect-video w-[200px] shrink-0 md:w-[280px]" />
+          ))}
+        </div>
+      </section>
+    );
+  }
+  if (!mockMode && error) {
+    return (
+      <section className="container mx-auto px-4 py-4 sm:px-6 lg:px-8">
+        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+          <span role="alert">{error}</span>
+          <Button variant="outline" size="sm" onClick={() => setReload((value) => value + 1)}>
+            Retry
+          </Button>
+        </div>
+      </section>
+    );
+  }
+
+  const items = mockMode ? watchHistory.filter((item) => item.progress < 100) : apiItems ?? [];
   if (!items.length) return null;
 
   return (
@@ -226,22 +287,45 @@ function ContinueWatchingRow() {
         {items.map((item) => (
           <div
             key={item.id}
-            onClick={() =>
-              navigate(item.type === 'series' ? `/series/${item.contentId}` : `/player/movie/${item.contentId}`)
-            }
+            onClick={() => {
+              if ('media_asset_id' in item) {
+                if (item.available && item.player_path) navigate(item.player_path);
+              } else {
+                navigate(item.type === 'series' ? `/series/${item.contentId}` : `/player/movie/${item.contentId}`);
+              }
+            }}
             className="flex-shrink-0 w-[200px] md:w-[280px] cursor-pointer group/card"
           >
             <div className="relative aspect-video rounded-lg overflow-hidden bg-muted mb-2">
-              <img src={item.poster} alt={item.title} className="w-full h-full object-cover" />
+              {('poster_url' in item ? item.poster_url : item.poster) ? (
+                <img
+                  src={'poster_url' in item ? item.poster_url : item.poster}
+                  alt={item.title}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center px-3 text-center text-xs text-muted-foreground">
+                  {item.title}
+                </div>
+              )}
               <div className="absolute inset-0 bg-black/0 group-hover/card:bg-black/40 transition-all flex items-center justify-center opacity-0 group-hover/card:opacity-100">
                 <Play className="h-10 w-10 text-white fill-white" />
               </div>
               <div className="absolute bottom-0 left-0 right-0 h-1 bg-muted/50">
-                <div className="h-full bg-primary" style={{ width: `${item.progress}%` }} />
+                <div
+                  className="h-full bg-primary"
+                  style={{
+                    width: `${Math.min(100, Math.max(0, 'progress_percent' in item ? item.progress_percent : item.progress))}%`,
+                  }}
+                />
               </div>
             </div>
             <h3 className="text-xs md:text-sm font-medium text-foreground truncate">{item.title}</h3>
-            {item.episode && <p className="text-[10px] text-muted-foreground">{item.episode}</p>}
+            {('subtitle' in item ? item.subtitle : item.episode) && (
+              <p className="text-[10px] text-muted-foreground">
+                {'subtitle' in item ? item.subtitle : item.episode}
+              </p>
+            )}
           </div>
         ))}
       </div>

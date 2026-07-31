@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, Monitor, Smartphone, Tablet, Tv, Trash2, Clock, Play, Star, X, AlertCircle, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useLang, useAuth } from '@/components/CustomerLayout';
-import { devices, watchHistory, movies, series } from '@/data/mockData';
+import { devices, episodes, watchHistory, movies, series } from '@/data/mockData';
+import { api, tokenStore, type WatchProgressDto } from '@/lib/api';
+import { isMockMode } from '@/lib/dataMode';
 
 // ============ LOGIN PAGE ============
 export function LoginPage() {
@@ -276,6 +278,24 @@ export function WatchlistPage() {
 
 // ============ WATCH HISTORY PAGE ============
 export function HistoryPage() {
+  return isMockMode() ? <MockHistoryPage /> : <ApiHistoryPage />;
+}
+
+function mockHistoryPlayerPath(item: (typeof watchHistory)[number]): string {
+  if (item.type === 'movie') return `/player/movie/${item.contentId}`;
+  const match = item.episode?.match(/^S(\d+)E(\d+)$/i);
+  const episode = match
+    ? episodes.find(
+        (candidate) =>
+          candidate.seriesId === item.contentId &&
+          candidate.season === Number(match[1]) &&
+          candidate.episode === Number(match[2])
+      )
+    : undefined;
+  return episode ? `/player/episode/${episode.id}` : `/series/${item.contentId}`;
+}
+
+function MockHistoryPage() {
   const { t } = useLang();
   const navigate = useNavigate();
   const [history, setHistory] = useState(watchHistory);
@@ -314,7 +334,7 @@ export function HistoryPage() {
             {history.map(item => (
               <Card key={item.id} className="bg-card border-border">
                 <CardContent className="flex items-center gap-4 py-3">
-                  <div className="relative w-[100px] md:w-[140px] flex-shrink-0 cursor-pointer" onClick={() => navigate(`/player/movie/${item.contentId}`)}>
+                  <div className="relative w-[100px] md:w-[140px] flex-shrink-0 cursor-pointer" onClick={() => navigate(mockHistoryPlayerPath(item))}>
                     <img src={item.poster} alt={item.title} className="w-full aspect-video rounded object-cover" />
                     {item.progress < 100 && (
                       <div className="absolute bottom-0 left-0 right-0 h-1 bg-muted"><div className="h-full bg-primary" style={{ width: `${item.progress}%` }} /></div>
@@ -343,4 +363,227 @@ export function HistoryPage() {
       </div>
     </div>
   );
+}
+
+function ApiHistoryPage() {
+  const { t } = useLang();
+  const { isLoggedIn } = useAuth();
+  const navigate = useNavigate();
+  const [history, setHistory] = useState<WatchProgressDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [removingAssetId, setRemovingAssetId] = useState<string | null>(null);
+  const [clearing, setClearing] = useState(false);
+
+  const loadHistory = useCallback(async () => {
+    if (!isLoggedIn || !tokenStore.get()) {
+      setHistory([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const page = await api.listWatchHistory({ page: 1, page_size: 100 });
+      setHistory(page.items);
+    } catch {
+      setHistory([]);
+      setError('Unable to load watch history.');
+    } finally {
+      setLoading(false);
+    }
+  }, [isLoggedIn]);
+
+  useEffect(() => {
+    void loadHistory();
+  }, [loadHistory]);
+
+  const removeItem = async (item: WatchProgressDto) => {
+    setRemovingAssetId(item.media_asset_id);
+    setError(null);
+    try {
+      await api.deleteWatchHistoryItem(item.media_asset_id);
+      setHistory((current) =>
+        current.filter((candidate) => candidate.media_asset_id !== item.media_asset_id)
+      );
+    } catch {
+      setError('Unable to remove this history item.');
+    } finally {
+      setRemovingAssetId(null);
+    }
+  };
+
+  const clearAll = async () => {
+    setClearing(true);
+    setError(null);
+    try {
+      await api.clearWatchHistory();
+      setHistory([]);
+    } catch {
+      setError('Unable to clear watch history.');
+    } finally {
+      setClearing(false);
+    }
+  };
+
+  if (!isLoggedIn || !tokenStore.get()) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-4">
+        <p className="text-muted-foreground">Sign in to view your watch history.</p>
+        <Button onClick={() => navigate('/login')}>{t.login.signIn}</Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
+        <div className="flex items-center justify-between gap-4 mb-6">
+          <h1 className="text-2xl md:text-3xl font-serif font-bold text-foreground">
+            {t.profile.history}
+          </h1>
+          {history.length > 0 && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm" disabled={clearing}>
+                  Clear All
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Clear Watch History</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will remove all items from your watch history. This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => void clearAll()}
+                    className="bg-destructive text-destructive-foreground"
+                  >
+                    {t.common.delete}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+        </div>
+
+        {error && (
+          <div
+            className="mb-4 flex flex-wrap items-center gap-3 rounded-lg bg-destructive/10 p-3 text-sm text-destructive"
+            role="alert"
+          >
+            <AlertCircle className="h-4 w-4" />
+            <span>{error}</span>
+            {history.length === 0 && (
+              <Button variant="outline" size="sm" onClick={() => void loadHistory()}>
+                Retry
+              </Button>
+            )}
+          </div>
+        )}
+
+        {loading ? (
+          <div className="py-20 text-center text-muted-foreground" role="status">
+            Loading watch history…
+          </div>
+        ) : history.length === 0 && !error ? (
+          <div className="text-center py-20 text-muted-foreground">
+            <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
+            <p className="text-lg">No watch history yet</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {history.map((item) => {
+              const canPlay = item.available && Boolean(item.player_path);
+              const progress = Math.min(100, Math.max(0, item.progress_percent || 0));
+              return (
+                <Card key={item.media_asset_id} className="bg-card border-border">
+                  <CardContent className="flex items-center gap-4 py-3">
+                    <button
+                      type="button"
+                      className="relative w-[100px] md:w-[140px] flex-shrink-0 overflow-hidden rounded bg-muted text-start disabled:cursor-default"
+                      onClick={() => canPlay && navigate(item.player_path)}
+                      disabled={!canPlay}
+                      aria-label={canPlay ? `Resume ${item.title}` : `${item.title || 'Title'} unavailable`}
+                    >
+                      {item.poster_url ? (
+                        <img
+                          src={item.poster_url}
+                          alt=""
+                          className="w-full aspect-video object-cover"
+                        />
+                      ) : (
+                        <span className="flex aspect-video items-center justify-center px-2 text-center text-xs text-muted-foreground">
+                          {item.available ? item.title : 'Unavailable'}
+                        </span>
+                      )}
+                      {!item.completed && (
+                        <span className="absolute bottom-0 left-0 right-0 h-1 bg-muted">
+                          <span className="block h-full bg-primary" style={{ width: `${progress}%` }} />
+                        </span>
+                      )}
+                      {canPlay && (
+                        <span className="absolute inset-0 flex items-center justify-center bg-black/20">
+                          <Play className="h-6 w-6 text-white fill-white" />
+                        </span>
+                      )}
+                    </button>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="font-medium text-foreground text-sm">
+                          {item.title || 'Unavailable'}
+                        </h3>
+                        {!item.available && <Badge variant="secondary">Unavailable</Badge>}
+                      </div>
+                      {item.subtitle && (
+                        <p className="text-xs text-muted-foreground">{item.subtitle}</p>
+                      )}
+                      <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-muted-foreground">
+                        {item.last_watched_at && <span>{formatHistoryDate(item.last_watched_at)}</span>}
+                        {item.last_watched_at && <span>•</span>}
+                        <span>{Math.round(progress)}%</span>
+                      </div>
+                      {canPlay && (
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="h-auto p-0 mt-1"
+                          onClick={() => navigate(item.player_path)}
+                        >
+                          {item.completed ? 'Watch Again' : 'Resume'}
+                        </Button>
+                      )}
+                    </div>
+
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => void removeItem(item)}
+                      disabled={removingAssetId === item.media_asset_id}
+                      className="text-muted-foreground hover:text-destructive"
+                      aria-label={`Remove ${item.title || 'unavailable title'} from watch history`}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function formatHistoryDate(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? value
+    : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date);
 }
