@@ -42,6 +42,9 @@ services:
       ENABLE_ENCODING: ${ENABLE_ENCODING:-false}
       ENABLE_CDN_SYNC: ${ENABLE_CDN_SYNC:-false}
       ENABLE_RADIUS_LOGIN: ${ENABLE_RADIUS_LOGIN:-false}
+      ENABLE_MEDIA_PROCESSING: ${ENABLE_MEDIA_PROCESSING:-false}
+      FFMPEG_BINARY: ${FFMPEG_BINARY:-ffmpeg}
+      FFPROBE_BINARY: ${FFPROBE_BINARY:-ffprobe}
       RADIUS_ENABLED: ${RADIUS_ENABLED:-false}
       RADIUS_MODE: ${RADIUS_MODE:-live}
       RADIUS_SECRET: ${RADIUS_SECRET:-}
@@ -72,6 +75,7 @@ services:
       ENABLE_ENCODING: ${ENABLE_ENCODING:-false}
       ENABLE_CDN_SYNC: ${ENABLE_CDN_SYNC:-false}
       ENABLE_RADIUS_LOGIN: ${ENABLE_RADIUS_LOGIN:-false}
+      ENABLE_MEDIA_PROCESSING: ${ENABLE_MEDIA_PROCESSING:-false}
       RADIUS_MODE: ${RADIUS_MODE:-live}
       RADIUS_SECRET: ${RADIUS_SECRET:-}
     volumes:
@@ -82,6 +86,44 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+  media-processing-worker:
+    build:
+      context: ./app/backend
+    command: python -m app.workers.media_processing
+    environment:
+      APP_ENV: development
+      DEBUG: "false"
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-ifilm}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ifilm}
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in your environment}
+      MEDIA_ROOT: /data/media
+      ENABLE_MEDIA_PROCESSING: ${ENABLE_MEDIA_PROCESSING:-false}
+      FFMPEG_BINARY: ${FFMPEG_BINARY:-ffmpeg}
+      FFPROBE_BINARY: ${FFPROBE_BINARY:-ffprobe}
+      MEDIA_PROCESSING_WORKER_ID: ${MEDIA_PROCESSING_WORKER_ID:-compose-media-1}
+      MEDIA_PROCESSING_POLL_SECONDS: ${MEDIA_PROCESSING_POLL_SECONDS:-2}
+      MEDIA_PROCESSING_STALE_AFTER_SECONDS: ${MEDIA_PROCESSING_STALE_AFTER_SECONDS:-120}
+      MEDIA_PROCESSING_MAX_ATTEMPTS: ${MEDIA_PROCESSING_MAX_ATTEMPTS:-3}
+      MEDIA_PROCESSING_RETRY_BASE_SECONDS: ${MEDIA_PROCESSING_RETRY_BASE_SECONDS:-30}
+      MEDIA_PROCESSING_PROBE_TIMEOUT_SECONDS: ${MEDIA_PROCESSING_PROBE_TIMEOUT_SECONDS:-120}
+      MEDIA_PROCESSING_LOG_MAX_BYTES: ${MEDIA_PROCESSING_LOG_MAX_BYTES:-65536}
+    volumes:
+      - ./app/backend:/app
+      - ifilm_media:/data/media:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"from app.services.media_processing.ffmpeg import binary_available; from app.core.config import get_settings; s=get_settings(); raise SystemExit(0 if binary_available(s.ffprobe_binary) else 1)\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
 volumes:
   ifilm_pg:

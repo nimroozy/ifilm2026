@@ -390,9 +390,63 @@ export interface MediaAssetDto {
   category: MediaCategory | string;
   upload_status: string;
   processing_status: string;
+  container_format?: string | null;
+  overall_bitrate?: number | null;
+  video_codec?: string | null;
+  video_profile?: string | null;
+  display_aspect_ratio?: string | null;
+  video_frame_rate?: number | null;
+  video_bitrate?: number | null;
+  pixel_format?: string | null;
+  audio_codec?: string | null;
+  audio_channels?: number | null;
+  audio_channel_layout?: string | null;
+  audio_sample_rate?: number | null;
+  audio_bitrate?: number | null;
+  audio_stream_count?: number | null;
+  subtitle_stream_count?: number | null;
+  probe_json?: Record<string, unknown> | null;
+  probe_version?: string | null;
+  probed_at?: string | null;
   created_by_admin_id: number | null;
   created_at?: string | null;
   updated_at?: string | null;
+}
+
+export interface ProcessingJobDto {
+  id: string;
+  media_asset_id: string;
+  job_type: string;
+  status: string;
+  priority: number;
+  attempt_count: number;
+  max_attempts: number;
+  progress_percent: number;
+  current_step: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  worker_id: string | null;
+  cancel_requested: boolean;
+  queued_at?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  heartbeat_at?: string | null;
+  next_retry_at?: string | null;
+  created_by_admin_id: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  media_asset?: MediaAssetDto | null;
+}
+
+export interface ProcessingJobCreateResult {
+  job: ProcessingJobDto;
+  created: boolean;
+}
+
+export interface ProcessingStatusDto {
+  enabled: boolean;
+  ffmpeg_available: boolean;
+  ffprobe_available: boolean;
 }
 
 export interface UploadSessionDto {
@@ -828,6 +882,57 @@ export const adminApi = {
 
   async getMediaAsset(assetId: string) {
     const { data } = await adminHttp.get<MediaAssetDto>(`/admin/media/assets/${assetId}`);
+    return data;
+  },
+
+  async getProcessingStatus() {
+    const { data } = await adminHttp.get<ProcessingStatusDto>('/admin/media/processing/status');
+    return data;
+  },
+
+  async queueMediaProbe(assetId: string) {
+    const { data } = await adminHttp.post<ProcessingJobCreateResult>(
+      `/admin/media/assets/${assetId}/processing/probe`
+    );
+    return data;
+  },
+
+  async listAssetProcessingJobs(assetId: string) {
+    const { data } = await adminHttp.get<Envelope<ProcessingJobDto>>(
+      `/admin/media/assets/${assetId}/processing`
+    );
+    return unwrapList(data);
+  },
+
+  async listProcessingJobs(params?: {
+    page?: number;
+    page_size?: number;
+    status?: string;
+    job_type?: string;
+    media_asset_id?: string;
+  }) {
+    const { data } = await adminHttp.get<Envelope<ProcessingJobDto>>('/admin/media/processing/jobs', {
+      params,
+    });
+    return unwrapList(data);
+  },
+
+  async getProcessingJob(jobId: string) {
+    const { data } = await adminHttp.get<ProcessingJobDto>(`/admin/media/processing/jobs/${jobId}`);
+    return data;
+  },
+
+  async retryProcessingJob(jobId: string) {
+    const { data } = await adminHttp.post<ProcessingJobDto>(
+      `/admin/media/processing/jobs/${jobId}/retry`
+    );
+    return data;
+  },
+
+  async cancelProcessingJob(jobId: string) {
+    const { data } = await adminHttp.delete<ProcessingJobDto>(
+      `/admin/media/processing/jobs/${jobId}`
+    );
     return data;
   },
 

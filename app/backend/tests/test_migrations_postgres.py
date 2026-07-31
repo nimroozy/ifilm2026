@@ -159,7 +159,7 @@ def test_postgresql_migration_succeeds(postgres_url):
     assert "seasons" in tables
     assert "media_assets" in tables
     assert "upload_sessions" in tables
-    assert version == "004_media_upload"
+    assert version == "005_media_processing"
 
 
 def test_postgresql_migration_from_previous_revision(postgres_url):
@@ -186,7 +186,7 @@ def test_postgresql_migration_from_previous_revision(postgres_url):
     assert movie_slug == "ordinary-film"
     assert series_slug == "ordinary-show"
     assert null_imdb >= 1
-    assert version == "004_media_upload"
+    assert version == "005_media_processing"
 
 
 def test_002_to_head_duplicate_and_messy_titles(postgres_url):
@@ -373,7 +373,7 @@ def test_downgrade_catalog_not_supported(postgres_url):
 def test_media_upload_migration_roundtrip(postgres_url):
     _reset_schema(postgres_url)
     assert _run_alembic(postgres_url, "upgrade", "003_catalog_admin").returncode == 0
-    assert _run_alembic(postgres_url, "upgrade", "head").returncode == 0
+    assert _run_alembic(postgres_url, "upgrade", "004_media_upload").returncode == 0
     engine = create_engine(postgres_url)
     with engine.connect() as conn:
         tables = {
@@ -386,7 +386,7 @@ def test_media_upload_migration_roundtrip(postgres_url):
     assert "upload_sessions" in tables
     assert version == "004_media_upload"
 
-    assert _run_alembic(postgres_url, "downgrade", "-1").returncode == 0
+    assert _run_alembic(postgres_url, "downgrade", "003_catalog_admin").returncode == 0
     engine = create_engine(postgres_url)
     with engine.connect() as conn:
         tables = {
@@ -399,10 +399,89 @@ def test_media_upload_migration_roundtrip(postgres_url):
     assert version == "003_catalog_admin"
 
 
+def test_media_processing_migration_roundtrip(postgres_url):
+    _reset_schema(postgres_url)
+    assert _run_alembic(postgres_url, "upgrade", "004_media_upload").returncode == 0
+    assert _run_alembic(postgres_url, "upgrade", "005_media_processing").returncode == 0
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        tables = {
+            row[0]
+            for row in conn.execute(text("SELECT tablename FROM pg_tables WHERE schemaname='public'"))
+        }
+        indexes = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT indexname FROM pg_indexes WHERE schemaname='public'")
+            )
+        }
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        cols = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='media_assets'"
+                )
+            )
+        }
+    engine.dispose()
+    assert "media_processing_jobs" in tables
+    assert "media_processing_job_events" in tables
+    assert "uq_media_processing_active_probe" in indexes
+    assert "container_format" in cols
+    assert "probe_json" in cols
+    assert version == "005_media_processing"
+
+    assert _run_alembic(postgres_url, "downgrade", "004_media_upload").returncode == 0
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        tables = {
+            row[0]
+            for row in conn.execute(text("SELECT tablename FROM pg_tables WHERE schemaname='public'"))
+        }
+        indexes = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT indexname FROM pg_indexes WHERE schemaname='public'")
+            )
+        }
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        cols = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='media_assets'"
+                )
+            )
+        }
+    engine.dispose()
+    assert "media_processing_jobs" not in tables
+    assert "uq_media_processing_active_probe" not in indexes
+    assert "container_format" not in cols
+    assert "media_assets" in tables
+    assert version == "004_media_upload"
+
+    assert _run_alembic(postgres_url, "upgrade", "005_media_processing").returncode == 0
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        indexes = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT indexname FROM pg_indexes WHERE schemaname='public'")
+            )
+        }
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+    engine.dispose()
+    assert "uq_media_processing_active_probe" in indexes
+    assert version == "005_media_processing"
+
+
 def test_alembic_heads_single(postgres_url):
     result = _run_alembic(postgres_url, "heads")
     assert result.returncode == 0, result.stdout + result.stderr
     lines = [ln.strip() for ln in (result.stdout + result.stderr).splitlines() if ln.strip()]
-    head_lines = [ln for ln in lines if "004_media_upload" in ln]
+    head_lines = [ln for ln in lines if "005_media_processing" in ln]
     assert head_lines, result.stdout + result.stderr
-    assert sum(1 for ln in lines if ln.startswith("004_media_upload")) >= 1
+    assert sum(1 for ln in lines if ln.startswith("005_media_processing")) >= 1

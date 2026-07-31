@@ -3,6 +3,7 @@ from app.models.cdn import Branch, CDNNode, CDNSyncJob
 from app.models.content import Episode, Genre, Movie, Season, Series
 from app.models.media import EncodingJob, UploadJob
 from app.models.media_assets import MediaAsset, UploadSession
+from app.models.media_processing import MediaProcessingJob, MediaProcessingJobEvent
 from app.models.user import Device, Subscriber, WatchHistory, WatchlistItem
 
 __all__ = [
@@ -16,6 +17,8 @@ __all__ = [
     "Episode",
     "Genre",
     "MediaAsset",
+    "MediaProcessingJob",
+    "MediaProcessingJobEvent",
     "Movie",
     "Season",
     "Series",

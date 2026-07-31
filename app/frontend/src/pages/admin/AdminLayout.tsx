@@ -23,7 +23,8 @@ const navItems = [
   { to: '/admin/series', label: 'Series', icon: Tv },
   { to: '/admin/genres', label: 'Genres', icon: Tags },
   { to: '/admin/tools/upload', label: 'Upload', icon: Upload },
-  { to: '/admin/tools/encoding', label: 'Encoding (soon)', icon: Cpu },
+  { to: '/admin/media/processing', label: 'Processing', icon: Cpu },
+  { to: '/admin/tools/encoding', label: 'Encoding (soon)', icon: Film },
   { to: '/admin/tools/cdn', label: 'CDN (soon)', icon: Server },
   { to: '/admin/tools/users', label: 'Users (soon)', icon: Users },
 ];

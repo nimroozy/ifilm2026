@@ -67,7 +67,9 @@ The Vite dev server proxies `/api` to `BACKEND_PORT` (default `8000`).
 
 ## Explicitly deferred
 
-Real FFmpeg encoding, ABR ladders, subtitles/DRM, signed streaming URLs, live SAS Radius, CDN replication, binary artwork uploads, watch-history sync, recommendations, payments/subscriptions, and production deployment are out of scope for this milestone.
+Full ABR encoding ladders, HLS/DASH packaging, subtitles/DRM, signed streaming URLs, live SAS Radius, CDN replication, binary artwork uploads, watch-history sync, recommendations, payments/subscriptions, and production deployment hardening remain out of scope.
+
+Media **probe** processing (ffprobe metadata) is available behind `ENABLE_MEDIA_PROCESSING` — see `docs/media/MEDIA_PROCESSING_FOUNDATION.md`. Run `python -m app.workers.media_processing` with FFmpeg/ffprobe installed.
 
 ## CI
 

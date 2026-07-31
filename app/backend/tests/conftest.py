@@ -27,6 +27,7 @@ os.environ["ENABLE_RADIUS_LOGIN"] = "true"
 os.environ["ENABLE_UPLOADS"] = "true"
 os.environ["ENABLE_ENCODING"] = "true"
 os.environ["ENABLE_CDN_SYNC"] = "true"
+os.environ["ENABLE_MEDIA_PROCESSING"] = "true"
 os.environ["REDIS_REQUIRED"] = "false"
 os.environ["MEDIA_ROOT"] = str(Path("/tmp/ifilm-test-media").resolve())
 os.environ["HLS_PUBLIC_BASE_URL"] = "http://testserver/media/hls"

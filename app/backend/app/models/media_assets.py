@@ -6,6 +6,7 @@ import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     CheckConstraint,
     DateTime,
@@ -77,7 +78,28 @@ class MediaAsset(Base):
     storage_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     category: Mapped[str] = mapped_column(String(32), default="originals")
     upload_status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
-    processing_status: Mapped[str] = mapped_column(String(32), default="none")
+    processing_status: Mapped[str] = mapped_column(String(32), default="none", index=True)
+
+    # Probed metadata (ffprobe). Null until a successful probe completes.
+    container_format: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    overall_bitrate: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    video_codec: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    video_profile: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    display_aspect_ratio: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    video_frame_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    video_bitrate: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    pixel_format: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    audio_codec: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    audio_channels: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    audio_channel_layout: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    audio_sample_rate: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    audio_bitrate: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    audio_stream_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    subtitle_stream_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    probe_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    probe_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    probed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     created_by_admin_id: Mapped[int | None] = mapped_column(
         ForeignKey("admin_users.id"), nullable=True
     )
@@ -88,6 +110,9 @@ class MediaAsset(Base):
 
     sessions = relationship(
         "UploadSession", back_populates="media_asset", cascade="all, delete-orphan"
+    )
+    processing_jobs = relationship(
+        "MediaProcessingJob", back_populates="media_asset", cascade="all, delete-orphan"
     )
 
 
