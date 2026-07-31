@@ -28,11 +28,12 @@ def test_subscriber_login_via_mock_radius_fixture(client):
     assert me.json()["username"] == TEST_FIXTURE_USER
 
 
-def test_admin_auth_and_movie_crud(client, admin_headers):
+def test_admin_auth_and_movie_crud(client, admin_headers, db_session):
     me = client.get("/api/admin/auth/me", headers=admin_headers)
     assert me.status_code == 200
     assert me.json()["username"] == "admin"
     assert "movies" in me.json()["permissions"]
+    assert "catalog.publish" in me.json()["permissions"]
 
     created = client.post(
         "/api/admin/movies",
@@ -45,11 +46,22 @@ def test_admin_auth_and_movie_crud(client, admin_headers):
             "imdb_rating": 8.0,
             "genre_ids": [],
             "description": "Test",
-            "status": "published",
+            "status": "draft",
         },
     )
     assert created.status_code == 201
+    assert created.json()["status"] == "draft"
     movie_id = created.json()["id"]
+
+    # Visibility tests force-publish via ORM (workflow readiness covered elsewhere).
+    from app.models.content import Movie
+    from app.services.catalog import utcnow
+
+    movie = db_session.get(Movie, movie_id)
+    movie.status = "published"
+    movie.published_at = utcnow()
+    db_session.add(movie)
+    db_session.commit()
 
     listed = client.get("/api/movies")
     assert listed.status_code == 200
@@ -75,7 +87,7 @@ def test_series_seasons_episodes_and_stream(client, admin_headers):
     series = client.post(
         "/api/admin/series",
         headers=admin_headers,
-        json={"title": "Test Series", "release_year": 2026, "status": "published"},
+        json={"title": "Test Series", "release_year": 2026, "status": "draft"},
     )
     assert series.status_code == 201
     series_id = series.json()["id"]
@@ -83,7 +95,7 @@ def test_series_seasons_episodes_and_stream(client, admin_headers):
     season = client.post(
         f"/api/admin/series/{series_id}/seasons",
         headers=admin_headers,
-        json={"season_number": 1, "title": "Season 1", "status": "published"},
+        json={"season_number": 1, "title": "Season 1", "status": "draft"},
     )
     assert season.status_code == 201
     season_id = season.json()["id"]
@@ -91,16 +103,14 @@ def test_series_seasons_episodes_and_stream(client, admin_headers):
     episode = client.post(
         f"/api/admin/seasons/{season_id}/episodes",
         headers=admin_headers,
-        json={"episode_number": 1, "title": "Pilot", "duration_minutes": 45, "status": "published"},
+        json={"episode_number": 1, "title": "Pilot", "duration_minutes": 45, "status": "draft"},
     )
     assert episode.status_code == 201
     assert episode.json()["series_id"] == series_id
+    assert episode.json()["status"] == "draft"
 
-    movies = client.get("/api/movies").json()["data"]
-    assert movies
-    movie_id = movies[0]["id"]
     # Legacy placeholder /api/stream/{type}/{id} was removed in Phase 7.
-    stream = client.get(f"/api/stream/movie/{movie_id}")
+    stream = client.get("/api/stream/movie/1")
     assert stream.status_code == 404
 
 

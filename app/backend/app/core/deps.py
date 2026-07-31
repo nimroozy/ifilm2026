@@ -16,10 +16,18 @@ Legacy coarse keys from the foundation seed remain supported with a narrow map:
 | `processing.manage` | `processing.manage`, `processing` |
 | `streaming.read` | `streaming.read`, `streaming.manage`, `streaming` |
 | `streaming.manage` | `streaming.manage`, `streaming` |
+| `catalog.read` | `catalog.read` (exact; movies.read / series.read do not grant workflow reads) |
+| `catalog.edit` | `catalog.edit` |
+| `catalog.review` | `catalog.review` |
+| `catalog.approve` | `catalog.approve` |
+| `catalog.publish` | `catalog.publish` |
+| `catalog.archive` | `catalog.archive` |
 
 Important: `movies` / `series` do **not** grant genre management or unrelated
 catalog mutations. `movies.read` alone cannot mutate movies. Coarse `upload`
 grants media upload manage/read but not catalog or encoding domains.
+`movies.manage` / `series.manage` do **not** satisfy publishing workflow
+permissions (`catalog.review` / `approve` / `publish` / `archive`).
 """
 
 from collections.abc import Callable

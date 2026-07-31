@@ -6,6 +6,7 @@ from app.models.media_assets import MediaAsset, UploadSession
 from app.models.media_encoding import MediaEncodingProfile, MediaPackage, MediaRendition
 from app.models.media_playback import MediaPlaybackSession
 from app.models.media_processing import MediaProcessingJob, MediaProcessingJobEvent
+from app.models.publication import MediaPublicationEvent
 from app.models.user import Device, Subscriber, WatchHistory, WatchlistItem
 
 __all__ = [
@@ -24,6 +25,7 @@ __all__ = [
     "MediaPlaybackSession",
     "MediaProcessingJob",
     "MediaProcessingJobEvent",
+    "MediaPublicationEvent",
     "MediaRendition",
     "Movie",
     "Season",

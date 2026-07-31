@@ -19,12 +19,11 @@ from app.services.catalog import (
     load_genres,
     make_slug_for_movie,
     movie_out,
-    publish_entity,
     resolve_movie,
     soft_delete,
-    unpublish_entity,
     utcnow,
 )
+from app.services.publishing import workflow as publishing_workflow
 
 router = APIRouter(tags=["movies"])
 
@@ -134,13 +133,12 @@ def create_movie(
     _: Annotated[AdminUser, Depends(require_permissions("movies.manage"))],
 ) -> MovieOut:
     data = payload.model_dump(exclude={"genre_ids", "slug"})
+    data["status"] = "draft"
     slug = make_slug_for_movie(db, payload.title, payload.slug)
     ensure_unique_imdb(db, Movie, payload.imdb_id)
     genres = load_genres(db, payload.genre_ids)
     movie = Movie(**data, slug=slug)
     movie.genre_links = genres
-    if movie.status == "published":
-        publish_entity(movie)
     db.add(movie)
     db.commit()
     return movie_out(get_movie(db, movie.id))
@@ -174,10 +172,7 @@ def update_movie(
         setattr(movie, key, value)
     if "genre_ids" in payload.model_fields_set and payload.genre_ids is not None:
         movie.genre_links = load_genres(db, payload.genre_ids)
-    if payload.status == "published":
-        publish_entity(movie)
-    elif payload.status == "draft":
-        unpublish_entity(movie)
+    # status is owned by publishing workflow — ignore if present on legacy clients
     movie.updated_at = utcnow()
     db.add(movie)
     db.commit()
@@ -202,12 +197,12 @@ def delete_movie(
 def publish_movie(
     movie_id: int,
     db: DbSession,
-    _: Annotated[AdminUser, Depends(require_permissions("movies.manage"))],
+    admin: Annotated[AdminUser, Depends(require_permissions("catalog.publish"))],
 ) -> PublishAction:
-    movie = get_movie(db, movie_id)
-    publish_entity(movie)
-    movie.updated_at = utcnow()
-    db.add(movie)
+    """Legacy alias — prefer POST /api/admin/catalog/movie/{id}/publish."""
+    movie = publishing_workflow.workflow_http(
+        publishing_workflow.publish, db, entity_type="movie", entity_id=movie_id, actor=admin
+    )
     db.commit()
     return PublishAction(detail="ok", status=movie.status)
 
@@ -216,11 +211,11 @@ def publish_movie(
 def unpublish_movie(
     movie_id: int,
     db: DbSession,
-    _: Annotated[AdminUser, Depends(require_permissions("movies.manage"))],
+    admin: Annotated[AdminUser, Depends(require_permissions("catalog.publish"))],
 ) -> PublishAction:
-    movie = get_movie(db, movie_id)
-    unpublish_entity(movie)
-    movie.updated_at = utcnow()
-    db.add(movie)
+    """Legacy alias — prefer POST /api/admin/catalog/movie/{id}/unpublish."""
+    movie = publishing_workflow.workflow_http(
+        publishing_workflow.unpublish, db, entity_type="movie", entity_id=movie_id, actor=admin
+    )
     db.commit()
     return PublishAction(detail="ok", status=movie.status)

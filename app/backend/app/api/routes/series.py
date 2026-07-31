@@ -28,14 +28,13 @@ from app.services.catalog import (
     load_genres,
     make_slug_for_series,
     not_deleted,
-    publish_entity,
     resolve_series,
     season_out,
     series_out,
     soft_delete,
-    unpublish_entity,
     utcnow,
 )
+from app.services.publishing import workflow as publishing_workflow
 
 router = APIRouter(tags=["series"])
 
@@ -146,7 +145,7 @@ def list_series(
 
 @router.get("/series/{id_or_slug}", response_model=SeriesOut)
 def get_public_series(id_or_slug: str, db: DbSession) -> SeriesOut:
-    return series_out(resolve_series(db, id_or_slug, published_only=True))
+    return series_out(resolve_series(db, id_or_slug, published_only=True), public_counts=True)
 
 
 @router.get("/series/{id_or_slug}/seasons", response_model=list[SeasonOut])
@@ -214,13 +213,12 @@ def create_series(
     _: Annotated[AdminUser, Depends(require_permissions("series.manage"))],
 ) -> SeriesOut:
     data = payload.model_dump(exclude={"genre_ids", "slug"})
+    data["status"] = "draft"
     slug = make_slug_for_series(db, payload.title, payload.slug)
     ensure_unique_imdb(db, Series, payload.imdb_id)
     genres = load_genres(db, payload.genre_ids)
     series = Series(**data, slug=slug)
     series.genre_links = genres
-    if series.status == "published":
-        publish_entity(series)
     db.add(series)
     db.commit()
     return series_out(get_series(db, series.id))
@@ -255,10 +253,6 @@ def update_series(
             setattr(series, key, value)
     if "genre_ids" in payload.model_fields_set and payload.genre_ids is not None:
         series.genre_links = load_genres(db, payload.genre_ids)
-    if payload.status == "published":
-        publish_entity(series)
-    elif payload.status == "draft":
-        unpublish_entity(series)
     series.updated_at = utcnow()
     db.add(series)
     db.commit()
@@ -293,12 +287,11 @@ def delete_series(
 def publish_series(
     series_id: int,
     db: DbSession,
-    _: Annotated[AdminUser, Depends(require_permissions("series.manage"))],
+    admin: Annotated[AdminUser, Depends(require_permissions("catalog.publish"))],
 ) -> PublishAction:
-    series = get_series(db, series_id)
-    publish_entity(series)
-    series.updated_at = utcnow()
-    db.add(series)
+    series = publishing_workflow.workflow_http(
+        publishing_workflow.publish, db, entity_type="series", entity_id=series_id, actor=admin
+    )
     db.commit()
     return PublishAction(detail="ok", status=series.status)
 
@@ -307,12 +300,11 @@ def publish_series(
 def unpublish_series(
     series_id: int,
     db: DbSession,
-    _: Annotated[AdminUser, Depends(require_permissions("series.manage"))],
+    admin: Annotated[AdminUser, Depends(require_permissions("catalog.publish"))],
 ) -> PublishAction:
-    series = get_series(db, series_id)
-    unpublish_entity(series)
-    series.updated_at = utcnow()
-    db.add(series)
+    series = publishing_workflow.workflow_http(
+        publishing_workflow.unpublish, db, entity_type="series", entity_id=series_id, actor=admin
+    )
     db.commit()
     return PublishAction(detail="ok", status=series.status)
 
@@ -344,7 +336,7 @@ def create_season(
 ) -> SeasonOut:
     series = get_series(db, series_id)
     _ensure_unique_season_number(db, series.id, payload.season_number)
-    season = Season(series_id=series.id, **payload.model_dump())
+    season = Season(series_id=series.id, **{**payload.model_dump(), "status": "draft"})
     db.add(season)
     db.commit()
     db.refresh(season)

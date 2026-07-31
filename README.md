@@ -11,7 +11,7 @@ Official repository for the iFilm streaming platform.
 
 ## Catalog administration
 
-Authorized admins can manage movies, series, seasons, episodes, genres, artwork URLs, publishing status, and featured/trending flags.
+Authorized admins can manage movies, series, seasons, episodes, genres, artwork URLs, featured/trending flags, and the controlled publishing workflow (draft → review → approve → publish/schedule).
 
 Docs:
 
@@ -19,6 +19,7 @@ Docs:
 - [docs/catalog/DATA_MODEL.md](./docs/catalog/DATA_MODEL.md)
 - [docs/catalog/API_REFERENCE.md](./docs/catalog/API_REFERENCE.md)
 - [docs/catalog/ADMIN_WORKFLOWS.md](./docs/catalog/ADMIN_WORKFLOWS.md)
+- [docs/catalog/PUBLISHING_WORKFLOW.md](./docs/catalog/PUBLISHING_WORKFLOW.md)
 - [docs/catalog/FRONTEND_INTEGRATION.md](./docs/catalog/FRONTEND_INTEGRATION.md)
 - [docs/catalog/TEST_REPORT.md](./docs/catalog/TEST_REPORT.md)
 

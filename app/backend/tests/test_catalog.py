@@ -2,6 +2,107 @@
 
 from __future__ import annotations
 
+from app.models.content import Movie
+from app.models.media_assets import MediaAsset, new_uuid, utcnow
+from app.models.media_encoding import PACKAGE_TYPE_HLS_VOD, MediaPackage, MediaRendition
+from app.services.storage import ensure_media_layout, media_root, relative_media_path
+from app.services.streaming.activation import activate_completed_package
+
+
+def _seed_pkg(db_session, *, movie_id=None, episode_id=None):
+    ensure_media_layout()
+    asset = MediaAsset(
+        id=new_uuid(),
+        original_filename="clip.mp4",
+        stored_filename="clip.mp4",
+        mime_type="video/mp4",
+        extension=".mp4",
+        size_bytes=1000,
+        category="originals",
+        upload_status="completed",
+        processing_status="completed",
+        storage_backend="local",
+        storage_path=f"originals/{new_uuid()}/clip.mp4",
+        movie_id=movie_id,
+        episode_id=episode_id,
+        probed_at=utcnow(),
+    )
+    db_session.add(asset)
+    db_session.flush()
+    package = MediaPackage(
+        id=new_uuid(),
+        media_asset_id=asset.id,
+        package_type=PACKAGE_TYPE_HLS_VOD,
+        status="completed",
+        is_active=False,
+        segment_duration_seconds=6,
+        rendition_count=1,
+        completed_at=utcnow(),
+    )
+    db_session.add(package)
+    db_session.flush()
+    pkg_dir = media_root() / "packages" / asset.id / package.id
+    pkg_dir.mkdir(parents=True, exist_ok=True)
+    rendition = pkg_dir / "240p"
+    rendition.mkdir(parents=True, exist_ok=True)
+    (rendition / "segment_000.ts").write_bytes(b"\x00\x01" * 32)
+    (rendition / "index.m3u8").write_text(
+        "#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:6.0,\nsegment_000.ts\n#EXT-X-ENDLIST\n",
+        encoding="utf-8",
+    )
+    (pkg_dir / "master.m3u8").write_text(
+        "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=400000\n240p/index.m3u8\n",
+        encoding="utf-8",
+    )
+    package.storage_path = relative_media_path(pkg_dir)
+    package.master_playlist_path = relative_media_path(pkg_dir / "master.m3u8")
+    db_session.add(
+        MediaRendition(
+            id=new_uuid(),
+            package_id=package.id,
+            label="240p",
+            height=240,
+            width=426,
+            bandwidth=400000,
+            playlist_path=relative_media_path(pkg_dir / "240p" / "index.m3u8"),
+            segment_count=1,
+            status="completed",
+        )
+    )
+    db_session.flush()
+    activate_completed_package(db_session, package)
+    db_session.commit()
+
+
+def _workflow_publish_movie(client, admin_headers, db_session, movie_id: int) -> None:
+    movie = db_session.get(Movie, movie_id)
+    # Ensure readiness metadata
+    if not movie.description:
+        movie.description = "Synopsis for publish readiness"
+    if not movie.poster_url:
+        movie.poster_url = "https://placehold.co/300x450"
+    if not movie.backdrop_url:
+        movie.backdrop_url = "https://placehold.co/1920x800"
+    if movie.release_year is None:
+        movie.release_year = 2024
+    db_session.add(movie)
+    db_session.commit()
+    if not movie.genre_links:
+        genre = client.post(
+            "/api/admin/genres",
+            headers=admin_headers,
+            json={"name": f"G{movie_id}", "slug": f"g-{movie_id}"},
+        ).json()
+        client.patch(
+            f"/api/admin/movies/{movie_id}",
+            headers=admin_headers,
+            json={"genre_ids": [genre["id"]]},
+        )
+    _seed_pkg(db_session, movie_id=movie_id)
+    assert client.post(f"/api/admin/catalog/movie/{movie_id}/submit-review", headers=admin_headers, json={}).status_code == 200
+    assert client.post(f"/api/admin/catalog/movie/{movie_id}/approve", headers=admin_headers, json={}).status_code == 200
+    assert client.post(f"/api/admin/catalog/movie/{movie_id}/publish", headers=admin_headers, json={}).status_code == 200
+
 
 def test_unauthorized_admin_access(client):
     assert client.get("/api/admin/movies").status_code == 401
@@ -40,11 +141,19 @@ def test_movie_creation_and_validation(client, admin_headers):
     assert dup.status_code == 409
 
 
-def test_movie_update_soft_delete_and_publish(client, admin_headers):
+def test_movie_update_soft_delete_and_publish(client, admin_headers, db_session):
     created = client.post(
         "/api/admin/movies",
         headers=admin_headers,
-        json={"title": "Publish Me", "slug": "publish-me", "status": "draft"},
+        json={
+            "title": "Publish Me",
+            "slug": "publish-me",
+            "status": "draft",
+            "description": "Ready synopsis",
+            "release_year": 2024,
+            "poster_url": "https://placehold.co/300x450",
+            "backdrop_url": "https://placehold.co/1920x800",
+        },
     )
     movie_id = created.json()["id"]
 
@@ -56,17 +165,16 @@ def test_movie_update_soft_delete_and_publish(client, admin_headers):
     assert updated.status_code == 200
     assert updated.json()["is_featured"] is True
 
-    published = client.post(f"/api/admin/movies/{movie_id}/publish", headers=admin_headers)
-    assert published.status_code == 200
-    assert published.json()["status"] == "published"
+    _workflow_publish_movie(client, admin_headers, db_session, movie_id)
 
     public = client.get(f"/api/movies/{movie_id}")
     assert public.status_code == 200
 
-    client.post(f"/api/admin/movies/{movie_id}/unpublish", headers=admin_headers)
+    client.post(f"/api/admin/catalog/movie/{movie_id}/unpublish", headers=admin_headers, json={})
     assert client.get(f"/api/movies/{movie_id}").status_code == 404
 
-    client.post(f"/api/admin/movies/{movie_id}/publish", headers=admin_headers)
+    # republish from unpublished
+    assert client.post(f"/api/admin/catalog/movie/{movie_id}/publish", headers=admin_headers, json={}).status_code == 200
     deleted = client.delete(f"/api/admin/movies/{movie_id}", headers=admin_headers)
     assert deleted.status_code == 200
     assert client.get(f"/api/movies/{movie_id}").status_code == 404
@@ -81,14 +189,23 @@ def test_public_endpoint_hides_drafts(client, admin_headers):
     )
     listed = client.get("/api/movies", params={"q": "Hidden Draft"})
     assert listed.status_code == 200
-    assert all(item["title"] != "Hidden Draft" for item in listed.json()["data"])
+    items = listed.json().get("data") or listed.json().get("items") or []
+    assert all(item["title"] != "Hidden Draft" for item in items)
 
 
-def test_series_season_episode_hierarchy(client, admin_headers):
+def test_series_season_episode_hierarchy(client, admin_headers, db_session):
     series = client.post(
         "/api/admin/series",
         headers=admin_headers,
-        json={"title": "Hierarchy Show", "slug": "hierarchy-show", "status": "draft"},
+        json={
+            "title": "Hierarchy Show",
+            "slug": "hierarchy-show",
+            "status": "draft",
+            "description": "Series synopsis",
+            "release_year": 2024,
+            "poster_url": "https://placehold.co/300x450",
+            "backdrop_url": "https://placehold.co/1920x800",
+        },
     )
     assert series.status_code == 201
     series_id = series.json()["id"]
@@ -123,23 +240,31 @@ def test_series_season_episode_hierarchy(client, admin_headers):
     )
     assert dup_ep.status_code == 409
 
-    # Cannot publish episode while parents are draft
+    # Episode cannot publish from draft (invalid transition) without review chain + package
     bad_publish = client.post(f"/api/admin/episodes/{episode_id}/publish", headers=admin_headers)
     assert bad_publish.status_code == 400
 
-    client.post(f"/api/admin/series/{series_id}/publish", headers=admin_headers)
-    # season still draft
-    still_bad = client.post(f"/api/admin/episodes/{episode_id}/publish", headers=admin_headers)
-    assert still_bad.status_code == 400
-
-    client.patch(
-        f"/api/admin/seasons/{season_id}",
-        headers=admin_headers,
-        json={"status": "published"},
-    )
-    ok = client.post(f"/api/admin/episodes/{episode_id}/publish", headers=admin_headers)
+    _seed_pkg(db_session, episode_id=episode_id)
+    assert client.post(f"/api/admin/catalog/episode/{episode_id}/submit-review", headers=admin_headers, json={}).status_code == 200
+    assert client.post(f"/api/admin/catalog/episode/{episode_id}/approve", headers=admin_headers, json={}).status_code == 200
+    ok = client.post(f"/api/admin/catalog/episode/{episode_id}/publish", headers=admin_headers, json={})
     assert ok.status_code == 200
     assert ok.json()["status"] == "published"
+
+    # Season + series publish for public hierarchy
+    assert client.post(f"/api/admin/catalog/season/{season_id}/submit-review", headers=admin_headers, json={}).status_code == 200
+    assert client.post(f"/api/admin/catalog/season/{season_id}/approve", headers=admin_headers, json={}).status_code == 200
+    assert client.post(f"/api/admin/catalog/season/{season_id}/publish", headers=admin_headers, json={}).status_code == 200
+
+    genre = client.post(
+        "/api/admin/genres",
+        headers=admin_headers,
+        json={"name": "Hierarchy", "slug": "hierarchy-genre"},
+    ).json()
+    client.patch(f"/api/admin/series/{series_id}", headers=admin_headers, json={"genre_ids": [genre["id"]]})
+    assert client.post(f"/api/admin/catalog/series/{series_id}/submit-review", headers=admin_headers, json={}).status_code == 200
+    assert client.post(f"/api/admin/catalog/series/{series_id}/approve", headers=admin_headers, json={}).status_code == 200
+    assert client.post(f"/api/admin/catalog/series/{series_id}/publish", headers=admin_headers, json={}).status_code == 200
 
 
 def test_genre_creation_and_delete_blocked_when_in_use(client, admin_headers):
@@ -161,20 +286,19 @@ def test_genre_creation_and_delete_blocked_when_in_use(client, admin_headers):
     blocked = client.delete(f"/api/admin/genres/{genre_id}", headers=admin_headers)
     assert blocked.status_code == 409
 
-    # Soft-deleted movies do not block genre deletion.
     client.delete(f"/api/admin/movies/{movie.json()['id']}", headers=admin_headers)
     allowed = client.delete(f"/api/admin/genres/{genre_id}", headers=admin_headers)
     assert allowed.status_code == 200
 
 
-def test_pagination_filtering_search_sorting(client, admin_headers):
+def test_pagination_filtering_search_sorting(client, admin_headers, db_session):
     genre = client.post(
         "/api/admin/genres",
         headers=admin_headers,
         json={"name": "Adventure", "slug": "adventure-filter"},
     ).json()
     for i, year in enumerate([2020, 2021, 2022], start=1):
-        client.post(
+        created = client.post(
             "/api/admin/movies",
             headers=admin_headers,
             json={
@@ -185,28 +309,35 @@ def test_pagination_filtering_search_sorting(client, admin_headers):
                 "imdb_rating": float(i),
                 "is_featured": i == 2,
                 "is_trending": i == 3,
-                "status": "published",
+                "status": "draft",
+                "description": "Synopsis",
+                "poster_url": "https://placehold.co/300x450",
+                "backdrop_url": "https://placehold.co/1920x800",
                 "genre_ids": [genre["id"]],
             },
         )
+        assert created.status_code == 201
+        _workflow_publish_movie(client, admin_headers, db_session, created.json()["id"])
 
     page = client.get("/api/movies", params={"page": 1, "page_size": 2, "q": "Sort Film"})
     assert page.status_code == 200
-    assert page.json()["meta"]["page_size"] == 2
-    assert page.json()["meta"]["total"] >= 3
+    meta = page.json()["meta"]
+    assert meta["page_size"] == 2
+    assert meta["total"] >= 3
+    items_key = "data" if "data" in page.json() else "items"
 
     filtered = client.get(
         "/api/movies",
         params={"genre": "adventure-filter", "year": 2021, "language": "Dari", "featured": True},
     )
     assert filtered.status_code == 200
-    assert all(item["release_year"] == 2021 for item in filtered.json()["data"])
+    assert all(item["release_year"] == 2021 for item in filtered.json()[items_key])
 
     sorted_rating = client.get("/api/movies", params={"q": "Sort Film", "sort": "rating_desc"})
     assert sorted_rating.status_code == 200
-    ratings = [item.get("imdb_rating") or 0 for item in sorted_rating.json()["data"]]
+    ratings = [item.get("imdb_rating") or 0 for item in sorted_rating.json()[items_key]]
     assert ratings == sorted(ratings, reverse=True)
 
     title_asc = client.get("/api/movies", params={"q": "Sort Film", "sort": "title_asc"})
-    titles = [item["title"] for item in title_asc.json()["data"]]
+    titles = [item["title"] for item in title_asc.json()[items_key]]
     assert titles == sorted(titles)

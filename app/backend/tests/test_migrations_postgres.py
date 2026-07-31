@@ -161,7 +161,7 @@ def test_postgresql_migration_succeeds(postgres_url):
     assert "seasons" in tables
     assert "media_assets" in tables
     assert "upload_sessions" in tables
-    assert version == "007_streaming_service"
+    assert version == "008_publishing_workflow"
 
 
 def test_postgresql_migration_from_previous_revision(postgres_url):
@@ -194,7 +194,7 @@ def test_postgresql_migration_from_previous_revision(postgres_url):
     assert movie_slug == "ordinary-film"
     assert series_slug == "ordinary-show"
     assert null_imdb >= 1
-    assert version == "007_streaming_service"
+    assert version == "008_publishing_workflow"
 
 
 def test_002_to_head_duplicate_and_messy_titles(postgres_url):
@@ -711,10 +711,144 @@ def test_streaming_service_migration_roundtrip(postgres_url):
     assert version == "007_streaming_service"
 
 
+def test_publishing_workflow_migration_roundtrip(postgres_url):
+    """007 → 008 → 007 → 008 round-trip for publishing workflow schema."""
+    _reset_schema(postgres_url)
+    assert _run_alembic(postgres_url, "upgrade", "007_streaming_service").returncode == 0
+
+    engine = create_engine(postgres_url)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO movies (
+                  title, original_title, slug, description, short_description,
+                  age_rating, language, country, poster_url, backdrop_url, trailer_url,
+                  status, is_featured, is_trending, director, "cast", audio, subtitles,
+                  qualities, dubbed, views, created_at, updated_at
+                ) VALUES (
+                  'Pub Mig', '', 'pub-mig', '', '',
+                  '', '', '', '', '', '',
+                  'draft', false, false, '', '[]', '[]', '[]',
+                  '[]', '[]', 0, NOW(), NOW()
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                INSERT INTO series (
+                  title, original_title, slug, description, short_description,
+                  age_rating, language, country, poster_url, backdrop_url, trailer_url,
+                  status, airing_status, is_featured, is_trending, audio, subtitles,
+                  dubbed, new_episode, views, created_at, updated_at
+                ) VALUES (
+                  'Series Mig', '', 'series-mig', '', '',
+                  '', '', '', '', '', '',
+                  'draft', 'Ongoing', false, false, '[]', '[]',
+                  '[]', false, 0, NOW(), NOW()
+                )
+                """
+            )
+        )
+        series_id = conn.execute(text("SELECT id FROM series WHERE slug='series-mig'")).scalar_one()
+        conn.execute(
+            text(
+                """
+                INSERT INTO seasons (
+                  series_id, season_number, title, description, poster_url, status,
+                  created_at, updated_at
+                ) VALUES (
+                  :sid, 1, 'S1', '', '', 'draft', NOW(), NOW()
+                )
+                """
+            ),
+            {"sid": series_id},
+        )
+    engine.dispose()
+
+    assert _run_alembic(postgres_url, "upgrade", "008_publishing_workflow").returncode == 0
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        movie_cols = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns WHERE table_name='movies'"
+                )
+            )
+        }
+        season_cols = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns WHERE table_name='seasons'"
+                )
+            )
+        }
+        tables = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT tablename FROM pg_tables WHERE schemaname='public'")
+            )
+        }
+        pub_version = conn.execute(
+            text("SELECT publication_version FROM movies WHERE slug='pub-mig'")
+        ).scalar_one()
+    engine.dispose()
+    assert version == "008_publishing_workflow"
+    assert "media_publication_events" in tables
+    assert "scheduled_publish_at" in movie_cols
+    assert "published_at" in season_cols
+    assert "publication_version" in movie_cols
+    assert pub_version == 0
+
+    assert _run_alembic(postgres_url, "downgrade", "007_streaming_service").returncode == 0
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        tables = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT tablename FROM pg_tables WHERE schemaname='public'")
+            )
+        }
+        movie_cols = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns WHERE table_name='movies'"
+                )
+            )
+        }
+        season_cols = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns WHERE table_name='seasons'"
+                )
+            )
+        }
+    engine.dispose()
+    assert version == "007_streaming_service"
+    assert "media_publication_events" not in tables
+    assert "scheduled_publish_at" not in movie_cols
+    assert "published_at" not in season_cols
+
+    assert _run_alembic(postgres_url, "upgrade", "008_publishing_workflow").returncode == 0
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+    engine.dispose()
+    assert version == "008_publishing_workflow"
+
+
 def test_alembic_heads_single(postgres_url):
     result = _run_alembic(postgres_url, "heads")
     assert result.returncode == 0, result.stdout + result.stderr
-    lines = [ln.strip() for ln in (result.stdout + result.stderr).splitlines() if ln.strip()]
-    head_lines = [ln for ln in lines if "007_streaming_service" in ln]
+    lines = [ln for ln in (result.stdout + result.stderr).splitlines() if ln.strip()]
+    head_lines = [ln for ln in lines if "008_publishing_workflow" in ln]
     assert head_lines, result.stdout + result.stderr
-    assert sum(1 for ln in lines if ln.startswith("007_streaming_service")) >= 1
+    assert sum(1 for ln in lines if ln.strip().startswith("008_publishing_workflow")) >= 1

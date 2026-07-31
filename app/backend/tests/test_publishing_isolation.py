@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
-from app.models.content import Movie, Series
+from app.models.content import Episode, Movie, Season, Series
 from app.services.catalog import utcnow
 
 
+def _force_published(db_session, model, entity_id: int) -> None:
+    row = db_session.get(model, entity_id)
+    row.status = "published"
+    row.published_at = row.published_at or utcnow()
+    row.deleted_at = None
+    db_session.add(row)
+    db_session.commit()
+
+
 def _seed_visibility_matrix(admin_headers, client, db_session):
-    """Create published + hidden catalog rows via admin API and direct ORM tweaks."""
+    """Create published + hidden catalog rows via admin API and ORM status force."""
     genre = client.post(
         "/api/admin/genres",
         headers=admin_headers,
@@ -20,12 +29,13 @@ def _seed_visibility_matrix(admin_headers, client, db_session):
         json={
             "title": "Visible Movie",
             "slug": "visible-movie",
-            "status": "published",
+            "status": "draft",
             "is_featured": True,
             "is_trending": True,
             "genre_ids": [genre["id"]],
         },
     ).json()
+    _force_published(db_session, Movie, published["id"])
 
     draft = client.post(
         "/api/admin/movies",
@@ -36,8 +46,9 @@ def _seed_visibility_matrix(admin_headers, client, db_session):
     archived = client.post(
         "/api/admin/movies",
         headers=admin_headers,
-        json={"title": "Archived Movie", "slug": "archived-movie", "status": "published", "is_trending": True},
+        json={"title": "Archived Movie", "slug": "archived-movie", "status": "draft", "is_trending": True},
     ).json()
+    _force_published(db_session, Movie, archived["id"])
     client.delete(f"/api/admin/movies/{archived['id']}", headers=admin_headers)
 
     series = client.post(
@@ -46,12 +57,13 @@ def _seed_visibility_matrix(admin_headers, client, db_session):
         json={
             "title": "Visible Series",
             "slug": "visible-series",
-            "status": "published",
+            "status": "draft",
             "is_featured": True,
             "is_trending": True,
             "genre_ids": [genre["id"]],
         },
     ).json()
+    _force_published(db_session, Series, series["id"])
 
     draft_series = client.post(
         "/api/admin/series",
@@ -62,15 +74,17 @@ def _seed_visibility_matrix(admin_headers, client, db_session):
     archived_series = client.post(
         "/api/admin/series",
         headers=admin_headers,
-        json={"title": "Archived Series", "slug": "archived-series", "status": "published"},
+        json={"title": "Archived Series", "slug": "archived-series", "status": "draft"},
     ).json()
+    _force_published(db_session, Series, archived_series["id"])
     client.delete(f"/api/admin/series/{archived_series['id']}", headers=admin_headers)
 
     pub_season = client.post(
         f"/api/admin/series/{series['id']}/seasons",
         headers=admin_headers,
-        json={"season_number": 1, "title": "S1", "status": "published"},
+        json={"season_number": 1, "title": "S1", "status": "draft"},
     ).json()
+    _force_published(db_session, Season, pub_season["id"])
     draft_season = client.post(
         f"/api/admin/series/{series['id']}/seasons",
         headers=admin_headers,
@@ -80,21 +94,20 @@ def _seed_visibility_matrix(admin_headers, client, db_session):
     pub_ep = client.post(
         f"/api/admin/seasons/{pub_season['id']}/episodes",
         headers=admin_headers,
-        json={"episode_number": 1, "title": "E1", "status": "published"},
+        json={"episode_number": 1, "title": "E1", "status": "draft"},
     ).json()
+    _force_published(db_session, Episode, pub_ep["id"])
     draft_ep = client.post(
         f"/api/admin/seasons/{pub_season['id']}/episodes",
         headers=admin_headers,
         json={"episode_number": 2, "title": "E2 Draft", "status": "draft"},
     ).json()
-    # draft season episode should also stay hidden even if somehow published later tests
     client.post(
         f"/api/admin/seasons/{draft_season['id']}/episodes",
         headers=admin_headers,
         json={"episode_number": 1, "title": "Hidden season ep", "status": "draft"},
     )
 
-    # Soft-deleted published rows (status remains published, deleted_at set) via ORM
     soft = Movie(
         title="Soft Deleted Movie",
         slug="soft-deleted-movie",
@@ -131,10 +144,14 @@ def _seed_visibility_matrix(admin_headers, client, db_session):
     }
 
 
+def _items(payload: dict):
+    return payload.get("data") or payload.get("items") or []
+
+
 def test_public_movies_hide_unpublished(client, admin_headers, db_session):
     data = _seed_visibility_matrix(admin_headers, client, db_session)
 
-    listed = client.get("/api/movies").json()["data"]
+    listed = _items(client.get("/api/movies").json())
     titles = {m["title"] for m in listed}
     assert "Visible Movie" in titles
     assert "Draft Movie" not in titles
@@ -149,11 +166,11 @@ def test_public_movies_hide_unpublished(client, admin_headers, db_session):
     assert client.get(f"/api/movies/{data['published']['id']}").status_code == 200
     assert client.get("/api/movies/visible-movie").status_code == 200
 
-    featured = client.get("/api/movies", params={"featured": True}).json()["data"]
+    featured = _items(client.get("/api/movies", params={"featured": True}).json())
     assert all(m["status"] == "published" for m in featured)
     assert all(m["title"] != "Draft Movie" for m in featured)
 
-    trending = client.get("/api/movies", params={"trending": True}).json()["data"]
+    trending = _items(client.get("/api/movies", params={"trending": True}).json())
     assert all(m["status"] == "published" for m in trending)
     assert all(m["title"] != "Archived Movie" for m in trending)
 
@@ -161,7 +178,7 @@ def test_public_movies_hide_unpublished(client, admin_headers, db_session):
 def test_public_series_seasons_episodes_hide_unpublished(client, admin_headers, db_session):
     data = _seed_visibility_matrix(admin_headers, client, db_session)
 
-    listed = client.get("/api/series").json()["data"]
+    listed = _items(client.get("/api/series").json())
     titles = {s["title"] for s in listed}
     assert "Visible Series" in titles
     assert "Draft Series" not in titles
