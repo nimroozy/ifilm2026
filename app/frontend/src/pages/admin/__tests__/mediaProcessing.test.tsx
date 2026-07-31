@@ -9,8 +9,10 @@ import { LangProvider } from '@/components/CustomerLayout';
 
 const getMediaAsset = vi.fn();
 const listAssetProcessingJobs = vi.fn();
+const listAssetPackages = vi.fn();
 const getProcessingStatus = vi.fn();
 const queueMediaProbe = vi.fn();
+const queueMediaEncodeHls = vi.fn();
 const retryProcessingJob = vi.fn();
 const cancelProcessingJob = vi.fn();
 const listProcessingJobs = vi.fn();
@@ -23,8 +25,10 @@ vi.mock('@/lib/api', async () => {
       ...actual.adminApi,
       getMediaAsset: (...args: unknown[]) => getMediaAsset(...args),
       listAssetProcessingJobs: (...args: unknown[]) => listAssetProcessingJobs(...args),
+      listAssetPackages: (...args: unknown[]) => listAssetPackages(...args),
       getProcessingStatus: (...args: unknown[]) => getProcessingStatus(...args),
       queueMediaProbe: (...args: unknown[]) => queueMediaProbe(...args),
+      queueMediaEncodeHls: (...args: unknown[]) => queueMediaEncodeHls(...args),
       retryProcessingJob: (...args: unknown[]) => retryProcessingJob(...args),
       cancelProcessingJob: (...args: unknown[]) => cancelProcessingJob(...args),
       listProcessingJobs: (...args: unknown[]) => listProcessingJobs(...args),
@@ -77,8 +81,10 @@ describe('media processing admin UI', () => {
     tokenStore.setAdmin('tok');
     getMediaAsset.mockResolvedValue(asset);
     listAssetProcessingJobs.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 1 });
+    listAssetPackages.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 1 });
     getProcessingStatus.mockResolvedValue({
       enabled: true,
+      hls_encoding_enabled: true,
       ffmpeg_available: true,
       ffprobe_available: true,
     });
@@ -100,6 +106,43 @@ describe('media processing admin UI', () => {
         worker_id: null,
         cancel_requested: false,
         created_by_admin_id: 1,
+      },
+    });
+    queueMediaEncodeHls.mockResolvedValue({
+      created: true,
+      job: {
+        id: 'job-enc-1',
+        media_asset_id: 'asset-1',
+        job_type: 'encode_hls',
+        status: 'queued',
+        priority: 200,
+        attempt_count: 0,
+        max_attempts: 3,
+        progress_percent: 0,
+        current_step: 'queued',
+        error_code: null,
+        error_message: null,
+        worker_id: null,
+        cancel_requested: false,
+        created_by_admin_id: 1,
+      },
+      package: {
+        id: 'pkg-1',
+        media_asset_id: 'asset-1',
+        processing_job_id: 'job-enc-1',
+        package_type: 'hls_vod',
+        status: 'pending',
+        storage_path: null,
+        master_playlist_path: null,
+        source_width: 640,
+        source_height: 360,
+        duration_seconds: 1,
+        segment_duration_seconds: 6,
+        rendition_count: 0,
+        error_code: null,
+        error_message: null,
+        created_by_admin_id: 1,
+        renditions: [],
       },
     });
     retryProcessingJob.mockResolvedValue({ id: 'job-1', status: 'queued' });
@@ -129,6 +172,7 @@ describe('media processing admin UI', () => {
   it('shows feature-disabled state', async () => {
     getProcessingStatus.mockResolvedValue({
       enabled: false,
+      hls_encoding_enabled: false,
       ffmpeg_available: false,
       ffprobe_available: false,
     });
@@ -255,5 +299,51 @@ describe('media processing admin UI', () => {
     listProcessingJobs.mockRejectedValue(new ApiError('boom', 500));
     fireEvent.click(screen.getByText('Refresh'));
     await waitFor(() => expect(screen.getByTestId('error-state')).toBeInTheDocument());
+  });
+
+  it('queues HLS encode when probe metadata is present', async () => {
+    getMediaAsset.mockResolvedValue({
+      ...asset,
+      width: 640,
+      height: 360,
+      probed_at: '2026-07-31T00:00:00Z',
+      processing_status: 'completed',
+    });
+    wrap(
+      <Routes>
+        <Route path="/admin/media/:assetId" element={<MediaAssetDetailPage />} />
+      </Routes>,
+      '/admin/media/asset-1'
+    );
+    await waitFor(() => expect(screen.getByTestId('encode-hls')).toBeInTheDocument());
+    expect(screen.getByTestId('encode-hls')).not.toBeDisabled();
+    fireEvent.click(screen.getByTestId('encode-hls'));
+    await waitFor(() => expect(queueMediaEncodeHls).toHaveBeenCalledWith('asset-1'));
+    expect(screen.getByTestId('packages-panel')).toBeInTheDocument();
+  });
+
+  it('shows HLS encoding disabled while probe remains available', async () => {
+    getProcessingStatus.mockResolvedValue({
+      enabled: true,
+      hls_encoding_enabled: false,
+      ffmpeg_available: false,
+      ffprobe_available: true,
+    });
+    getMediaAsset.mockResolvedValue({
+      ...asset,
+      width: 640,
+      height: 360,
+      probed_at: '2026-07-31T00:00:00Z',
+      processing_status: 'completed',
+    });
+    wrap(
+      <Routes>
+        <Route path="/admin/media/:assetId" element={<MediaAssetDetailPage />} />
+      </Routes>,
+      '/admin/media/asset-1'
+    );
+    await waitFor(() => expect(screen.getByTestId('hls-encoding-disabled')).toBeInTheDocument());
+    expect(screen.getByTestId('encode-hls')).toBeDisabled();
+    expect(screen.getByTestId('probe-media')).not.toBeDisabled();
   });
 });

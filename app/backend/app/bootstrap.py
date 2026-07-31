@@ -11,6 +11,8 @@ from app.core.security import hash_password
 from app.models.admin import AdminRole, AdminUser
 from app.models.cdn import Branch, CDNNode
 from app.models.content import Genre, Movie, Series
+from app.models.media_assets import new_uuid
+from app.models.media_encoding import MediaEncodingProfile
 from app.models.user import Subscriber
 from app.services.catalog import publish_entity, utcnow
 from app.utils.slug import normalize_slug
@@ -40,6 +42,48 @@ SUPER_PERMISSIONS = [
     "settings",
 ]
 
+# Default HLS ladder (same seed as migration 006_hls_encoding).
+DEFAULT_ENCODING_PROFILES = [
+    ("hls_240p", "240p", 240, 400_000, 64_000, 440_000, 800_000, 10),
+    ("hls_360p", "360p", 360, 800_000, 96_000, 880_000, 1_600_000, 20),
+    ("hls_480p", "480p", 480, 1_400_000, 128_000, 1_540_000, 2_800_000, 30),
+    ("hls_720p", "720p", 720, 2_800_000, 128_000, 3_080_000, 5_600_000, 40),
+    ("hls_1080p", "1080p", 1080, 5_000_000, 192_000, 5_500_000, 10_000_000, 50),
+]
+
+
+def seed_encoding_profiles(db: Session) -> int:
+    """Insert missing default encoding profiles. Returns count inserted."""
+    inserted = 0
+    for name, label, height, vbr, abr, maxrate, bufsize, sort_order in DEFAULT_ENCODING_PROFILES:
+        existing = (
+            db.query(MediaEncodingProfile).filter(MediaEncodingProfile.name == name).one_or_none()
+        )
+        if existing is not None:
+            continue
+        db.add(
+            MediaEncodingProfile(
+                id=new_uuid(),
+                name=name,
+                label=label,
+                height=height,
+                video_bitrate=vbr,
+                audio_bitrate=abr,
+                maxrate=maxrate,
+                bufsize=bufsize,
+                video_codec="h264",
+                audio_codec="aac",
+                video_profile="main",
+                preset="veryfast",
+                enabled=True,
+                sort_order=sort_order,
+            )
+        )
+        inserted += 1
+    if inserted:
+        db.flush()
+    return inserted
+
 
 def _ensure_genres(db: Session, names: list[str]) -> list[Genre]:
     genres: list[Genre] = []
@@ -57,6 +101,7 @@ def _ensure_genres(db: Session, names: list[str]) -> list[Genre]:
 def seed_development_data(db: Session, *, include_demo_catalog: bool = True) -> None:
     settings = get_settings()
     admin_password = require_admin_bootstrap_password(settings)
+    seed_encoding_profiles(db)
 
     role = db.query(AdminRole).filter(AdminRole.name == "Super Admin").one_or_none()
     if role is None:

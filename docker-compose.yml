@@ -43,6 +43,7 @@ services:
       ENABLE_CDN_SYNC: ${ENABLE_CDN_SYNC:-false}
       ENABLE_RADIUS_LOGIN: ${ENABLE_RADIUS_LOGIN:-false}
       ENABLE_MEDIA_PROCESSING: ${ENABLE_MEDIA_PROCESSING:-false}
+      ENABLE_HLS_ENCODING: ${ENABLE_HLS_ENCODING:-false}
       FFMPEG_BINARY: ${FFMPEG_BINARY:-ffmpeg}
       FFPROBE_BINARY: ${FFPROBE_BINARY:-ffprobe}
       RADIUS_ENABLED: ${RADIUS_ENABLED:-false}
@@ -76,6 +77,7 @@ services:
       ENABLE_CDN_SYNC: ${ENABLE_CDN_SYNC:-false}
       ENABLE_RADIUS_LOGIN: ${ENABLE_RADIUS_LOGIN:-false}
       ENABLE_MEDIA_PROCESSING: ${ENABLE_MEDIA_PROCESSING:-false}
+      ENABLE_HLS_ENCODING: ${ENABLE_HLS_ENCODING:-false}
       RADIUS_MODE: ${RADIUS_MODE:-live}
       RADIUS_SECRET: ${RADIUS_SECRET:-}
     volumes:
@@ -99,6 +101,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in your environment}
       MEDIA_ROOT: /data/media
       ENABLE_MEDIA_PROCESSING: ${ENABLE_MEDIA_PROCESSING:-false}
+      ENABLE_HLS_ENCODING: ${ENABLE_HLS_ENCODING:-false}
       FFMPEG_BINARY: ${FFMPEG_BINARY:-ffmpeg}
       FFPROBE_BINARY: ${FFPROBE_BINARY:-ffprobe}
       MEDIA_PROCESSING_WORKER_ID: ${MEDIA_PROCESSING_WORKER_ID:-compose-media-1}
@@ -107,10 +110,16 @@ services:
       MEDIA_PROCESSING_MAX_ATTEMPTS: ${MEDIA_PROCESSING_MAX_ATTEMPTS:-3}
       MEDIA_PROCESSING_RETRY_BASE_SECONDS: ${MEDIA_PROCESSING_RETRY_BASE_SECONDS:-30}
       MEDIA_PROCESSING_PROBE_TIMEOUT_SECONDS: ${MEDIA_PROCESSING_PROBE_TIMEOUT_SECONDS:-120}
+      MEDIA_PROCESSING_ENCODE_TIMEOUT_SECONDS: ${MEDIA_PROCESSING_ENCODE_TIMEOUT_SECONDS:-3600}
       MEDIA_PROCESSING_LOG_MAX_BYTES: ${MEDIA_PROCESSING_LOG_MAX_BYTES:-65536}
+      HLS_SEGMENT_DURATION_SECONDS: ${HLS_SEGMENT_DURATION_SECONDS:-6}
+      HLS_MAX_HEIGHT: ${HLS_MAX_HEIGHT:-1080}
+      HLS_X264_PRESET: ${HLS_X264_PRESET:-veryfast}
     volumes:
+      # Intentional RW mount: the same worker probes originals and writes HLS
+      # packages under MEDIA_ROOT/packages (plus temporary workspaces).
       - ./app/backend:/app
-      - ifilm_media:/data/media:ro
+      - ifilm_media:/data/media
     depends_on:
       postgres:
         condition: service_healthy
@@ -118,7 +127,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "python -c \"from app.services.media_processing.ffmpeg import binary_available; from app.core.config import get_settings; s=get_settings(); raise SystemExit(0 if binary_available(s.ffprobe_binary) else 1)\"",
+          "python -c \"from app.services.media_processing.ffmpeg import binary_available; from app.core.config import get_settings; s=get_settings(); ok=binary_available(s.ffprobe_binary) and (binary_available(s.ffmpeg_binary) if s.enable_hls_encoding else True); raise SystemExit(0 if ok else 1)\"",
         ]
       interval: 30s
       timeout: 10s

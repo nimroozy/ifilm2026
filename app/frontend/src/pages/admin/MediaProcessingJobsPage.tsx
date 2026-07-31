@@ -21,7 +21,7 @@ export default function MediaProcessingJobsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [jobType, setJobType] = useState<string>('probe');
+  const [jobType, setJobType] = useState<string>('all');
   const [assetFilter, setAssetFilter] = useState('');
 
   const load = useCallback(async () => {
@@ -32,7 +32,7 @@ export default function MediaProcessingJobsPage() {
           page: 1,
           page_size: 50,
           status: statusFilter === 'all' ? undefined : statusFilter,
-          job_type: jobType || undefined,
+          job_type: jobType === 'all' ? undefined : jobType,
           media_asset_id: assetFilter.trim() || undefined,
         }),
         adminApi.getProcessingStatus().catch(() => null),
@@ -66,7 +66,7 @@ export default function MediaProcessingJobsPage() {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-serif font-bold">Media processing</h1>
-          <p className="text-sm text-muted-foreground">Probe jobs for completed uploads</p>
+          <p className="text-sm text-muted-foreground">Probe and HLS encode jobs for completed uploads</p>
         </div>
         <Button variant="outline" size="sm" onClick={() => void load()}>
           Refresh
@@ -103,7 +103,9 @@ export default function MediaProcessingJobsPage() {
               <SelectValue placeholder="Type" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="all">All</SelectItem>
               <SelectItem value="probe">probe</SelectItem>
+              <SelectItem value="encode_hls">encode_hls</SelectItem>
             </SelectContent>
           </Select>
         </div>

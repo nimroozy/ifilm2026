@@ -11,7 +11,7 @@ This phase adds **ffprobe-based media probing** for completed uploads:
 
 Encoding profiles, HLS/DASH packaging, CDN, playback, DRM, thumbnails, and subtitle conversion are **out of scope**.
 
-Feature flag: `ENABLE_MEDIA_PROCESSING` (default `false`).
+Feature flag: `ENABLE_MEDIA_PROCESSING` (default `false`). HLS packaging additionally requires `ENABLE_HLS_ENCODING` (see `docs/media/HLS_ENCODING_PIPELINE.md`).
 
 Permissions:
 
@@ -109,7 +109,7 @@ The web API does **not** crash if processing is disabled or binaries are missing
 
 - Backend image installs `ffmpeg`
 - Compose service `media-processing-worker` runs `python -m app.workers.media_processing`
-- Media volume mounted read-only for the probe worker
+- Media volume is mounted **read-write** so the same worker can write HLS packages when encoding is enabled (intentional; see HLS docs)
 - Legacy ARQ `worker` service remains for other placeholders
 
 ## systemd

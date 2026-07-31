@@ -149,7 +149,9 @@ def test_postgresql_migration_succeeds(postgres_url):
     with engine.connect() as conn:
         tables = {
             row[0]
-            for row in conn.execute(text("SELECT tablename FROM pg_tables WHERE schemaname='public'"))
+            for row in conn.execute(
+                text("SELECT tablename FROM pg_tables WHERE schemaname='public'")
+            )
         }
         version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
     engine.dispose()
@@ -159,7 +161,7 @@ def test_postgresql_migration_succeeds(postgres_url):
     assert "seasons" in tables
     assert "media_assets" in tables
     assert "upload_sessions" in tables
-    assert version == "005_media_processing"
+    assert version == "006_hls_encoding"
 
 
 def test_postgresql_migration_from_previous_revision(postgres_url):
@@ -178,15 +180,21 @@ def test_postgresql_migration_from_previous_revision(postgres_url):
 
     engine = create_engine(postgres_url)
     with engine.connect() as conn:
-        movie_slug = conn.execute(text("SELECT slug FROM movies WHERE title='Ordinary Film'")).scalar_one()
-        series_slug = conn.execute(text("SELECT slug FROM series WHERE title='Ordinary Show'")).scalar_one()
+        movie_slug = conn.execute(
+            text("SELECT slug FROM movies WHERE title='Ordinary Film'")
+        ).scalar_one()
+        series_slug = conn.execute(
+            text("SELECT slug FROM series WHERE title='Ordinary Show'")
+        ).scalar_one()
         version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-        null_imdb = conn.execute(text("SELECT COUNT(*) FROM movies WHERE imdb_id IS NULL")).scalar_one()
+        null_imdb = conn.execute(
+            text("SELECT COUNT(*) FROM movies WHERE imdb_id IS NULL")
+        ).scalar_one()
     engine.dispose()
     assert movie_slug == "ordinary-film"
     assert series_slug == "ordinary-show"
     assert null_imdb >= 1
-    assert version == "005_media_processing"
+    assert version == "006_hls_encoding"
 
 
 def test_002_to_head_duplicate_and_messy_titles(postgres_url):
@@ -245,9 +253,7 @@ def test_002_to_head_unicode_titles(postgres_url):
     with engine.connect() as conn:
         rows = list(conn.execute(text("SELECT title, slug FROM movies ORDER BY id")))
         _assert_valid_slugs([slug for _, slug in rows])
-        mixed = conn.execute(
-            text("SELECT slug FROM movies WHERE title LIKE 'Mixed%'")
-        ).scalar_one()
+        mixed = conn.execute(text("SELECT slug FROM movies WHERE title LIKE 'Mixed%'")).scalar_one()
         assert "caravan" in mixed
     engine.dispose()
 
@@ -353,8 +359,12 @@ def test_multiple_null_imdb_ids_allowed(postgres_url):
 
     engine = create_engine(postgres_url)
     with engine.connect() as conn:
-        movie_nulls = conn.execute(text("SELECT COUNT(*) FROM movies WHERE imdb_id IS NULL")).scalar_one()
-        series_nulls = conn.execute(text("SELECT COUNT(*) FROM series WHERE imdb_id IS NULL")).scalar_one()
+        movie_nulls = conn.execute(
+            text("SELECT COUNT(*) FROM movies WHERE imdb_id IS NULL")
+        ).scalar_one()
+        series_nulls = conn.execute(
+            text("SELECT COUNT(*) FROM series WHERE imdb_id IS NULL")
+        ).scalar_one()
     engine.dispose()
     assert movie_nulls >= 2
     assert series_nulls >= 1
@@ -365,9 +375,10 @@ def test_downgrade_catalog_not_supported(postgres_url):
     assert _run_alembic(postgres_url, "upgrade", "003_catalog_admin").returncode == 0
     result = _run_alembic(postgres_url, "downgrade", "-1")
     assert result.returncode != 0
-    assert "not supported" in (result.stdout + result.stderr).lower() or "notimplemented" in (
-        result.stdout + result.stderr
-    ).lower()
+    assert (
+        "not supported" in (result.stdout + result.stderr).lower()
+        or "notimplemented" in (result.stdout + result.stderr).lower()
+    )
 
 
 def test_media_upload_migration_roundtrip(postgres_url):
@@ -378,7 +389,9 @@ def test_media_upload_migration_roundtrip(postgres_url):
     with engine.connect() as conn:
         tables = {
             row[0]
-            for row in conn.execute(text("SELECT tablename FROM pg_tables WHERE schemaname='public'"))
+            for row in conn.execute(
+                text("SELECT tablename FROM pg_tables WHERE schemaname='public'")
+            )
         }
         version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
     engine.dispose()
@@ -391,7 +404,9 @@ def test_media_upload_migration_roundtrip(postgres_url):
     with engine.connect() as conn:
         tables = {
             row[0]
-            for row in conn.execute(text("SELECT tablename FROM pg_tables WHERE schemaname='public'"))
+            for row in conn.execute(
+                text("SELECT tablename FROM pg_tables WHERE schemaname='public'")
+            )
         }
         version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
     engine.dispose()
@@ -407,7 +422,9 @@ def test_media_processing_migration_roundtrip(postgres_url):
     with engine.connect() as conn:
         tables = {
             row[0]
-            for row in conn.execute(text("SELECT tablename FROM pg_tables WHERE schemaname='public'"))
+            for row in conn.execute(
+                text("SELECT tablename FROM pg_tables WHERE schemaname='public'")
+            )
         }
         indexes = {
             row[0]
@@ -438,7 +455,9 @@ def test_media_processing_migration_roundtrip(postgres_url):
     with engine.connect() as conn:
         tables = {
             row[0]
-            for row in conn.execute(text("SELECT tablename FROM pg_tables WHERE schemaname='public'"))
+            for row in conn.execute(
+                text("SELECT tablename FROM pg_tables WHERE schemaname='public'")
+            )
         }
         indexes = {
             row[0]
@@ -478,10 +497,84 @@ def test_media_processing_migration_roundtrip(postgres_url):
     assert version == "005_media_processing"
 
 
+def test_hls_encoding_migration_roundtrip(postgres_url):
+    """005 → 006 → 005 → 006 round-trip for HLS encoding schema."""
+    _reset_schema(postgres_url)
+    assert _run_alembic(postgres_url, "upgrade", "005_media_processing").returncode == 0
+    assert _run_alembic(postgres_url, "upgrade", "006_hls_encoding").returncode == 0
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        tables = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT tablename FROM pg_tables WHERE schemaname='public'")
+            )
+        }
+        indexes = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT indexname FROM pg_indexes WHERE schemaname='public'")
+            )
+        }
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        profile_count = conn.execute(
+            text("SELECT COUNT(*) FROM media_encoding_profiles")
+        ).scalar_one()
+    engine.dispose()
+    assert "media_encoding_profiles" in tables
+    assert "media_packages" in tables
+    assert "media_renditions" in tables
+    assert "uq_media_processing_active_encode_hls" in indexes
+    assert profile_count == 5
+    assert version == "006_hls_encoding"
+
+    assert _run_alembic(postgres_url, "downgrade", "005_media_processing").returncode == 0
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        tables = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT tablename FROM pg_tables WHERE schemaname='public'")
+            )
+        }
+        indexes = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT indexname FROM pg_indexes WHERE schemaname='public'")
+            )
+        }
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+    engine.dispose()
+    assert "media_encoding_profiles" not in tables
+    assert "media_packages" not in tables
+    assert "media_renditions" not in tables
+    assert "uq_media_processing_active_encode_hls" not in indexes
+    assert "media_processing_jobs" in tables
+    assert version == "005_media_processing"
+
+    assert _run_alembic(postgres_url, "upgrade", "006_hls_encoding").returncode == 0
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        indexes = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT indexname FROM pg_indexes WHERE schemaname='public'")
+            )
+        }
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        profile_count = conn.execute(
+            text("SELECT COUNT(*) FROM media_encoding_profiles")
+        ).scalar_one()
+    engine.dispose()
+    assert "uq_media_processing_active_encode_hls" in indexes
+    assert profile_count == 5
+    assert version == "006_hls_encoding"
+
+
 def test_alembic_heads_single(postgres_url):
     result = _run_alembic(postgres_url, "heads")
     assert result.returncode == 0, result.stdout + result.stderr
     lines = [ln.strip() for ln in (result.stdout + result.stderr).splitlines() if ln.strip()]
-    head_lines = [ln for ln in lines if "005_media_processing" in ln]
+    head_lines = [ln for ln in lines if "006_hls_encoding" in ln]
     assert head_lines, result.stdout + result.stderr
-    assert sum(1 for ln in lines if ln.startswith("005_media_processing")) >= 1
+    assert sum(1 for ln in lines if ln.startswith("006_hls_encoding")) >= 1

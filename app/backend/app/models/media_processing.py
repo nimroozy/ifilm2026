@@ -24,7 +24,7 @@ from app.models.media_assets import new_uuid, utcnow
 ACTIVE_JOB_STATUSES = frozenset({"queued", "running", "retry_wait"})
 TERMINAL_JOB_STATUSES = frozenset({"completed", "failed", "cancelled"})
 JOB_TYPE_PROBE = "probe"
-# Reserved for later phases (not implemented here): encode, hls_package
+JOB_TYPE_ENCODE_HLS = "encode_hls"
 
 
 class MediaProcessingJob(Base):
@@ -46,6 +46,19 @@ class MediaProcessingJob(Base):
             ),
             postgresql_where=text(
                 "status IN ('queued', 'running', 'retry_wait') AND job_type = 'probe'"
+            ),
+        ),
+        # At most one active HLS encode job per asset.
+        Index(
+            "uq_media_processing_active_encode_hls",
+            "media_asset_id",
+            "job_type",
+            unique=True,
+            sqlite_where=text(
+                "status IN ('queued', 'running', 'retry_wait') AND job_type = 'encode_hls'"
+            ),
+            postgresql_where=text(
+                "status IN ('queued', 'running', 'retry_wait') AND job_type = 'encode_hls'"
             ),
         ),
     )
@@ -79,6 +92,7 @@ class MediaProcessingJob(Base):
     )
 
     media_asset = relationship("MediaAsset", back_populates="processing_jobs")
+    package = relationship("MediaPackage", back_populates="processing_job", uselist=False)
     events = relationship(
         "MediaProcessingJobEvent",
         back_populates="job",

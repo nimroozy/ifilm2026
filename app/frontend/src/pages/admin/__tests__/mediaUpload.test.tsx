@@ -68,6 +68,7 @@ describe('media upload admin pages', () => {
     listAssetProcessingJobs.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 1 });
     getProcessingStatus.mockResolvedValue({
       enabled: true,
+      hls_encoding_enabled: true,
       ffmpeg_available: true,
       ffprobe_available: true,
     });

@@ -57,12 +57,36 @@ class UnsupportedMediaError(PermanentProcessingError):
     code = "unsupported_media"
 
 
+class EncodeFailedError(PermanentProcessingError):
+    code = "encode_failed"
+
+
+class EncodeTimeoutError(TransientProcessingError):
+    code = "encode_timeout"
+
+
+class EncodeCancelledError(PermanentProcessingError):
+    code = "cancelled"
+
+
+class PackageValidationError(PermanentProcessingError):
+    code = "package_validation"
+
+
+class ProbeRequiredError(PermanentProcessingError):
+    code = "probe_required"
+
+
 PROGRESS_QUEUED = 0
 PROGRESS_CLAIMED = 10
 PROGRESS_VALIDATING = 30
 PROGRESS_RUNNING_FFPROBE = 50
 PROGRESS_PARSING = 75
 PROGRESS_SAVING = 90
+PROGRESS_ENCODING = 40
+PROGRESS_WRITING_PLAYLISTS = 85
+PROGRESS_VALIDATING_PACKAGE = 90
+PROGRESS_PROMOTING = 95
 PROGRESS_COMPLETED = 100
 
 DIAGNOSTIC_MAX_CHARS = 2000

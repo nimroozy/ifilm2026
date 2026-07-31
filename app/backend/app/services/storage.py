@@ -2,7 +2,7 @@ from pathlib import Path
 
 from app.core.config import get_settings
 
-MEDIA_SUBDIRS = ("originals", "posters", "backdrops", "trailers", "subtitles", "temp")
+MEDIA_SUBDIRS = ("originals", "posters", "backdrops", "trailers", "subtitles", "temp", "packages")
 
 
 def media_root() -> Path:
@@ -22,6 +22,18 @@ def ensure_media_layout() -> Path:
 def upload_dir() -> Path:
     """Legacy upload_jobs destination (kept for existing routes)."""
     path = media_root() / "uploads"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def packages_dir() -> Path:
+    path = media_root() / "packages"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def packages_work_dir() -> Path:
+    path = packages_dir() / "work"
     path.mkdir(parents=True, exist_ok=True)
     return path
 
