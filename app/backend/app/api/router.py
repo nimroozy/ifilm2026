@@ -9,6 +9,7 @@ from app.api.routes import (
     encoding,
     genres,
     health,
+    media_upload,
     movies,
     search,
     seasons,
@@ -29,6 +30,7 @@ api_router.include_router(genres.router)
 api_router.include_router(admin_catalog.router)
 api_router.include_router(search.router)
 api_router.include_router(upload.router)
+api_router.include_router(media_upload.router)
 api_router.include_router(encoding.router)
 api_router.include_router(cdn.router)
 api_router.include_router(stream.router)

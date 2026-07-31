@@ -10,9 +10,12 @@ Legacy coarse keys from the foundation seed remain supported with a narrow map:
 | `series.manage` | `series.manage`, `series` |
 | `genres.read` | `genres.read`, `genres.manage`, `genres` |
 | `genres.manage` | `genres.manage`, `genres` |
+| `upload.read` | `upload.read`, `upload.manage`, `upload` |
+| `upload.manage` | `upload.manage`, `upload` |
 
 Important: `movies` / `series` do **not** grant genre management or unrelated
-catalog mutations. `movies.read` alone cannot mutate movies.
+catalog mutations. `movies.read` alone cannot mutate movies. Coarse `upload`
+grants media upload manage/read but not catalog or encoding domains.
 """
 
 from collections.abc import Callable
@@ -38,6 +41,8 @@ PERMISSION_ALIASES: dict[str, frozenset[str]] = {
     "series.manage": frozenset({"series.manage", "series"}),
     "genres.read": frozenset({"genres.read", "genres.manage", "genres"}),
     "genres.manage": frozenset({"genres.manage", "genres"}),
+    "upload.read": frozenset({"upload.read", "upload.manage", "upload"}),
+    "upload.manage": frozenset({"upload.manage", "upload"}),
 }
 
 

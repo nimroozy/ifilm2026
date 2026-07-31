@@ -20,6 +20,8 @@ import SeasonFormPage from '@/pages/admin/SeasonFormPage';
 import EpisodesPage from '@/pages/admin/EpisodesPage';
 import EpisodeFormPage from '@/pages/admin/EpisodeFormPage';
 import GenresPage from '@/pages/admin/GenresPage';
+import MediaUploadPage from '@/pages/admin/MediaUploadPage';
+import MediaAssetDetailPage from '@/pages/admin/MediaAssetDetailPage';
 import AdminPlaceholderPage from '@/pages/admin/AdminPlaceholderPage';
 
 const queryClient = new QueryClient();
@@ -68,7 +70,8 @@ const AppRoutes = () => (
       <Route path="seasons/:id/episodes" element={<EpisodesPage />} />
       <Route path="episodes/:id/edit" element={<EpisodeFormPage />} />
       <Route path="genres" element={<GenresPage />} />
-      <Route path="tools/upload" element={<AdminPlaceholderPage section="upload" />} />
+      <Route path="tools/upload" element={<MediaUploadPage />} />
+      <Route path="media/:assetId" element={<MediaAssetDetailPage />} />
       <Route path="tools/encoding" element={<AdminPlaceholderPage section="encoding" />} />
       <Route path="tools/cdn" element={<AdminPlaceholderPage section="cdn" />} />
       <Route path="tools/users" element={<AdminPlaceholderPage section="users" />} />

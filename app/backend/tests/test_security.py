@@ -141,7 +141,7 @@ def test_invalid_media_type_is_rejected(client, admin_headers):
     response = client.post(
         f"/api/admin/uploads/{upload_id}/file",
         headers=admin_headers,
-        files={"file": ("clip.mp4", b"data", "text/plain")},
+        files={"file": ("clip.mp4", b"data", "text/html")},
     )
     assert response.status_code == 400
     assert response.json()["detail"] == "Invalid media type"

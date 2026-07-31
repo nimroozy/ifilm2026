@@ -38,11 +38,21 @@ class Settings(BaseSettings):
         default_factory=lambda: [
             "video/mp4",
             "video/x-matroska",
+            "video/webm",
             "video/quicktime",
             "video/x-msvideo",
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "text/vtt",
+            "application/x-subrip",
+            "text/plain",
             "application/octet-stream",
         ]
     )
+    # When true, completing an upload whose SHA256 matches another completed
+    # media asset is rejected (409). Failed/cancelled assets are ignored.
+    upload_reject_duplicate_checksum: bool = True
 
     redis_url: str = "redis://localhost:6379/0"
     worker_queue_name: str = "ifilm"
