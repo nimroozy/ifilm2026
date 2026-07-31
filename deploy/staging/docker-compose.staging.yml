@@ -2,10 +2,15 @@
 #
 # Usage:
 #   cp deploy/staging/.env.staging.example deploy/staging/.env.staging
+#   # fill secrets (see docs/deployment/STAGING_DEPLOYMENT.md)
 #   chmod 600 deploy/staging/.env.staging
 #   docker compose -f deploy/staging/docker-compose.staging.yml --env-file deploy/staging/.env.staging up -d --build
 #   ./deploy/staging/scripts/migrate.sh
 #   ./deploy/staging/scripts/ops_check.sh
+#
+# DATABASE_URL / REDIS_URL are built inside the container entrypoint from
+# POSTGRES_* / REDIS_* components (passwords with @ : / # % are encoded).
+# Do NOT interpolate an unescaped password into Compose YAML.
 
 name: ifilm-staging
 
@@ -30,14 +35,26 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1000"]
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--save",
+        "60",
+        "1000",
+        "--requirepass",
+        "${REDIS_PASSWORD:?}",
+      ]
     volumes:
       - staging_redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$REDIS_PASSWORD redis-cli ping | grep -q PONG"]
       interval: 5s
       timeout: 3s
       retries: 12
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?}
     networks: [staging_net]
 
   backend-api:
@@ -49,8 +66,16 @@ services:
       - path: .env.staging
         required: false
     environment: &api_env
-      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      REDIS_URL: redis://redis:6379/0
+      # Connection URLs are constructed by entrypoint.staging.sh (encoded).
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:?}
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_DB: "0"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?}
       MEDIA_ROOT: /data/media
       ARTWORK_ROOT: /data/artwork
       APP_ENV: ${APP_ENV:-staging}
@@ -103,7 +128,7 @@ services:
       interval: 20s
       timeout: 5s
       retries: 5
-      start_period: 25s
+      start_period: 40s
     networks: [staging_net]
 
   media-processing-worker:
@@ -121,6 +146,7 @@ services:
     volumes:
       - staging_media_originals:/data/media/originals:ro
       - staging_media_packages:/data/media/packages
+      - staging_media_temp:/data/media/temp
     depends_on:
       postgres:
         condition: service_healthy
@@ -135,7 +161,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 15s
+      start_period: 20s
     networks: [staging_net]
 
   publishing-worker:
@@ -166,7 +192,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 15s
+      start_period: 20s
     networks: [staging_net]
 
   frontend:

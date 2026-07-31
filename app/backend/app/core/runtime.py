@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.core.config import Settings
+from app.core.db_url import validate_database_url
 
 UNSAFE_JWT_SECRETS = {
     "",
@@ -141,6 +142,11 @@ def collect_runtime_errors(settings: Settings) -> list[str]:
             errors.append("DATABASE_URL is required")
         elif any(marker in settings.database_url for marker in DEFAULT_DATABASE_MARKERS):
             errors.append("DATABASE_URL uses default/example credentials")
+        else:
+            try:
+                validate_database_url(settings.database_url)
+            except ValueError as exc:
+                errors.append(f"DATABASE_URL invalid: {exc}")
         if settings.radius_secret in UNSAFE_RADIUS_SECRETS:
             # Only require a strong secret when Radius transport or mapping is actually used.
             if settings.radius_enabled or radius_identity_active or settings.radius_entitlement_mapping_enabled:
