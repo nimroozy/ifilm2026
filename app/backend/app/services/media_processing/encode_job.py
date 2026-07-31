@@ -45,6 +45,7 @@ from app.services.media_processing.paths import resolve_completed_asset_path
 from app.services.media_processing.profiles import select_profiles_for_source
 from app.services.media_processing.validation import validate_hls_package
 from app.services.storage import media_root, relative_media_path
+from app.services.streaming.activation import activate_or_fail_encode
 
 
 def _clip(message: str | None) -> str | None:
@@ -225,6 +226,9 @@ def _mark_package_failed(
     package.status = "cancelled" if cancelled else "failed"
     package.error_code = error_code
     package.error_message = _clip(message)
+    # Failed/cancelled packages can never remain playback-active.
+    package.is_active = False
+    package.activated_at = None
     if package.work_path:
         remove_tree_if_exists(media_root() / package.work_path)
     package.work_path = None
@@ -429,6 +433,9 @@ def execute_encode_hls_job(
             package.error_code = None
             package.error_message = None
             db.add(package)
+            db.flush()
+            # Activate only after completed + validated + promoted + renditions exist.
+            activate_or_fail_encode(db, package)
 
         asset.processing_status = "completed"
         job.status = "completed"

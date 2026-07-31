@@ -161,7 +161,7 @@ def test_postgresql_migration_succeeds(postgres_url):
     assert "seasons" in tables
     assert "media_assets" in tables
     assert "upload_sessions" in tables
-    assert version == "006_hls_encoding"
+    assert version == "007_streaming_service"
 
 
 def test_postgresql_migration_from_previous_revision(postgres_url):
@@ -194,7 +194,7 @@ def test_postgresql_migration_from_previous_revision(postgres_url):
     assert movie_slug == "ordinary-film"
     assert series_slug == "ordinary-show"
     assert null_imdb >= 1
-    assert version == "006_hls_encoding"
+    assert version == "007_streaming_service"
 
 
 def test_002_to_head_duplicate_and_messy_titles(postgres_url):
@@ -571,10 +571,150 @@ def test_hls_encoding_migration_roundtrip(postgres_url):
     assert version == "006_hls_encoding"
 
 
+def test_streaming_service_migration_roundtrip(postgres_url):
+    """006 → 007 → 006 → 007 round-trip with active-package backfill."""
+    _reset_schema(postgres_url)
+    assert _run_alembic(postgres_url, "upgrade", "006_hls_encoding").returncode == 0
+    engine = create_engine(postgres_url)
+    with engine.begin() as conn:
+        # Minimal asset + packages for backfill scenarios.
+        conn.execute(
+            text(
+                """
+                INSERT INTO media_assets (
+                  id, original_filename, stored_filename, mime_type, extension,
+                  size_bytes, category, upload_status, processing_status, storage_backend
+                ) VALUES (
+                  'asset-1', 'a.mp4', 'a.mp4', 'video/mp4', '.mp4',
+                  1, 'originals', 'completed', 'completed', 'local'
+                )
+                """
+            )
+        )
+        # older completed, newer completed, failed, cancelled, encoding
+        for pkg_id, status, completed in [
+            ("pkg-old", "completed", "2026-01-01 00:00:00+00"),
+            ("pkg-new", "completed", "2026-06-01 00:00:00+00"),
+            ("pkg-fail", "failed", None),
+            ("pkg-cancel", "cancelled", None),
+            ("pkg-enc", "encoding", None),
+        ]:
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO media_packages (
+                      id, media_asset_id, package_type, status, segment_duration_seconds,
+                      rendition_count, completed_at, created_at
+                    ) VALUES (
+                      :id, 'asset-1', 'hls_vod', :status, 6, 0,
+                      CAST(:completed AS timestamptz), NOW()
+                    )
+                    """
+                ),
+                {"id": pkg_id, "status": status, "completed": completed},
+            )
+        # Asset with no completed package
+        conn.execute(
+            text(
+                """
+                INSERT INTO media_assets (
+                  id, original_filename, stored_filename, mime_type, extension,
+                  size_bytes, category, upload_status, processing_status, storage_backend
+                ) VALUES (
+                  'asset-2', 'b.mp4', 'b.mp4', 'video/mp4', '.mp4',
+                  1, 'originals', 'completed', 'none', 'local'
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                INSERT INTO media_packages (
+                  id, media_asset_id, package_type, status, segment_duration_seconds,
+                  rendition_count, created_at
+                ) VALUES (
+                  'pkg-pending', 'asset-2', 'hls_vod', 'pending', 6, 0, NOW()
+                )
+                """
+            )
+        )
+    engine.dispose()
+
+    assert _run_alembic(postgres_url, "upgrade", "007_streaming_service").returncode == 0
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        active = list(
+            conn.execute(
+                text(
+                    "SELECT id, is_active FROM media_packages WHERE media_asset_id='asset-1' ORDER BY id"
+                )
+            )
+        )
+        asset2_active = conn.execute(
+            text("SELECT COUNT(*) FROM media_packages WHERE media_asset_id='asset-2' AND is_active")
+        ).scalar_one()
+        tables = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT tablename FROM pg_tables WHERE schemaname='public'")
+            )
+        }
+        indexes = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT indexname FROM pg_indexes WHERE schemaname='public'")
+            )
+        }
+    engine.dispose()
+    assert version == "007_streaming_service"
+    assert "media_playback_sessions" in tables
+    assert "uq_media_packages_one_active_hls" in indexes
+    active_map = {row[0]: row[1] for row in active}
+    assert active_map["pkg-new"] is True
+    assert active_map["pkg-old"] is False
+    assert active_map["pkg-fail"] is False
+    assert active_map["pkg-cancel"] is False
+    assert active_map["pkg-enc"] is False
+    assert asset2_active == 0
+
+    assert _run_alembic(postgres_url, "downgrade", "006_hls_encoding").returncode == 0
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        tables = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT tablename FROM pg_tables WHERE schemaname='public'")
+            )
+        }
+        cols = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='media_packages'"
+                )
+            )
+        }
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+    engine.dispose()
+    assert "media_playback_sessions" not in tables
+    assert "is_active" not in cols
+    assert version == "006_hls_encoding"
+
+    assert _run_alembic(postgres_url, "upgrade", "007_streaming_service").returncode == 0
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+    engine.dispose()
+    assert version == "007_streaming_service"
+
+
 def test_alembic_heads_single(postgres_url):
     result = _run_alembic(postgres_url, "heads")
     assert result.returncode == 0, result.stdout + result.stderr
     lines = [ln.strip() for ln in (result.stdout + result.stderr).splitlines() if ln.strip()]
-    head_lines = [ln for ln in lines if "006_hls_encoding" in ln]
+    head_lines = [ln for ln in lines if "007_streaming_service" in ln]
     assert head_lines, result.stdout + result.stderr
-    assert sum(1 for ln in lines if ln.startswith("006_hls_encoding")) >= 1
+    assert sum(1 for ln in lines if ln.startswith("007_streaming_service")) >= 1

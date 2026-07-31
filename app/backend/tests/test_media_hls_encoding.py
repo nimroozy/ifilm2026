@@ -264,6 +264,8 @@ def test_worker_hls_encode_e2e_no_upscale_and_checksum(db_session):
 
     assert job.status == "completed", (job.error_code, job.error_message)
     assert package.status == "completed"
+    assert package.is_active is True
+    assert package.activated_at is not None
     assert package.master_playlist_path
     assert package.storage_path
     assert package.rendition_count == 2

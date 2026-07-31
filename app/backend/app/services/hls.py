@@ -1,43 +1,18 @@
-"""HLS packaging helpers and playlist delivery.
+"""Legacy HLS helpers retained only for non-delivery utilities.
 
-Current packages are placeholders for foundation testing only.
-This is not a production media packaging pipeline.
+Placeholder package writing and public /media/hls delivery were removed in Phase 7.
+Protected streaming lives in app.services.streaming.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable
-from pathlib import Path
-
-from app.core.config import get_settings
-from app.services.storage import hls_dir
 
 DEFAULT_QUALITIES = ["1080p", "720p", "480p", "360p"]
 
 
-def content_hls_dir(content_type: str, content_id: int, episode_id: int | None = None) -> Path:
-    parts = [content_type, str(content_id)]
-    if episode_id is not None:
-        parts.append(f"ep-{episode_id}")
-    path = hls_dir().joinpath(*parts)
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
-def master_playlist_path(content_type: str, content_id: int, episode_id: int | None = None) -> Path:
-    return content_hls_dir(content_type, content_id, episode_id) / "master.m3u8"
-
-
-def public_playlist_url(content_type: str, content_id: int, episode_id: int | None = None) -> str:
-    base = get_settings().hls_public_base_url.rstrip("/")
-    suffix = f"{content_type}/{content_id}"
-    if episode_id is not None:
-        suffix = f"{suffix}/ep-{episode_id}"
-    return f"{base}/{suffix}/master.m3u8"
-
-
 def build_master_playlist(qualities: Iterable[str] | None = None) -> str:
-    """Generate a placeholder master playlist for foundation/dev without ffmpeg."""
+    """Generate a sample master playlist string for unit tests of playlist formatting."""
     bandwidth = {
         "1080p": 5_000_000,
         "720p": 2_800_000,
@@ -60,25 +35,3 @@ def _resolution(quality: str) -> str:
         "360p": "640x360",
     }
     return mapping.get(quality, "1280x720")
-
-
-def write_placeholder_package(
-    content_type: str,
-    content_id: int,
-    qualities: list[str] | None = None,
-    episode_id: int | None = None,
-) -> str:
-    root = content_hls_dir(content_type, content_id, episode_id)
-    quals = list(qualities or DEFAULT_QUALITIES)
-    (root / "master.m3u8").write_text(build_master_playlist(quals), encoding="utf-8")
-    for quality in quals:
-        qdir = root / quality
-        qdir.mkdir(parents=True, exist_ok=True)
-        (qdir / "index.m3u8").write_text(
-            "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:0\n"
-            "#EXTINF:6.0,\nsegment000.ts\n#EXT-X-ENDLIST\n",
-            encoding="utf-8",
-        )
-        (qdir / "segment000.ts").write_bytes(b"\x00" * 16)
-    relative = root.relative_to(hls_dir()).as_posix()
-    return relative

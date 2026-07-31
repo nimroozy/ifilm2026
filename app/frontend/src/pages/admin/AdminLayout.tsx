@@ -7,6 +7,7 @@ import {
   Tags,
   Upload,
   Cpu,
+  PlayCircle,
   Server,
   Users,
   Menu,
@@ -24,7 +25,8 @@ const navItems = [
   { to: '/admin/genres', label: 'Genres', icon: Tags },
   { to: '/admin/tools/upload', label: 'Upload', icon: Upload },
   { to: '/admin/media/processing', label: 'Processing', icon: Cpu },
-  { to: '/admin/tools/encoding', label: 'Encoding (soon)', icon: Film },
+  { to: '/admin/media/playback-sessions', label: 'Playback', icon: PlayCircle },
+  { to: '/admin/tools/encoding', label: 'Encoding (legacy)', icon: Film },
   { to: '/admin/tools/cdn', label: 'CDN (soon)', icon: Server },
   { to: '/admin/tools/users', label: 'Users (soon)', icon: Users },
 ];

@@ -1,101 +1,215 @@
+"""Protected HLS streaming endpoints (authoritative Phase 7 implementation).
 
-from fastapi import APIRouter, HTTPException, Query, status
-from fastapi.responses import FileResponse
+Legacy placeholder stream routes and write_placeholder_package delivery are removed.
+"""
 
-from app.core.deps import DbSession, OptionalSubscriber
-from app.models.cdn import CDNNode
-from app.models.content import Episode, Movie
-from app.schemas.media import StreamManifest
-from app.services.hls import hls_dir, public_playlist_url, write_placeholder_package
+from __future__ import annotations
 
-router = APIRouter(tags=["stream"])
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+
+from app.core.config import get_settings
+from app.core.deps import DbSession, require_permissions
+from app.core.features import require_local_streaming
+from app.models.admin import AdminUser
+from app.models.media_assets import MediaAsset
+from app.models.media_playback import MediaPlaybackSession
+from app.schemas.common import Envelope, paginated
+from app.schemas.streaming import (
+    PlaybackSessionCreate,
+    PlaybackSessionCreated,
+    PlaybackSessionOut,
+    PlaybackSessionRevokeResult,
+    StreamingStatusOut,
+)
+from app.services.streaming.delivery import deliver_master, deliver_segment, deliver_variant
+from app.services.streaming.sessions import (
+    create_playback_session,
+    master_playlist_url,
+    revoke_session,
+    revoke_sessions_for_asset,
+    revoke_sessions_for_user,
+)
+
+router = APIRouter(tags=["streaming"])
 
 
-@router.get("/stream/{content_type}/{content_id}", response_model=StreamManifest)
-def get_stream_manifest(
-    content_type: str,
-    content_id: int,
+def _session_out(session: MediaPlaybackSession) -> PlaybackSessionOut:
+    return PlaybackSessionOut.model_validate(
+        {
+            "id": session.id,
+            "media_asset_id": session.media_asset_id,
+            "media_package_id": session.media_package_id,
+            "principal_type": session.principal_type,
+            "principal_id": session.principal_id,
+            "status": session.status,
+            "expires_at": session.expires_at,
+            "revoked_at": session.revoked_at,
+            "created_at": session.created_at,
+            "last_accessed_at": session.last_accessed_at,
+            "created_by_admin_id": session.created_by_admin_id,
+            "client_ip": session.client_ip,
+            "user_agent": session.user_agent,
+            "revoke_reason": session.revoke_reason,
+            "access_count": session.access_count,
+        }
+    )
+
+
+@router.get("/streaming/status", response_model=StreamingStatusOut)
+def streaming_status():
+    settings = get_settings()
+    return StreamingStatusOut(
+        enabled=bool(settings.enable_local_streaming),
+        supported_principals=["admin", "subscriber"],
+        subscriber_entitlement=(
+            "deferred — published catalog visibility only; no subscription/payment rules"
+        ),
+    )
+
+
+@router.post(
+    "/admin/playback/sessions",
+    response_model=PlaybackSessionCreated,
+    status_code=status.HTTP_201_CREATED,
+)
+def admin_create_playback_session(
+    body: PlaybackSessionCreate,
+    request: Request,
     db: DbSession,
-    _: OptionalSubscriber,
-    episode_id: int | None = Query(None),
+    admin: Annotated[AdminUser, Depends(require_permissions("streaming.manage"))],
 ):
-    if content_type not in {"movie", "series", "episode"}:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid content type")
-
-    title = ""
-    qualities = ["1080p", "720p", "480p", "360p"]
-    hls_path = None
-
-    if content_type == "movie":
-        movie = db.get(Movie, content_id)
-        if not movie:
-            raise HTTPException(status_code=404, detail="Movie not found")
-        title = movie.title
-        qualities = movie.qualities or qualities
-        hls_path = movie.hls_path
-        if not hls_path:
-            hls_path = write_placeholder_package("movie", movie.id, qualities)
-            movie.hls_path = hls_path
-            db.add(movie)
-            db.commit()
-        content_type_key = "movie"
-        resolved_id = movie.id
-        ep_id = None
-    elif content_type == "episode":
-        episode = db.get(Episode, content_id)
-        if not episode:
-            raise HTTPException(status_code=404, detail="Episode not found")
-        title = episode.title
-        hls_path = episode.hls_path
-        if not hls_path:
-            hls_path = write_placeholder_package("episode", episode.id, qualities)
-            episode.hls_path = hls_path
-            db.add(episode)
-            db.commit()
-        content_type_key = "episode"
-        resolved_id = episode.id
-        ep_id = None
-    else:
-        # series + optional episode
-        if episode_id is None:
-            raise HTTPException(status_code=400, detail="episode_id required for series streams")
-        episode = db.get(Episode, episode_id)
-        if not episode or episode.series_id != content_id:
-            raise HTTPException(status_code=404, detail="Episode not found")
-        title = episode.title
-        hls_path = episode.hls_path
-        if not hls_path:
-            hls_path = write_placeholder_package("series", content_id, qualities, episode_id=episode.id)
-            episode.hls_path = hls_path
-            db.add(episode)
-            db.commit()
-        content_type_key = "series"
-        resolved_id = content_id
-        ep_id = episode.id
-
-    node = (
-        db.query(CDNNode)
-        .filter(CDNNode.status == "online")
-        .order_by(CDNNode.health_score.desc())
-        .first()
+    require_local_streaming()
+    asset = db.get(MediaAsset, body.media_asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail="Media asset not found")
+    session, raw_token = create_playback_session(
+        db,
+        principal=admin,
+        media_asset=asset,
+        client_ip=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+        created_by_admin=admin,
     )
-    return StreamManifest(
-        content_type=content_type_key,
-        content_id=resolved_id,
-        episode_id=ep_id,
-        title=title,
-        qualities=qualities,
-        playlist_url=public_playlist_url(content_type_key, resolved_id, ep_id),
-        cdn_node=node.name if node else "Origin",
-        skip_intro_seconds=0,
+    settings = get_settings()
+    return PlaybackSessionCreated(
+        id=session.id,
+        media_asset_id=session.media_asset_id,
+        media_package_id=session.media_package_id,
+        expires_at=session.expires_at,
+        playback_token=raw_token,
+        master_playlist_url=master_playlist_url(
+            api_prefix=settings.api_prefix, token=raw_token
+        ),
     )
 
 
-@router.get("/media/hls/{path:path}")
-def serve_hls(path: str):
-    target = (hls_dir() / path).resolve()
-    root = hls_dir().resolve()
-    if not str(target).startswith(str(root)) or not target.exists() or not target.is_file():
-        raise HTTPException(status_code=404, detail="Media not found")
-    media_type = "application/vnd.apple.mpegurl" if target.suffix == ".m3u8" else "video/mp2t"
-    return FileResponse(target, media_type=media_type)
+@router.get("/admin/playback/sessions", response_model=Envelope[PlaybackSessionOut])
+def admin_list_playback_sessions(
+    db: DbSession,
+    _: Annotated[AdminUser, Depends(require_permissions("streaming.read"))],
+    page: int = 1,
+    page_size: int = 50,
+    media_asset_id: str | None = None,
+    media_package_id: str | None = None,
+    principal_type: str | None = None,
+    principal_id: str | None = None,
+    session_status: str | None = Query(None, alias="status"),
+):
+    require_local_streaming()
+    query = db.query(MediaPlaybackSession)
+    if media_asset_id:
+        query = query.filter(MediaPlaybackSession.media_asset_id == media_asset_id)
+    if media_package_id:
+        query = query.filter(MediaPlaybackSession.media_package_id == media_package_id)
+    if principal_type:
+        query = query.filter(MediaPlaybackSession.principal_type == principal_type)
+    if principal_id:
+        query = query.filter(MediaPlaybackSession.principal_id == principal_id)
+    if session_status:
+        query = query.filter(MediaPlaybackSession.status == session_status)
+    total = query.count()
+    page = max(1, page)
+    page_size = min(max(1, page_size), 100)
+    rows = (
+        query.order_by(MediaPlaybackSession.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return paginated(
+        [_session_out(row) for row in rows],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.post(
+    "/admin/playback/sessions/{session_id}/revoke",
+    response_model=PlaybackSessionOut,
+)
+def admin_revoke_session(
+    session_id: str,
+    db: DbSession,
+    _: Annotated[AdminUser, Depends(require_permissions("streaming.manage"))],
+):
+    require_local_streaming()
+    session = db.get(MediaPlaybackSession, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Playback session not found")
+    return _session_out(revoke_session(db, session, reason="admin_revoke"))
+
+
+@router.post(
+    "/admin/playback/sessions/revoke-user",
+    response_model=PlaybackSessionRevokeResult,
+)
+def admin_revoke_user_sessions(
+    db: DbSession,
+    _: Annotated[AdminUser, Depends(require_permissions("streaming.manage"))],
+    principal_type: str = Query(...),
+    principal_id: str = Query(...),
+):
+    require_local_streaming()
+    count = revoke_sessions_for_user(
+        db, principal_type=principal_type, principal_id=principal_id, reason="admin_revoke_user"
+    )
+    return PlaybackSessionRevokeResult(revoked=count)
+
+
+@router.post(
+    "/admin/playback/sessions/revoke-asset",
+    response_model=PlaybackSessionRevokeResult,
+)
+def admin_revoke_asset_sessions(
+    db: DbSession,
+    _: Annotated[AdminUser, Depends(require_permissions("streaming.manage"))],
+    media_asset_id: str = Query(...),
+):
+    require_local_streaming()
+    count = revoke_sessions_for_asset(
+        db, media_asset_id=media_asset_id, reason="admin_revoke_asset"
+    )
+    return PlaybackSessionRevokeResult(revoked=count)
+
+
+@router.get("/stream/{token}/master.m3u8")
+def stream_master(token: str, request: Request, db: DbSession):
+    return deliver_master(db, token, request)
+
+
+@router.get("/stream/{token}/{label}/index.m3u8")
+def stream_variant(token: str, label: str, request: Request, db: DbSession):
+    return deliver_variant(db, token, label, request)
+
+
+@router.get("/stream/{token}/{label}/{segment_name}")
+def stream_segment(
+    token: str, label: str, segment_name: str, request: Request, db: DbSession
+):
+    return deliver_segment(db, token, label, segment_name, request)
+
+
+# Keep route module focused on streaming + admin session APIs.

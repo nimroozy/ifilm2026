@@ -111,6 +111,7 @@ class MediaRenditionOut(ORMModel):
     width: int | None = None
     bandwidth: int | None = None
     average_bandwidth: int | None = None
+    # Paths redacted from API responses.
     playlist_path: str | None = None
     segment_count: int = 0
     video_codec: str | None = None
@@ -126,6 +127,10 @@ class MediaPackageOut(ORMModel):
     processing_job_id: str | None = None
     package_type: str
     status: str
+    is_active: bool = False
+    activated_at: datetime | None = None
+    superseded_at: datetime | None = None
+    # Filesystem paths are never exposed via API (Phase 7).
     storage_path: str | None = None
     master_playlist_path: str | None = None
     source_width: int | None = None

@@ -55,6 +55,15 @@ class ValidationResult:
     errors: list[str]
 
 
+UNSAFE_PLAYBACK_SECRETS = {
+    "",
+    "change-me-in-production",
+    "secret",
+    "playback-secret",
+    "test-secret",
+}
+
+
 def collect_runtime_errors(settings: Settings) -> list[str]:
     errors: list[str] = []
 
@@ -77,12 +86,31 @@ def collect_runtime_errors(settings: Settings) -> list[str]:
             errors.append("ADMIN_BOOTSTRAP_PASSWORD uses an unsafe default")
         if settings.debug:
             errors.append("DEBUG must be false in staging/production")
+        if settings.enable_local_streaming:
+            if (
+                settings.playback_token_secret in UNSAFE_PLAYBACK_SECRETS
+                or len(settings.playback_token_secret) < 32
+            ):
+                errors.append(
+                    "PLAYBACK_TOKEN_SECRET is missing, too short, or uses an unsafe default"
+                )
 
     if is_dev_like(settings.app_env):
         if not settings.jwt_secret:
             errors.append("JWT_SECRET must be set explicitly")
         if not settings.database_url:
             errors.append("DATABASE_URL must be set explicitly")
+
+    if settings.enable_local_streaming:
+        if (
+            settings.playback_token_secret in UNSAFE_PLAYBACK_SECRETS
+            or len(settings.playback_token_secret) < 32
+        ):
+            errors.append(
+                "PLAYBACK_TOKEN_SECRET must be set (min 32 chars) when ENABLE_LOCAL_STREAMING=true"
+            )
+        if int(settings.playback_token_ttl_seconds) < 60:
+            errors.append("PLAYBACK_TOKEN_TTL_SECONDS must be at least 60")
 
     if settings.enable_radius_login and settings.radius_mode == "mock":
         if not settings.radius_mock_users:

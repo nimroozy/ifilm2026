@@ -32,7 +32,10 @@ class Settings(BaseSettings):
     admin_bootstrap_email: str = "admin@ifilm.local"
 
     media_root: str = "./media"
-    hls_public_base_url: str = "http://127.0.0.1:8000/media/hls"
+    # Dedicated artwork tree — never under packages/originals. Served only at /artwork.
+    artwork_root: str = "./artwork"
+    # Legacy placeholder HLS base URL (unused by Phase 7 protected streaming).
+    hls_public_base_url: str = "http://127.0.0.1:8000/api/stream"
     upload_max_bytes: int = 50 * 1024 * 1024 * 1024
     upload_allowed_content_types: list[str] = Field(
         default_factory=lambda: [
@@ -65,6 +68,12 @@ class Settings(BaseSettings):
     enable_radius_login: bool = False
     enable_media_processing: bool = False
     enable_hls_encoding: bool = False
+    enable_local_streaming: bool = False
+
+    # Opaque playback token HMAC secret (required when streaming enabled).
+    playback_token_secret: str = ""
+    playback_token_ttl_seconds: int = 3600
+    playback_access_touch_seconds: int = 30
 
     ffmpeg_binary: str = "ffmpeg"
     ffprobe_binary: str = "ffprobe"

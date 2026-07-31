@@ -11,6 +11,20 @@ def media_root() -> Path:
     return root
 
 
+def artwork_root() -> Path:
+    """Dedicated public artwork tree — never packages/originals/temp."""
+    root = Path(get_settings().artwork_root).resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def ensure_artwork_layout() -> Path:
+    root = artwork_root()
+    for name in ("posters", "backdrops"):
+        (root / name).mkdir(parents=True, exist_ok=True)
+    return root
+
+
 def ensure_media_layout() -> Path:
     """Create the configured local media directory tree."""
     root = media_root()
@@ -26,14 +40,20 @@ def upload_dir() -> Path:
     return path
 
 
-def packages_dir() -> Path:
+def packages_dir(*, create: bool = True) -> Path:
     path = media_root() / "packages"
-    path.mkdir(parents=True, exist_ok=True)
+    if create:
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            # Read-only package mounts (API) must still resolve the path.
+            if not path.exists():
+                raise
     return path
 
 
 def packages_work_dir() -> Path:
-    path = packages_dir() / "work"
+    path = packages_dir(create=True) / "work"
     path.mkdir(parents=True, exist_ok=True)
     return path
 

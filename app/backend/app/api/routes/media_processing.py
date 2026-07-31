@@ -72,8 +72,11 @@ def _job_out(job, *, include_events: bool = False) -> ProcessingJobOut:
 
 def _package_out(package, *, include_renditions: bool = True) -> MediaPackageOut:
     renditions = []
-    if include_renditions:
-        renditions = [MediaRenditionOut.model_validate(item) for item in (package.renditions or [])]
+    if include_renditions and package.status == "completed":
+        for item in package.renditions or []:
+            payload = MediaRenditionOut.model_validate(item).model_dump()
+            payload["playlist_path"] = None
+            renditions.append(MediaRenditionOut.model_validate(payload))
     return MediaPackageOut.model_validate(
         {
             "id": package.id,
@@ -81,10 +84,11 @@ def _package_out(package, *, include_renditions: bool = True) -> MediaPackageOut
             "processing_job_id": package.processing_job_id,
             "package_type": package.package_type,
             "status": package.status,
-            "storage_path": package.storage_path if package.status == "completed" else None,
-            "master_playlist_path": (
-                package.master_playlist_path if package.status == "completed" else None
-            ),
+            "is_active": bool(package.is_active) if package.status == "completed" else False,
+            "activated_at": package.activated_at if package.status == "completed" else None,
+            "superseded_at": package.superseded_at if package.status == "completed" else None,
+            "storage_path": None,
+            "master_playlist_path": None,
             "source_width": package.source_width,
             "source_height": package.source_height,
             "duration_seconds": package.duration_seconds,
@@ -96,7 +100,7 @@ def _package_out(package, *, include_renditions: bool = True) -> MediaPackageOut
             "created_at": package.created_at,
             "updated_at": package.updated_at,
             "completed_at": package.completed_at,
-            "renditions": renditions if package.status == "completed" else [],
+            "renditions": renditions,
         }
     )
 

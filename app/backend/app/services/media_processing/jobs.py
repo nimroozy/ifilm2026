@@ -254,6 +254,9 @@ def retry_job(db: Session, *, settings: Settings, job: MediaProcessingJob) -> Me
             package.master_playlist_path = None
             package.work_path = None
             package.rendition_count = 0
+            package.is_active = False
+            package.activated_at = None
+            package.superseded_at = None
             db.add(package)
     add_job_event(db, job, "queued", "Job re-queued after failure")
     db.add(job)

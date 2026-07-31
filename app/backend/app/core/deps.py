@@ -14,6 +14,8 @@ Legacy coarse keys from the foundation seed remain supported with a narrow map:
 | `upload.manage` | `upload.manage`, `upload` |
 | `processing.read` | `processing.read`, `processing.manage`, `processing` |
 | `processing.manage` | `processing.manage`, `processing` |
+| `streaming.read` | `streaming.read`, `streaming.manage`, `streaming` |
+| `streaming.manage` | `streaming.manage`, `streaming` |
 
 Important: `movies` / `series` do **not** grant genre management or unrelated
 catalog mutations. `movies.read` alone cannot mutate movies. Coarse `upload`
@@ -47,6 +49,8 @@ PERMISSION_ALIASES: dict[str, frozenset[str]] = {
     "upload.manage": frozenset({"upload.manage", "upload"}),
     "processing.read": frozenset({"processing.read", "processing.manage", "processing"}),
     "processing.manage": frozenset({"processing.manage", "processing"}),
+    "streaming.read": frozenset({"streaming.read", "streaming.manage", "streaming"}),
+    "streaming.manage": frozenset({"streaming.manage", "streaming"}),
 }
 
 

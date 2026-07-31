@@ -452,3 +452,26 @@ See §§11–13 for CORS, dual workers, placeholder admin nav, weak `startswith`
 **Do not start implementation until this audit is approved.**  
 **Do not mark PR #7 Ready for Review.**  
 **Do not begin Phase 8.**
+
+---
+
+## Post-approval resolution (2026-07-31)
+
+Implementation landed on `media/streaming-service` (Draft PR #7). Audit BLOCKERs addressed as follows:
+
+| ID | Resolution |
+| --- | --- |
+| B1 | Public `StaticFiles` `/media` mount removed; legacy `/media/**` returns 404 |
+| B2 | `is_active` / `activated_at` / `superseded_at` + partial unique index in `007_streaming_service` |
+| B3 | Legacy placeholder `stream.py` / `write_placeholder_package` removed; single streaming stack |
+| B4 | Package filesystem paths redacted from admin package APIs |
+
+HIGH items addressed or deferred:
+
+- H1–H5: protected stream + RO packages mount + eligibility abstraction + streaming flags/secret
+- H4: request path token redaction middleware/filter
+- H6: README/SECURITY/STREAMING_SERVICE docs updated
+- H7: streaming tests added locally (CI expansion still optional)
+- H8: customer player remains deferred (Phase 8+)
+
+Deferred (documented, non-blocking for Draft): subscriber entitlement/payment rules, CDN/Cloudflare/R2/S3/DRM, customer player UI.

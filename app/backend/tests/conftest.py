@@ -29,9 +29,12 @@ os.environ["ENABLE_ENCODING"] = "true"
 os.environ["ENABLE_CDN_SYNC"] = "true"
 os.environ["ENABLE_MEDIA_PROCESSING"] = "true"
 os.environ["ENABLE_HLS_ENCODING"] = "true"
+os.environ["ENABLE_LOCAL_STREAMING"] = "true"
+os.environ["PLAYBACK_TOKEN_SECRET"] = "unit-test-playback-token-secret-32chars-min"
 os.environ["REDIS_REQUIRED"] = "false"
 os.environ["MEDIA_ROOT"] = str(Path("/tmp/ifilm-test-media").resolve())
-os.environ["HLS_PUBLIC_BASE_URL"] = "http://testserver/media/hls"
+os.environ["ARTWORK_ROOT"] = str(Path("/tmp/ifilm-test-artwork").resolve())
+os.environ["HLS_PUBLIC_BASE_URL"] = "http://testserver/api/stream"
 os.environ["RADIUS_MOCK_USERS"] = json.dumps(
     [
         {
@@ -55,6 +58,7 @@ from app.db import session as session_module
 from app.db.base import Base
 
 Path(os.environ["MEDIA_ROOT"]).mkdir(parents=True, exist_ok=True)
+Path(os.environ["ARTWORK_ROOT"]).mkdir(parents=True, exist_ok=True)
 
 engine = create_engine(
     "sqlite://",
