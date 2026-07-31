@@ -1,94 +1,351 @@
+from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import or_
+from typing import Annotated
 
-from app.core.deps import CurrentAdmin, DbSession
-from app.models.content import Episode, Series
-from app.schemas.common import Message, Page
-from app.schemas.content import EpisodeCreate, EpisodeOut, SeriesCreate, SeriesOut, SeriesUpdate
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import joinedload
+
+from app.core.deps import DbSession, require_permissions
+from app.models.admin import AdminUser
+from app.models.content import Episode, Season, Series
+from app.models.enums import SORT_OPTIONS
+from app.schemas.common import Envelope, Message, paginated
+from app.schemas.content import (
+    EpisodeOut,
+    PublishAction,
+    SeasonCreate,
+    SeasonOut,
+    SeriesCreate,
+    SeriesOut,
+    SeriesUpdate,
+)
+from app.services.catalog import (
+    apply_sort,
+    ensure_unique_imdb,
+    episode_out,
+    filter_catalog_query,
+    get_series,
+    load_genres,
+    make_slug_for_series,
+    not_deleted,
+    publish_entity,
+    resolve_series,
+    season_out,
+    series_out,
+    soft_delete,
+    unpublish_entity,
+    utcnow,
+)
 
 router = APIRouter(tags=["series"])
 
+SortParam = Annotated[str, Query(description="Sort order")]
 
-@router.get("/series", response_model=Page[SeriesOut])
+
+def _list_query(
+    db: DbSession,
+    *,
+    q: str | None,
+    genre: str | None,
+    year: int | None,
+    language: str | None,
+    featured: bool | None,
+    trending: bool | None,
+    status_filter: str | None,
+    published_only: bool,
+    sort: str,
+):
+    query = db.query(Series).options(
+        joinedload(Series.genre_links),
+        joinedload(Series.seasons).joinedload(Season.episodes),
+    )
+    query = filter_catalog_query(
+        query,
+        Series,
+        q=q,
+        genre=genre,
+        year=year,
+        language=language,
+        featured=featured,
+        trending=trending,
+        status=status_filter,
+        published_only=published_only,
+    )
+    return apply_sort(query, Series, sort if sort in SORT_OPTIONS else "newest")
+
+
+def _ensure_unique_season_number(
+    db: DbSession,
+    series_id: int,
+    season_number: int,
+    *,
+    exclude_id: int | None = None,
+) -> None:
+    query = not_deleted(db.query(Season), Season).filter(
+        Season.series_id == series_id,
+        Season.season_number == season_number,
+    )
+    if exclude_id is not None:
+        query = query.filter(Season.id != exclude_id)
+    if query.first():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Season number already exists for this series",
+        )
+
+
+def _public_seasons(series: Series) -> list[Season]:
+    return [
+        s
+        for s in (series.seasons or [])
+        if s.deleted_at is None and s.status == "published"
+    ]
+
+
+def _public_episodes(series: Series, season_number: int | None = None) -> list[Episode]:
+    episodes: list[Episode] = []
+    for season in _public_seasons(series):
+        if season_number is not None and season.season_number != season_number:
+            continue
+        for episode in season.episodes or []:
+            if episode.deleted_at is None and episode.status == "published":
+                episodes.append(episode)
+    episodes.sort(key=lambda e: (e.season.season_number if e.season else 0, e.episode_number))
+    return episodes
+
+
+@router.get("/series", response_model=Envelope[SeriesOut])
 def list_series(
     db: DbSession,
     q: str | None = None,
     genre: str | None = None,
+    year: int | None = None,
+    language: str | None = None,
+    featured: bool | None = None,
+    trending: bool | None = None,
+    sort: SortParam = "newest",
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-):
-    query = db.query(Series).filter(Series.published.is_(True))
-    if q:
-        like = f"%{q}%"
-        query = query.filter(or_(Series.title.ilike(like), Series.original_title.ilike(like)))
+) -> Envelope[SeriesOut]:
+    query = _list_query(
+        db,
+        q=q,
+        genre=genre,
+        year=year,
+        language=language,
+        featured=featured,
+        trending=trending,
+        status_filter=None,
+        published_only=True,
+        sort=sort,
+    )
     total = query.count()
-    items = query.order_by(Series.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
-    if genre:
-        items = [s for s in items if genre in (s.genres or [])]
-    return Page(items=[SeriesOut.from_orm_series(s) for s in items], total=total, page=page, page_size=page_size)
+    items = query.offset((page - 1) * page_size).limit(page_size).all()
+    return paginated([series_out(s) for s in items], total=total, page=page, page_size=page_size)
 
 
-@router.get("/series/{series_id}", response_model=SeriesOut)
-def get_series(series_id: int, db: DbSession):
-    series = db.get(Series, series_id)
-    if not series or not series.published:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Series not found")
-    return SeriesOut.from_orm_series(series)
+@router.get("/series/{id_or_slug}", response_model=SeriesOut)
+def get_public_series(id_or_slug: str, db: DbSession) -> SeriesOut:
+    return series_out(resolve_series(db, id_or_slug, published_only=True))
 
 
-@router.get("/series/{series_id}/episodes", response_model=list[EpisodeOut])
-def list_episodes(series_id: int, db: DbSession, season: int | None = None):
-    series = db.get(Series, series_id)
-    if not series:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Series not found")
-    query = db.query(Episode).filter(Episode.series_id == series_id, Episode.published.is_(True))
-    if season is not None:
-        query = query.filter(Episode.season == season)
-    return query.order_by(Episode.season.asc(), Episode.episode.asc()).all()
+@router.get("/series/{id_or_slug}/seasons", response_model=list[SeasonOut])
+def list_public_seasons(id_or_slug: str, db: DbSession) -> list[SeasonOut]:
+    series = resolve_series(db, id_or_slug, published_only=True)
+    seasons = sorted(_public_seasons(series), key=lambda s: s.season_number)
+    return [season_out(s) for s in seasons]
+
+
+@router.get("/series/{id_or_slug}/seasons/{season_number}", response_model=SeasonOut)
+def get_public_season(id_or_slug: str, season_number: int, db: DbSession) -> SeasonOut:
+    series = resolve_series(db, id_or_slug, published_only=True)
+    for season in _public_seasons(series):
+        if season.season_number == season_number:
+            return season_out(season)
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Season not found")
+
+
+@router.get("/series/{id_or_slug}/episodes", response_model=list[EpisodeOut])
+def list_public_episodes(
+    id_or_slug: str,
+    db: DbSession,
+    season: int | None = None,
+) -> list[EpisodeOut]:
+    series = resolve_series(db, id_or_slug, published_only=True)
+    return [episode_out(e) for e in _public_episodes(series, season)]
+
+
+@router.get("/admin/series", response_model=Envelope[SeriesOut])
+def admin_list_series(
+    db: DbSession,
+    _: Annotated[AdminUser, Depends(require_permissions("series.read"))],
+    q: str | None = None,
+    genre: str | None = None,
+    year: int | None = None,
+    language: str | None = None,
+    featured: bool | None = None,
+    trending: bool | None = None,
+    status: str | None = None,
+    sort: SortParam = "newest",
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+) -> Envelope[SeriesOut]:
+    query = _list_query(
+        db,
+        q=q,
+        genre=genre,
+        year=year,
+        language=language,
+        featured=featured,
+        trending=trending,
+        status_filter=status,
+        published_only=False,
+        sort=sort,
+    )
+    total = query.count()
+    items = query.offset((page - 1) * page_size).limit(page_size).all()
+    return paginated([series_out(s) for s in items], total=total, page=page, page_size=page_size)
 
 
 @router.post("/admin/series", response_model=SeriesOut, status_code=status.HTTP_201_CREATED)
-def create_series(payload: SeriesCreate, db: DbSession, _: CurrentAdmin):
-    series = Series(**payload.model_dump())
+def create_series(
+    payload: SeriesCreate,
+    db: DbSession,
+    _: Annotated[AdminUser, Depends(require_permissions("series.manage"))],
+) -> SeriesOut:
+    data = payload.model_dump(exclude={"genre_ids", "slug"})
+    slug = make_slug_for_series(db, payload.title, payload.slug)
+    ensure_unique_imdb(db, Series, payload.imdb_id)
+    genres = load_genres(db, payload.genre_ids)
+    series = Series(**data, slug=slug)
+    series.genre_links = genres
+    if series.status == "published":
+        publish_entity(series)
     db.add(series)
     db.commit()
-    db.refresh(series)
-    return SeriesOut.from_orm_series(series)
+    return series_out(get_series(db, series.id))
+
+
+@router.get("/admin/series/{series_id}", response_model=SeriesOut)
+def admin_get_series(
+    series_id: int,
+    db: DbSession,
+    _: Annotated[AdminUser, Depends(require_permissions("series.read"))],
+) -> SeriesOut:
+    return series_out(get_series(db, series_id))
 
 
 @router.patch("/admin/series/{series_id}", response_model=SeriesOut)
-def update_series(series_id: int, payload: SeriesUpdate, db: DbSession, _: CurrentAdmin):
-    series = db.get(Series, series_id)
-    if not series:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Series not found")
-    for key, value in payload.model_dump(exclude_unset=True).items():
-        setattr(series, key, value)
+def update_series(
+    series_id: int,
+    payload: SeriesUpdate,
+    db: DbSession,
+    _: Annotated[AdminUser, Depends(require_permissions("series.manage"))],
+) -> SeriesOut:
+    series = get_series(db, series_id)
+    data = payload.model_dump(exclude_unset=True, exclude={"genre_ids", "slug"})
+    if "title" in payload.model_fields_set or "slug" in payload.model_fields_set:
+        title = payload.title if payload.title is not None else series.title
+        slug_value = payload.slug if "slug" in payload.model_fields_set else series.slug
+        series.slug = make_slug_for_series(db, title, slug_value, exclude_id=series.id)
+    if "imdb_id" in payload.model_fields_set:
+        ensure_unique_imdb(db, Series, payload.imdb_id, exclude_id=series.id)
+    for key, value in data.items():
+        if hasattr(series, key):
+            setattr(series, key, value)
+    if "genre_ids" in payload.model_fields_set and payload.genre_ids is not None:
+        series.genre_links = load_genres(db, payload.genre_ids)
+    if payload.status == "published":
+        publish_entity(series)
+    elif payload.status == "draft":
+        unpublish_entity(series)
+    series.updated_at = utcnow()
     db.add(series)
     db.commit()
-    db.refresh(series)
-    return SeriesOut.from_orm_series(series)
+    return series_out(get_series(db, series.id))
 
 
 @router.delete("/admin/series/{series_id}", response_model=Message)
-def delete_series(series_id: int, db: DbSession, _: CurrentAdmin):
-    series = db.get(Series, series_id)
-    if not series:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Series not found")
-    db.delete(series)
+def delete_series(
+    series_id: int,
+    db: DbSession,
+    _: Annotated[AdminUser, Depends(require_permissions("series.manage"))],
+) -> Message:
+    series = get_series(db, series_id)
+    soft_delete(series)
+    series.updated_at = utcnow()
+    for season in series.seasons or []:
+        if season.deleted_at is None:
+            soft_delete(season)
+            season.updated_at = utcnow()
+            db.add(season)
+            for episode in season.episodes or []:
+                if episode.deleted_at is None:
+                    soft_delete(episode)
+                    episode.updated_at = utcnow()
+                    db.add(episode)
+    db.add(series)
     db.commit()
     return Message(detail="Series deleted")
 
 
-@router.post("/admin/series/{series_id}/episodes", response_model=EpisodeOut, status_code=status.HTTP_201_CREATED)
-def create_episode(series_id: int, payload: EpisodeCreate, db: DbSession, _: CurrentAdmin):
-    series = db.get(Series, series_id)
-    if not series:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Series not found")
-    episode = Episode(series_id=series_id, **payload.model_dump())
-    db.add(episode)
-    series.episode_count = (series.episode_count or 0) + 1
+@router.post("/admin/series/{series_id}/publish", response_model=PublishAction)
+def publish_series(
+    series_id: int,
+    db: DbSession,
+    _: Annotated[AdminUser, Depends(require_permissions("series.manage"))],
+) -> PublishAction:
+    series = get_series(db, series_id)
+    publish_entity(series)
+    series.updated_at = utcnow()
     db.add(series)
     db.commit()
-    db.refresh(episode)
-    return episode
+    return PublishAction(detail="ok", status=series.status)
+
+
+@router.post("/admin/series/{series_id}/unpublish", response_model=PublishAction)
+def unpublish_series(
+    series_id: int,
+    db: DbSession,
+    _: Annotated[AdminUser, Depends(require_permissions("series.manage"))],
+) -> PublishAction:
+    series = get_series(db, series_id)
+    unpublish_entity(series)
+    series.updated_at = utcnow()
+    db.add(series)
+    db.commit()
+    return PublishAction(detail="ok", status=series.status)
+
+
+@router.get("/admin/series/{series_id}/seasons", response_model=list[SeasonOut])
+def admin_list_seasons(
+    series_id: int,
+    db: DbSession,
+    _: Annotated[AdminUser, Depends(require_permissions("series.read"))],
+) -> list[SeasonOut]:
+    series = get_series(db, series_id)
+    seasons = sorted(
+        [s for s in (series.seasons or []) if s.deleted_at is None],
+        key=lambda s: s.season_number,
+    )
+    return [season_out(s) for s in seasons]
+
+
+@router.post(
+    "/admin/series/{series_id}/seasons",
+    response_model=SeasonOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_season(
+    series_id: int,
+    payload: SeasonCreate,
+    db: DbSession,
+    _: Annotated[AdminUser, Depends(require_permissions("series.manage"))],
+) -> SeasonOut:
+    series = get_series(db, series_id)
+    _ensure_unique_season_number(db, series.id, payload.season_number)
+    season = Season(series_id=series.id, **payload.model_dump())
+    db.add(season)
+    db.commit()
+    db.refresh(season)
+    return season_out(season)

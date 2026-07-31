@@ -2,13 +2,16 @@ from fastapi import APIRouter
 
 from app.api.routes import (
     admin_auth,
+    admin_catalog,
     auth,
     cdn,
     config,
     encoding,
+    genres,
     health,
     movies,
     search,
+    seasons,
     series,
     stream,
     upload,
@@ -21,6 +24,9 @@ api_router.include_router(auth.router)
 api_router.include_router(admin_auth.router)
 api_router.include_router(movies.router)
 api_router.include_router(series.router)
+api_router.include_router(seasons.router)
+api_router.include_router(genres.router)
+api_router.include_router(admin_catalog.router)
 api_router.include_router(search.router)
 api_router.include_router(upload.router)
 api_router.include_router(encoding.router)

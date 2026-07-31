@@ -1,0 +1,258 @@
+import { useCallback, useEffect, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { Plus, Edit, Trash2, Clapperboard } from 'lucide-react';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { adminApi, ApiError, type SeasonDto, type SeriesDto } from '@/lib/api';
+import { EmptyState, ErrorState, LoadingBlock, StatusBadge } from './adminShared';
+
+const createSchema = z.object({
+  season_number: z.coerce.number().int().min(0).max(500),
+  title: z.string().optional(),
+  release_year: z.coerce.number().int().min(1888).max(2100).optional().or(z.literal('')),
+  status: z.enum(['draft', 'published', 'archived']),
+});
+
+type CreateValues = z.infer<typeof createSchema>;
+
+export default function SeasonsPage() {
+  const { id } = useParams();
+  const seriesId = Number(id);
+  const [series, setSeries] = useState<SeriesDto | null>(null);
+  const [seasons, setSeasons] = useState<SeasonDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [deleteId, setDeleteId] = useState<number | null>(null);
+
+  const form = useForm<CreateValues>({
+    resolver: zodResolver(createSchema),
+    defaultValues: { season_number: 1, title: '', release_year: '' as unknown as number, status: 'draft' },
+  });
+
+  const load = useCallback(async () => {
+    if (!seriesId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const [s, list] = await Promise.all([adminApi.getSeries(seriesId), adminApi.listSeasons(seriesId)]);
+      setSeries(s);
+      setSeasons([...list].sort((a, b) => a.season_number - b.season_number));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to load seasons');
+    } finally {
+      setLoading(false);
+    }
+  }, [seriesId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function onCreate(values: CreateValues) {
+    try {
+      await adminApi.createSeason(seriesId, {
+        season_number: Number(values.season_number),
+        title: values.title || '',
+        release_year:
+          values.release_year === '' || values.release_year == null
+            ? null
+            : Number(values.release_year),
+        status: values.status,
+      });
+      toast.success('Season created');
+      form.reset({
+        season_number: Number(values.season_number) + 1,
+        title: '',
+        release_year: '' as unknown as number,
+        status: 'draft',
+      });
+      load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Create failed');
+    }
+  }
+
+  async function confirmDelete() {
+    if (deleteId == null) return;
+    try {
+      await adminApi.deleteSeason(deleteId);
+      toast.success('Season deleted');
+      setDeleteId(null);
+      load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Delete failed');
+    }
+  }
+
+  if (loading) return <LoadingBlock />;
+  if (error) return <ErrorState message={error} onRetry={load} />;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold text-foreground">Seasons</h2>
+          <p className="text-sm text-muted-foreground">{series?.title}</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <Link to={`/admin/series/${seriesId}/edit`}>Edit series</Link>
+          </Button>
+          <Button variant="outline" asChild>
+            <Link to="/admin/series">Back</Link>
+          </Button>
+        </div>
+      </div>
+
+      <Card className="bg-card border-border">
+        <CardHeader>
+          <CardTitle className="text-base">Add season</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onCreate)} className="flex flex-wrap gap-3 items-end">
+              <FormField
+                control={form.control}
+                name="season_number"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Number</FormLabel>
+                    <FormControl>
+                      <Input type="number" className="w-24" {...field} data-testid="season-number" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="title"
+                render={({ field }) => (
+                  <FormItem className="flex-1 min-w-[160px]">
+                    <FormLabel>Title</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="status"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Status</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger className="w-[130px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="draft">Draft</SelectItem>
+                        <SelectItem value="published">Published</SelectItem>
+                        <SelectItem value="archived">Archived</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <Button type="submit" className="gap-2 bg-primary text-primary-foreground">
+                <Plus className="h-4 w-4" />
+                Add
+              </Button>
+            </form>
+          </Form>
+        </CardContent>
+      </Card>
+
+      {seasons.length === 0 ? (
+        <EmptyState message="No seasons yet." />
+      ) : (
+        <Card className="bg-card border-border">
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>#</TableHead>
+                  <TableHead>Title</TableHead>
+                  <TableHead>Episodes</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {seasons.map((season) => (
+                  <TableRow key={season.id} data-testid={`season-row-${season.season_number}`}>
+                    <TableCell>{season.season_number}</TableCell>
+                    <TableCell className="font-medium">{season.title || `Season ${season.season_number}`}</TableCell>
+                    <TableCell>{season.episode_count ?? 0}</TableCell>
+                    <TableCell>
+                      <StatusBadge status={season.status} />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+                          <Link to={`/admin/seasons/${season.id}/edit`} aria-label="Edit season">
+                            <Edit className="h-3.5 w-3.5" />
+                          </Link>
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+                          <Link to={`/admin/seasons/${season.id}/episodes`} aria-label="Episodes">
+                            <Clapperboard className="h-3.5 w-3.5" />
+                          </Link>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive"
+                          onClick={() => setDeleteId(season.id)}
+                          aria-label="Delete season"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      <AlertDialog open={deleteId != null} onOpenChange={(open) => !open && setDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete season?</AlertDialogTitle>
+            <AlertDialogDescription>This removes the season from the series.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}

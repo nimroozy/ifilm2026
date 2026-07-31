@@ -10,13 +10,22 @@ from app.core.runtime import require_admin_bootstrap_password
 from app.core.security import hash_password
 from app.models.admin import AdminRole, AdminUser
 from app.models.cdn import Branch, CDNNode
-from app.models.content import Movie, Series
+from app.models.content import Genre, Movie, Series
 from app.models.user import Subscriber
+from app.services.catalog import publish_entity, utcnow
+from app.utils.slug import normalize_slug
 
 SUPER_PERMISSIONS = [
     "dashboard",
     "movies",
+    "movies.read",
+    "movies.manage",
     "series",
+    "series.read",
+    "series.manage",
+    "genres",
+    "genres.read",
+    "genres.manage",
     "upload",
     "encoding",
     "cdn",
@@ -27,6 +36,19 @@ SUPER_PERMISSIONS = [
 ]
 
 
+def _ensure_genres(db: Session, names: list[str]) -> list[Genre]:
+    genres: list[Genre] = []
+    for name in names:
+        slug = normalize_slug(name)
+        genre = db.query(Genre).filter(Genre.slug == slug).one_or_none()
+        if genre is None:
+            genre = Genre(name=name, slug=slug, description="")
+            db.add(genre)
+            db.flush()
+        genres.append(genre)
+    return genres
+
+
 def seed_development_data(db: Session, *, include_demo_catalog: bool = True) -> None:
     settings = get_settings()
     admin_password = require_admin_bootstrap_password(settings)
@@ -34,6 +56,12 @@ def seed_development_data(db: Session, *, include_demo_catalog: bool = True) -> 
     role = db.query(AdminRole).filter(AdminRole.name == "Super Admin").one_or_none()
     if role is None:
         role = AdminRole(name="Super Admin", permissions=SUPER_PERMISSIONS)
+        db.add(role)
+        db.flush()
+    else:
+        # Merge newly introduced catalog permissions into existing Super Admin roles.
+        merged = list(dict.fromkeys([*(role.permissions or []), *SUPER_PERMISSIONS]))
+        role.permissions = merged
         db.add(role)
         db.flush()
 
@@ -118,54 +146,62 @@ def seed_development_data(db: Session, *, include_demo_catalog: bool = True) -> 
         )
 
     if include_demo_catalog and db.query(Movie).count() == 0:
-        db.add(
-            Movie(
-                title="The Last Caravan",
-                original_title="آخرین کاروان",
-                year=2024,
-                duration=128,
-                rating=8.4,
-                age_rating="PG-13",
-                genres=["Drama", "Adventure"],
-                country="Afghanistan",
-                language="Dari",
-                director="Ahmad Zahir",
-                cast=["Farhad Darya", "Leena Alam"],
-                description="A sweeping epic about a merchant caravan crossing the Hindu Kush.",
-                poster="https://placehold.co/300x450/4a1942/e8a838?text=Last+Caravan",
-                backdrop="https://placehold.co/1920x800/4a1942/e8a838?text=The+Last+Caravan",
-                audio=["Dari", "Pashto"],
-                subtitles=["English", "Dari", "Pashto"],
-                qualities=["1080p", "720p", "480p"],
-                dubbed=["Persian"],
-                featured=True,
-                views=45200,
-            )
+        movie_genres = _ensure_genres(db, ["Drama", "Adventure"])
+        movie = Movie(
+            title="The Last Caravan",
+            original_title="آخرین کاروان",
+            slug="the-last-caravan",
+            release_year=2024,
+            duration_minutes=128,
+            imdb_rating=8.4,
+            age_rating="PG-13",
+            country="Afghanistan",
+            language="Dari",
+            director="Ahmad Zahir",
+            cast=["Farhad Darya", "Leena Alam"],
+            description="A sweeping epic about a merchant caravan crossing the Hindu Kush.",
+            poster_url="https://placehold.co/300x450/4a1942/e8a838?text=Last+Caravan",
+            backdrop_url="https://placehold.co/1920x800/4a1942/e8a838?text=The+Last+Caravan",
+            audio=["Dari", "Pashto"],
+            subtitles=["English", "Dari", "Pashto"],
+            qualities=["1080p", "720p", "480p"],
+            dubbed=["Persian"],
+            is_featured=True,
+            views=45200,
+            status="draft",
+            created_at=utcnow(),
+            updated_at=utcnow(),
         )
+        movie.genre_links = movie_genres
+        publish_entity(movie)
+        db.add(movie)
 
     if include_demo_catalog and db.query(Series).count() == 0:
-        db.add(
-            Series(
-                title="The Bazaar",
-                original_title="بازار",
-                year=2024,
-                rating=8.6,
-                age_rating="PG-13",
-                genres=["Drama", "Crime"],
-                country="Afghanistan",
-                language="Dari",
-                seasons=3,
-                episode_count=30,
-                status="Ongoing",
-                description="Interconnected lives of merchants in Kabul's oldest bazaar.",
-                poster="https://placehold.co/300x450/1a1a2e/e8a838?text=The+Bazaar",
-                backdrop="https://placehold.co/1920x800/1a1a2e/e8a838?text=The+Bazaar",
-                audio=["Dari", "Pashto"],
-                subtitles=["English", "Dari", "Pashto"],
-                dubbed=["Persian"],
-                new_episode=True,
-                views=156000,
-            )
+        series_genres = _ensure_genres(db, ["Drama", "Crime"])
+        series = Series(
+            title="The Bazaar",
+            original_title="بازار",
+            slug="the-bazaar",
+            release_year=2024,
+            imdb_rating=8.6,
+            age_rating="PG-13",
+            country="Afghanistan",
+            language="Dari",
+            airing_status="Ongoing",
+            description="Interconnected lives of merchants in Kabul's oldest bazaar.",
+            poster_url="https://placehold.co/300x450/1a1a2e/e8a838?text=The+Bazaar",
+            backdrop_url="https://placehold.co/1920x800/1a1a2e/e8a838?text=The+Bazaar",
+            audio=["Dari", "Pashto"],
+            subtitles=["English", "Dari", "Pashto"],
+            dubbed=["Persian"],
+            new_episode=True,
+            views=156000,
+            status="draft",
+            created_at=utcnow(),
+            updated_at=utcnow(),
         )
+        series.genre_links = series_genres
+        publish_entity(series)
+        db.add(series)
 
     db.commit()

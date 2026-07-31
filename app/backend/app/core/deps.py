@@ -1,3 +1,21 @@
+"""Permission dependency helpers.
+
+Legacy coarse keys from the foundation seed remain supported with a narrow map:
+
+| Required permission | Satisfied by any of |
+| --- | --- |
+| `movies.read` | `movies.read`, `movies.manage`, `movies` |
+| `movies.manage` | `movies.manage`, `movies` |
+| `series.read` | `series.read`, `series.manage`, `series` |
+| `series.manage` | `series.manage`, `series` |
+| `genres.read` | `genres.read`, `genres.manage`, `genres` |
+| `genres.manage` | `genres.manage`, `genres` |
+
+Important: `movies` / `series` do **not** grant genre management or unrelated
+catalog mutations. `movies.read` alone cannot mutate movies.
+"""
+
+from collections.abc import Callable
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
@@ -11,6 +29,16 @@ from app.models.user import Subscriber
 
 bearer = HTTPBearer(auto_error=False)
 DbSession = Annotated[Session, Depends(get_db)]
+
+# Exact legacy alias map — do not broaden across resource domains.
+PERMISSION_ALIASES: dict[str, frozenset[str]] = {
+    "movies.read": frozenset({"movies.read", "movies.manage", "movies"}),
+    "movies.manage": frozenset({"movies.manage", "movies"}),
+    "series.read": frozenset({"series.read", "series.manage", "series"}),
+    "series.manage": frozenset({"series.manage", "series"}),
+    "genres.read": frozenset({"genres.read", "genres.manage", "genres"}),
+    "genres.manage": frozenset({"genres.manage", "genres"}),
+}
 
 
 def _token_payload(credentials: HTTPAuthorizationCredentials | None) -> dict:
@@ -33,6 +61,30 @@ def get_current_admin(
     if not admin or not admin.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin not found")
     return admin
+
+
+def admin_permissions(admin: AdminUser) -> set[str]:
+    role = admin.role
+    if role is None:
+        return set()
+    return set(role.permissions or [])
+
+
+def require_permissions(*required: str) -> Callable[..., AdminUser]:
+    """Require each listed permission (legacy aliases via PERMISSION_ALIASES)."""
+
+    def _dependency(admin: Annotated[AdminUser, Depends(get_current_admin)]) -> AdminUser:
+        perms = admin_permissions(admin)
+        for need in required:
+            allowed = PERMISSION_ALIASES.get(need, frozenset({need}))
+            if perms.isdisjoint(allowed):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Insufficient permissions",
+                )
+        return admin
+
+    return _dependency
 
 
 def get_current_subscriber(
