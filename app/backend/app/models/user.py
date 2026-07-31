@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -50,17 +50,3 @@ class WatchlistItem(Base):
     content_id: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
-
-class WatchHistory(Base):
-    __tablename__ = "watch_history"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    subscriber_id: Mapped[int] = mapped_column(ForeignKey("subscribers.id", ondelete="CASCADE"), index=True)
-    content_type: Mapped[str] = mapped_column(String(32), nullable=False)
-    content_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    episode_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    progress: Mapped[float] = mapped_column(Float, default=0.0)
-    duration: Mapped[int] = mapped_column(Integer, default=0)
-    title: Mapped[str] = mapped_column(String(255), default="")
-    poster: Mapped[str] = mapped_column(String(1024), default="")
-    watched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

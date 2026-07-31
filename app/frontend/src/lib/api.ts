@@ -6,7 +6,7 @@
  */
 import axios, { type AxiosError, type AxiosInstance } from 'axios';
 import { createClient } from '@metagptx/web-sdk';
-import { getAPIBaseURL } from './config';
+import { getAPIBaseURL, type RuntimeConfig } from './config';
 
 export const client = createClient();
 
@@ -533,6 +533,43 @@ export interface PlaybackSessionCreatedDto {
   master_playlist_url: string;
 }
 
+export interface WatchProgressDto {
+  id: number;
+  media_asset_id: string;
+  content_type: 'movie' | 'episode';
+  movie_id?: number | null;
+  episode_id?: number | null;
+  series_id?: number | null;
+  season_number?: number | null;
+  episode_number?: number | null;
+  title: string;
+  subtitle?: string;
+  poster_url?: string;
+  position_seconds: number;
+  duration_seconds: number;
+  progress_percent: number;
+  completed: boolean;
+  available: boolean;
+  player_path: string;
+  first_watched_at?: string | null;
+  last_watched_at?: string | null;
+  completed_at?: string | null;
+  last_event_at?: string | null;
+}
+
+export interface WatchProgressUpdate {
+  position_seconds: number;
+  duration_seconds?: number;
+  playback_session_id?: string;
+  event_at: string;
+  start_over?: boolean;
+}
+
+export interface WatchProgressActionDto {
+  detail: string;
+  deleted: number;
+}
+
 export interface StreamingStatusDto {
   enabled: boolean;
   supported_principals: string[];
@@ -734,7 +771,7 @@ const adminHttp = createHttp(() => tokenStore.getAdmin(), {
 });
 
 export const api = {
-  async getConfig(): Promise<{ API_BASE_URL: string }> {
+  async getConfig(): Promise<RuntimeConfig> {
     const { data } = await http.get('/config');
     return data;
   },
@@ -813,6 +850,41 @@ export const api = {
 
   async revokePlaybackSession(sessionId: string) {
     const { data } = await http.post<PlaybackSessionDto>(`/playback/sessions/${sessionId}/revoke`);
+    return data;
+  },
+
+  async putWatchProgress(assetId: string, body: WatchProgressUpdate) {
+    const { data } = await http.put<WatchProgressDto>(`/me/watch-progress/${assetId}`, body);
+    return data;
+  },
+
+  async getWatchProgress(assetId: string) {
+    const { data } = await http.get<WatchProgressDto>(`/me/watch-progress/${assetId}`);
+    return data;
+  },
+
+  async listContinueWatching() {
+    const { data } = await http.get<WatchProgressDto[]>('/me/continue-watching');
+    return data;
+  },
+
+  async listWatchHistory(params?: { page?: number; page_size?: number }) {
+    const { data } = await http.get<Envelope<WatchProgressDto>>('/me/watch-history', { params });
+    return unwrapList(data);
+  },
+
+  async deleteWatchHistoryItem(assetId: string) {
+    const { data } = await http.delete<WatchProgressActionDto>(`/me/watch-history/${assetId}`);
+    return data;
+  },
+
+  async clearWatchHistory() {
+    const { data } = await http.delete<WatchProgressActionDto>('/me/watch-history');
+    return data;
+  },
+
+  async completeWatchProgress(assetId: string, body: WatchProgressUpdate) {
+    const { data } = await http.post<WatchProgressDto>(`/me/watch-progress/${assetId}/complete`, body);
     return data;
   },
 

@@ -1,14 +1,26 @@
-// Runtime configuration
-let runtimeConfig: {
+export interface RuntimeConfig {
   API_BASE_URL: string;
-} | null = null;
+  ENABLE_WATCH_HISTORY?: boolean;
+  WATCH_PROGRESS_MIN_SECONDS?: number;
+  WATCH_PROGRESS_COMPLETE_PERCENT?: number;
+  WATCH_PROGRESS_SAVE_INTERVAL_SECONDS?: number;
+  WATCH_PROGRESS_RESUME_MARGIN_SECONDS?: number;
+}
+
+// Runtime configuration
+let runtimeConfig: RuntimeConfig | null = null;
 
 // Configuration loading state
 let configLoading = true;
 
 // Default fallback configuration
-const defaultConfig = {
+const defaultConfig: RuntimeConfig = {
   API_BASE_URL: 'http://127.0.0.1:8000', // Only used if runtime config fails to load
+  ENABLE_WATCH_HISTORY: true,
+  WATCH_PROGRESS_MIN_SECONDS: 30,
+  WATCH_PROGRESS_COMPLETE_PERCENT: 90,
+  WATCH_PROGRESS_SAVE_INTERVAL_SECONDS: 20,
+  WATCH_PROGRESS_RESUME_MARGIN_SECONDS: 10,
 };
 
 // Function to load runtime configuration
@@ -45,7 +57,7 @@ export async function loadRuntimeConfig(): Promise<void> {
 }
 
 // Get current configuration
-export function getConfig() {
+export function getConfig(): RuntimeConfig {
   // If config is still loading, return default config to avoid using stale Vite env vars
   if (configLoading) {
     console.log('Config still loading, using default config');

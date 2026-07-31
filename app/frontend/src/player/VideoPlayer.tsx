@@ -1,8 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { usePlaybackSession } from './usePlaybackSession';
 import { useHlsPlayer } from './useHlsPlayer';
+import { useWatchProgress } from './useWatchProgress';
 import { PlayerControls } from './PlayerControls';
 import { PlaybackError } from './PlaybackError';
 import { PlayerLoadingState } from './PlaybackLoadingState';
@@ -45,6 +54,11 @@ export function VideoPlayer({
     masterUrl: session?.masterPlaylistUrl ?? null,
     onGone,
     onFatal: setFatal,
+  });
+  const { resumePosition, resume, startOver, dismissResume } = useWatchProgress({
+    target,
+    session,
+    videoRef,
   });
 
   const [playing, setPlaying] = useState(false);
@@ -239,6 +253,41 @@ export function VideoPlayer({
           />
         ) : null}
       </div>
+
+      <Dialog
+        open={resumePosition != null}
+        onOpenChange={(open) => {
+          if (!open) dismissResume();
+        }}
+      >
+        <DialogContent
+          className="max-w-md border-white/10 bg-card text-foreground [&>button]:end-4 [&>button]:right-auto"
+          data-testid="resume-dialog"
+        >
+          <DialogHeader className="text-start">
+            <DialogTitle>Continue watching?</DialogTitle>
+            <DialogDescription>
+              Resume from {formatResumeTime(resumePosition ?? 0)}, or start from the beginning.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 space-x-0 sm:justify-start">
+            <Button onClick={resume}>Resume</Button>
+            <Button variant="outline" onClick={startOver}>
+              Start Over
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
+}
+
+function formatResumeTime(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const remainingSeconds = total % 60;
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`
+    : `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
 }
