@@ -8,8 +8,11 @@ Slug backfill notes (PostgreSQL):
 - Titles are normalized with lower() + regexp_replace to [a-z0-9] tokens.
 - Empty / Unicode-only titles (e.g. Dari/Persian with no Latin letters) become
   base slug ``item``, then disambiguated with ``-<id>`` on collisions.
-- Collisions (duplicate titles, case-only / punctuation-only differences) keep
-  the lowest-id row on the bare slug; others append ``-<id>``.
+- Collisions are detected on the 280-char bare prefix so long titles that share
+  the same truncated prefix are disambiguated together.
+- Collision rows reserve ``length('-' || id)`` before truncating the base, then
+  append ``-<id>`` so the deterministic suffix is never clipped by the 280 limit.
+- The lowest-id row in a collision group keeps the bare (truncated) slug.
 - Multiple NULL imdb_id values remain allowed.
 - Duplicate non-null imdb_id values abort the migration with an actionable error
   (no silent deletion). Legacy 002 schema has no imdb_id column, so values are
@@ -17,8 +20,6 @@ Slug backfill notes (PostgreSQL):
 """
 
 from __future__ import annotations
-
-import os
 
 import sqlalchemy as sa
 from alembic import op
@@ -52,18 +53,29 @@ def _backfill_unique_slugs(table: str) -> None:
               SELECT id, COALESCE(base_raw, 'item') AS base
               FROM normalized
             ),
+            candidates AS (
+              SELECT
+                id,
+                base,
+                left(base, 280) AS bare_slug
+              FROM prepared
+            ),
             ranked AS (
               SELECT
                 id,
                 base,
-                COUNT(*) OVER (PARTITION BY base) AS cnt,
-                MIN(id) OVER (PARTITION BY base) AS min_id
-              FROM prepared
+                bare_slug,
+                COUNT(*) OVER (PARTITION BY bare_slug) AS cnt,
+                MIN(id) OVER (PARTITION BY bare_slug) AS min_id
+              FROM candidates
             )
             UPDATE {table} AS t
             SET slug = CASE
-              WHEN r.cnt = 1 OR t.id = r.min_id THEN left(r.base, 280)
-              ELSE left(r.base || '-' || t.id::text, 280)
+              WHEN r.cnt = 1 OR t.id = r.min_id THEN r.bare_slug
+              ELSE left(
+                     r.base,
+                     GREATEST(0, 280 - length('-' || t.id::text))
+                   ) || '-' || t.id::text
             END
             FROM ranked AS r
             WHERE t.id = r.id
@@ -175,11 +187,6 @@ def upgrade() -> None:
         """
     )
 
-    # Test-only injection to exercise duplicate-imdb abort (never set in production).
-    inject = os.environ.get("IFILM_MIGRATE_INJECT_DUP_IMDB")
-    if inject:
-        op.execute(sa.text("UPDATE movies SET imdb_id = :v").bindparams(v=inject))
-
     _backfill_unique_slugs("movies")
     _assert_no_duplicate_imdb("movies")
 
@@ -238,9 +245,6 @@ def upgrade() -> None:
           published_at = CASE WHEN published THEN created_at ELSE NULL END
         """
     )
-
-    if inject:
-        op.execute(sa.text("UPDATE series SET imdb_id = :v").bindparams(v=inject))
 
     _backfill_unique_slugs("series")
     _assert_no_duplicate_imdb("series")

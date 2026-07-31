@@ -5,15 +5,20 @@ These tests require TEST_DATABASE_URL pointing at PostgreSQL.
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import DBAPIError
 
 ROOT = Path(__file__).resolve().parents[1]
+MIGRATION_003 = ROOT / "alembic" / "versions" / "003_catalog_administration.py"
 
 
 def _postgres_url() -> str | None:
@@ -33,14 +38,19 @@ def postgres_url():
     return url
 
 
-def _run_alembic(url: str, *args: str, extra_env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+def _load_migration_003():
+    spec = importlib.util.spec_from_file_location("catalog_admin_migration_003", MIGRATION_003)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _run_alembic(url: str, *args: str) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["DATABASE_URL"] = url
     env["APP_ENV"] = "test"
     env["JWT_SECRET"] = "migration-test-jwt-secret-value-32ch"
-    env.pop("IFILM_MIGRATE_INJECT_DUP_IMDB", None)
-    if extra_env:
-        env.update(extra_env)
     return subprocess.run(
         [sys.executable, "-m", "alembic", *args],
         cwd=ROOT,
@@ -123,6 +133,13 @@ def _insert_legacy_series(conn, *, title: str) -> int:
     return int(result.scalar_one())
 
 
+def _assert_valid_slugs(slugs: list[str]) -> None:
+    assert slugs
+    assert all(s and s.strip() for s in slugs)
+    assert all(len(s) <= 280 for s in slugs)
+    assert len(slugs) == len(set(slugs))
+
+
 def test_postgresql_migration_succeeds(postgres_url):
     _reset_schema(postgres_url)
     result = _run_alembic(postgres_url, "upgrade", "head")
@@ -200,8 +217,8 @@ def test_002_to_head_duplicate_and_messy_titles(postgres_url):
     engine.dispose()
 
     assert emptyish == 0
-    assert len(movie_slugs) == len(set(movie_slugs))
-    assert len(series_slugs) == len(set(series_slugs))
+    _assert_valid_slugs(movie_slugs)
+    _assert_valid_slugs(series_slugs)
     assert any(s == "same-title" for s in movie_slugs)
     assert sum(1 for s in movie_slugs if s.startswith("same-title")) >= 3
     assert any(s.startswith("item") for s in movie_slugs)
@@ -225,8 +242,7 @@ def test_002_to_head_unicode_titles(postgres_url):
     engine = create_engine(postgres_url)
     with engine.connect() as conn:
         rows = list(conn.execute(text("SELECT title, slug FROM movies ORDER BY id")))
-        assert all(slug and slug.strip() for _, slug in rows)
-        assert len({slug for _, slug in rows}) == len(rows)
+        _assert_valid_slugs([slug for _, slug in rows])
         mixed = conn.execute(
             text("SELECT slug FROM movies WHERE title LIKE 'Mixed%'")
         ).scalar_one()
@@ -234,7 +250,69 @@ def test_002_to_head_unicode_titles(postgres_url):
     engine.dispose()
 
 
-def test_002_to_head_duplicate_imdb_ids_abort(postgres_url):
+def test_002_to_head_long_title_slug_collisions(postgres_url):
+    """Collision suffixes must survive the 280-char slug limit."""
+    _reset_schema(postgres_url)
+    assert _run_alembic(postgres_url, "upgrade", "002_movies_title_idx").returncode == 0
+
+    long_a = "A" * 400
+    long_same_prefix_a = ("B" * 280) + "TAILONE"
+    long_same_prefix_b = ("B" * 280) + "TAILTWO"
+
+    engine = create_engine(postgres_url)
+    with engine.begin() as conn:
+        # Legacy title column is VARCHAR(255); widen only in this test so we can
+        # exercise slug truncation near the 280-char unique slug limit.
+        conn.execute(text("ALTER TABLE movies ALTER COLUMN title TYPE VARCHAR(512)"))
+        id_long_1 = _insert_legacy_movie(conn, title=long_a)
+        id_long_2 = _insert_legacy_movie(conn, title=long_a)
+        id_prefix_1 = _insert_legacy_movie(conn, title=long_same_prefix_a)
+        id_prefix_2 = _insert_legacy_movie(conn, title=long_same_prefix_b)
+        id_uni_1 = _insert_legacy_movie(conn, title="آخرین کاروان")
+        id_uni_2 = _insert_legacy_movie(conn, title="آخرین کاروان")
+        id_empty_1 = _insert_legacy_movie(conn, title="")
+        id_empty_2 = _insert_legacy_movie(conn, title="   ")
+        id_punct_1 = _insert_legacy_movie(conn, title="!!! ???")
+        id_punct_2 = _insert_legacy_movie(conn, title="---...")
+    engine.dispose()
+
+    result = _run_alembic(postgres_url, "upgrade", "head")
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        rows = list(conn.execute(text("SELECT id, slug FROM movies ORDER BY id")))
+    engine.dispose()
+
+    by_id = {row_id: slug for row_id, slug in rows}
+    slugs = [slug for _, slug in rows]
+    _assert_valid_slugs(slugs)
+
+    # Identical overlong titles: winner keeps bare truncated slug; loser keeps -<id>.
+    winner_long, loser_long = sorted([id_long_1, id_long_2])
+    assert by_id[winner_long] == "a" * 280
+    assert by_id[loser_long].endswith(f"-{loser_long}")
+    assert len(by_id[loser_long]) == 280
+
+    # Distinct tails that share the same 280-char normalized prefix collide on bare slug.
+    winner_prefix, loser_prefix = sorted([id_prefix_1, id_prefix_2])
+    assert by_id[winner_prefix] == "b" * 280
+    assert by_id[loser_prefix].endswith(f"-{loser_prefix}")
+    assert len(by_id[loser_prefix]) <= 280
+
+    # Unicode-only / empty / punctuation-only all normalize to base ``item``.
+    item_ids = sorted([id_uni_1, id_uni_2, id_empty_1, id_empty_2, id_punct_1, id_punct_2])
+    assert by_id[item_ids[0]] == "item"
+    for item_id in item_ids[1:]:
+        assert by_id[item_id] == f"item-{item_id}"
+        assert by_id[item_id].endswith(f"-{item_id}")
+
+
+def test_duplicate_imdb_guard_without_migration_hooks(postgres_url):
+    """Prepare conflicting imdb_id values after the column exists, then run the guard.
+
+    Does not rely on environment variables or test-only migration branches.
+    """
     _reset_schema(postgres_url)
     assert _run_alembic(postgres_url, "upgrade", "002_movies_title_idx").returncode == 0
 
@@ -242,16 +320,18 @@ def test_002_to_head_duplicate_imdb_ids_abort(postgres_url):
     with engine.begin() as conn:
         _insert_legacy_movie(conn, title="Film A")
         _insert_legacy_movie(conn, title="Film B")
+        # Mid-upgrade shape: imdb_id exists (as 003 adds it) before uniqueness.
+        conn.execute(text("ALTER TABLE movies ADD COLUMN imdb_id VARCHAR(32)"))
+        conn.execute(text("UPDATE movies SET imdb_id = 'tt9999999'"))
+
+        migration = _load_migration_003()
+        context = MigrationContext.configure(conn)
+        with Operations.context(context):
+            with pytest.raises(DBAPIError) as exc_info:
+                migration._assert_no_duplicate_imdb("movies")
     engine.dispose()
 
-    result = _run_alembic(
-        postgres_url,
-        "upgrade",
-        "head",
-        extra_env={"IFILM_MIGRATE_INJECT_DUP_IMDB": "tt9999999"},
-    )
-    assert result.returncode != 0, result.stdout + result.stderr
-    combined = (result.stdout + result.stderr).lower()
+    combined = str(exc_info.value).lower()
     assert "imdb_id" in combined
     assert "tt9999999" in combined or "duplicate" in combined
 
@@ -294,5 +374,4 @@ def test_alembic_heads_single(postgres_url):
     lines = [ln.strip() for ln in (result.stdout + result.stderr).splitlines() if ln.strip()]
     head_lines = [ln for ln in lines if "003_catalog_admin" in ln]
     assert head_lines, result.stdout + result.stderr
-    # Exactly one head revision id mentioned as head
     assert sum(1 for ln in lines if ln.startswith("003_catalog_admin")) >= 1
