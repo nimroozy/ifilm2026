@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Hls, { type ErrorData, type ManifestParsedData } from 'hls.js';
 import type { AudioTrackInfo, PlaybackEngine, QualityLevel, SafePlayerError } from './types';
-import { safePlayerError, supportsNativeHls } from './safeErrors';
+import { safePlayerError, supportsNativeHls, classifySessionGone } from './safeErrors';
 
 export interface UseHlsPlayerOptions {
   masterUrl: string | null;
@@ -159,20 +159,33 @@ export function useHlsPlayer({ masterUrl, onGone, onFatal }: UseHlsPlayerOptions
         hls.on(Hls.Events.ERROR, (_e, data: ErrorData) => {
           if (!data.fatal) return;
           if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-            const status = (data.response as { code?: number } | undefined)?.code;
+            const status = (data.response as { code?: number; url?: string } | undefined)?.code;
+            const failedUrl =
+              (data.response as { url?: string } | undefined)?.url ||
+              (data as { url?: string }).url ||
+              url;
             if (status === 410 && onGone && !refreshingRef.current) {
               refreshingRef.current = true;
               restoreTimeRef.current = video.currentTime || 0;
-              void onGone()
-                .then((nextUrl) => {
+              void (async () => {
+                try {
+                  const kind = await classifySessionGone(failedUrl);
+                  if (kind === 'revoked') {
+                    refreshingRef.current = false;
+                    destroyEngine();
+                    onFatal?.(safePlayerError('session_revoked', { retryable: false }));
+                    return;
+                  }
+                  // expired / unknown → one automatic refresh
+                  const nextUrl = await onGone();
                   refreshingRef.current = false;
                   if (nextUrl) void attach(nextUrl);
-                  else onFatal?.(safePlayerError('session_revoked', { retryable: false }));
-                })
-                .catch(() => {
+                  else onFatal?.(safePlayerError('session_expired', { retryable: false }));
+                } catch {
                   refreshingRef.current = false;
                   onFatal?.(safePlayerError('session_expired', { retryable: false }));
-                });
+                }
+              })();
               return;
             }
             networkRetryRef.current += 1;

@@ -18,27 +18,29 @@ Customer-facing adaptive playback using the **protected Phase 7 streaming servic
 
 ## Native HLS vs hls.js
 
-1. If `video.canPlayType('application/vnd.apple.mpegurl')` is usable → **native** (`video.src = masterUrl`). Quality selector explains browser-managed ABR.
+1. **Apple Safari / iOS only:** if `canPlayType('application/vnd.apple.mpegurl')` is usable → **native** (`video.src = masterUrl`). Quality selector explains browser-managed ABR. Chromium often returns `"maybe"` for HLS without reliable native playback — we **do not** treat that as native.
 2. Else if `Hls.isSupported()` → **hls.js** with conservative retries (bounded network/media recoveries).
 3. Else → unsupported browser error.
 
 Hls instances and listeners are destroyed on unmount, URL change, and fatal errors. Never attach native and hls.js at the same time.
 
+**Verification status:** native selection/lifecycle is **unit-simulated**. Real Safari playback is **not verified** in CI/cloud agents.
+
 ## Playback-session lifecycle
 
 1. Require subscriber JWT (`tokenStore`) or admin JWT (ops test / asset route).
 2. `POST /api/playback/sessions` with `{content_type, content_id}` or `{media_asset_id}`.
-3. Hold `master_playlist_url` / token **only in component memory** (never localStorage / sessionStorage / IndexedDB / cookies / analytics / Redux).
+3. Hold `master_playlist_url` / token **only in component memory**.
 4. Load protected master; start when ready.
 5. On unmount: destroy engine; best-effort revoke with the matching principal client.
 
 ### Session expiration / 410 refresh
 
-- **hls.js:** fatal `NETWORK_ERROR` with HTTP 410 triggers one refresh.
-- **Native HLS:** media `error` event triggers one best-effort refresh (browsers do not expose the HTTP status).
-- Bound: at most **one** automatic session refresh per player mount (`MAX_AUTO_REFRESH = 1`).
-- Prior `currentTime` is restored after metadata loads (clamped to duration).
-- Further failures show a safe non-retryable error without the raw playback URL.
+- **hls.js:** fatal `NETWORK_ERROR` with HTTP 410 → classify response body:
+  - `expired` / unknown → **one** automatic session refresh + restore `currentTime`
+  - `revoked` → **no** refresh; safe error UI
+- Bound: `MAX_AUTO_REFRESH = 1` per player mount.
+- **Native HLS:** media `error` best-effort refresh (browsers do not expose HTTP 410). Not claimed as fully verified without Safari.
 
 ## Routes
 
@@ -49,64 +51,57 @@ Hls instances and listeners are destroyed on unmount, URL change, and fatal erro
 | `/player/asset/:assetId` | Admin protected play test (same session APIs) |
 | `/player/:id` | Legacy → movie (or `?ep=` episode) |
 
-Browse / Index / Account Watch links use `/player/movie/:id` or `/player/episode/:id`. Backend selects the **active** completed package. Clients never pick packages or supply stream URLs.
+## CSP (enforced)
 
-## Quality selection
+Authoritative layer: FastAPI `SecurityHeadersMiddleware` (`app/core/csp.py` + `app/core/security_headers.py`).
 
-Levels come **only** from the loaded HLS manifest (`MANIFEST_PARSED`). Labels map height → 240p / 360p / 480p / 720p / 1080p. Auto restores ABR (`currentLevel = -1`). Native HLS hides manual selection with an explanation.
+When `FRONTEND_DIST` points at `app/frontend/dist`, the API also serves the SPA so HTML documents receive the same CSP.
 
-## Error recovery
+**Production policy (exact directives):**
 
-Handled safely (no token leakage): auth required, streaming disabled, no active package, session create failure, network/media errors, unsupported browser, expired/revoked (410), fatal hls.js errors. Recoverable network/media errors retry a bounded number of times then stop.
+```
+default-src 'self';
+script-src 'self';
+style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+img-src 'self' data: blob: https:;
+font-src 'self' data: https://fonts.gstatic.com;
+connect-src 'self' blob:;
+media-src 'self' blob:;
+worker-src 'self' blob:;
+object-src 'none';
+base-uri 'self';
+frame-ancestors 'none';
+form-action 'self';
+```
 
-## Keyboard
+`CSP_MODE=production|development` overrides derivation from `APP_ENV`. Development adds `unsafe-eval` + Vite HMR websocket/connect origins only.
 
-Space/K play-pause · ←/→ seek · ↑/↓ volume · M mute · F fullscreen. Ignored while typing in inputs/selects/contenteditable. Esc exits fullscreen via the browser where applicable.
-
-## Mobile
-
-`playsInline`, touch-friendly controls, safe-area padding, auto-hide chrome on playback, controls reappear on tap/pointer move, volume control visible on small screens, no sound autoplay without gesture.
-
-## Accessibility
-
-ARIA labels on controls, `role="alert"` on errors, visible focus via existing button styles, keyboard usable without a mouse, screen-reader-friendly status copy. Subtitle control remains a deferred placeholder.
+Vite `server` / `preview` headers mirror the same policies for split hosting, but prefer `FRONTEND_DIST` so one middleware owns the header.
 
 ## Security and token handling
 
-- No token in storage, analytics, UI errors, or intentional console logs of stream URLs
+- No token in storage / analytics / UI errors
 - Error text redacts `/api/stream/{token}`
+- Network panel will show requested URLs (expected); the app must not persist, render, or log them
 - No `dangerouslySetInnerHTML` for stream content
-- Player route accepts only catalog/asset ids — not arbitrary stream URLs
-- Backend access logs redact stream token paths
+- Player route accepts only catalog/asset ids
 
-## CSP requirements
+## Keyboard / mobile / a11y
 
-There is no global CSP in the SPA host yet. When enabling CSP at the edge or static host, add **only** the minimum player-related directives:
+Space/K · ←/→ · ↑/↓ · M · F. Ignored in inputs. `playsInline`, safe-area, touch controls, auto-hide chrome, RTL via `dir`.
 
+## Local verification
+
+```bash
+# Prepare encoded 640×360 asset (writes /tmp; does not commit media)
+python3 scripts/prepare_phase8_verify_asset.py
+
+# Serve production SPA + API with CSP
+# FRONTEND_DIST=.../app/frontend/dist CSP_MODE=production uvicorn ...
+
+cd app/frontend
+pnpm exec playwright test -c playwright.phase8.config.ts
 ```
-media-src 'self' blob:;
-connect-src 'self' blob:;
-worker-src 'self' blob:;
-```
-
-Keep `script-src` / `default-src` as already required by the app shell. Do not broaden to arbitrary remote media origins. Same-origin `/api` (Vite proxy or reverse proxy) keeps stream fetches under `'self'`.
-
-## Testing
-
-- Unit: session hook, safe errors, hls vs native selection, destroy, quality list, keyboard, a11y labels, token redaction
-- Backend: customer session by movie/episode, auth required, XOR validation, owner revoke, 409 no package, admin dual principal
-- Real browser: use an encoded asset with `ENABLE_LOCAL_STREAMING=true` (Chrome required; Safari/native covered by unit simulation when Safari is unavailable)
-
-## Troubleshooting
-
-| Symptom | Check |
-| --- | --- |
-| Sign in to watch | Subscriber or admin JWT present |
-| Not ready for playback | Active completed HLS package on asset |
-| Streaming unavailable | `ENABLE_LOCAL_STREAMING=true` + `PLAYBACK_TOKEN_SECRET` |
-| Quality list empty on Chrome | Manifest parsed? hls.js path? |
-| Quality unavailable on iPhone | Expected — native ABR |
-| Infinite loading after expiry | Refresh already used once — retry manually |
 
 ## Deferred
 

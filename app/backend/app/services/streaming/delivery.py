@@ -44,7 +44,10 @@ SEGMENT_HEADERS = {
 
 
 def _gone(exc: SessionGoneError) -> HTTPException:
-    return HTTPException(status_code=status.HTTP_410_GONE, detail=str(exc))
+    return HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail={"code": exc.code, "message": str(exc)},
+    )
 
 
 def _path_http(exc: StreamPathError) -> HTTPException:

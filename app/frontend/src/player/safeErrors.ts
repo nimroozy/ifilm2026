@@ -51,8 +51,44 @@ export function sanitizeErrorText(text: string): string {
   return text.replace(/\/api\/stream\/[A-Za-z0-9_-]{16,128}/g, '/api/stream/[redacted]');
 }
 
+export type SessionGoneKind = 'expired' | 'revoked' | 'unknown';
+
+/**
+ * Classify a 410 stream response. Explicit revocation must not be silently
+ * refreshed; expiry may trigger a single automatic session replacement.
+ */
+export async function classifySessionGone(url: string): Promise<SessionGoneKind> {
+  try {
+    const resp = await fetch(url, { method: 'GET', cache: 'no-store' });
+    if (resp.status !== 410) return 'unknown';
+    const body = (await resp.json().catch(() => null)) as
+      | { detail?: string | { code?: string; message?: string } }
+      | null;
+    const detail = body?.detail;
+    const code =
+      typeof detail === 'object' && detail
+        ? String(detail.code || detail.message || '')
+        : String(detail || '');
+    const normalized = code.toLowerCase();
+    if (normalized.includes('revok')) return 'revoked';
+    if (normalized.includes('expir')) return 'expired';
+    return 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
 export function supportsNativeHls(video: HTMLVideoElement | null): boolean {
   if (!video) return false;
+  // Chrome/Chromium often return "maybe" for HLS without reliable native playback.
+  // Prefer hls.js everywhere except Apple Safari / iOS.
+  if (typeof navigator !== 'undefined') {
+    const ua = navigator.userAgent;
+    const isIOS = /iPad|iPhone|iPod/.test(ua);
+    const isAppleSafari =
+      /Safari/.test(ua) && !/Chrome|Chromium|CriOS|Edg|OPR|Firefox/.test(ua);
+    if (!isIOS && !isAppleSafari) return false;
+  }
   const type = video.canPlayType('application/vnd.apple.mpegurl');
   return type === 'probably' || type === 'maybe';
 }

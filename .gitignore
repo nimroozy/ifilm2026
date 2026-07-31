@@ -15,3 +15,7 @@ app/backend/.ruff_cache/
 app/backend/media/
 app/backend/*.db
 app/backend/.env
+
+# Playwright / local verification artifacts
+app/frontend/test-results/
+app/frontend/playwright-report/

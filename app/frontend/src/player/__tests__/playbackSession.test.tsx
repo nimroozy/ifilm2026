@@ -44,7 +44,23 @@ describe('safeErrors', () => {
     const video = {
       canPlayType: (t: string) => (t.includes('mpegurl') ? 'maybe' : ''),
     } as unknown as HTMLVideoElement;
+    const original = navigator.userAgent;
+    Object.defineProperty(navigator, 'userAgent', {
+      configurable: true,
+      get: () =>
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+    });
     expect(supportsNativeHls(video)).toBe(true);
+    Object.defineProperty(navigator, 'userAgent', {
+      configurable: true,
+      get: () =>
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    });
+    expect(supportsNativeHls(video)).toBe(false);
+    Object.defineProperty(navigator, 'userAgent', {
+      configurable: true,
+      get: () => original,
+    });
     expect(supportsNativeHls(null)).toBe(false);
   });
 });

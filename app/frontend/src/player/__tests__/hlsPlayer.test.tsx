@@ -85,6 +85,22 @@ function mockVideo(native = false): HTMLVideoElement {
   } as unknown as HTMLVideoElement;
 }
 
+function withSafariUA() {
+  Object.defineProperty(navigator, 'userAgent', {
+    configurable: true,
+    get: () =>
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+  });
+}
+
+function withChromeUA() {
+  Object.defineProperty(navigator, 'userAgent', {
+    configurable: true,
+    get: () =>
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  });
+}
+
 function renderPlayer(url: string | null, opts?: { native?: boolean; onGone?: () => Promise<string | null> }) {
   const video = mockVideo(Boolean(opts?.native));
   let api: ReturnType<typeof useHlsPlayer> | null = null;
@@ -105,9 +121,11 @@ function renderPlayer(url: string | null, opts?: { native?: boolean; onGone?: ()
 describe('useHlsPlayer', () => {
   beforeEach(() => {
     hlsInstances.length = 0;
+    withChromeUA();
   });
 
   it('uses native HLS when supported and does not create hls.js', async () => {
+    withSafariUA();
     const { getApi } = renderPlayer('/api/stream/tokensecretvalue012345678901234567890/master.m3u8', {
       native: true,
     });
@@ -144,10 +162,17 @@ describe('useHlsPlayer', () => {
     expect(hlsInstances[0].destroy).toHaveBeenCalled();
   });
 
-  it('refreshes once on fatal 410 network error', async () => {
+  it('refreshes once on fatal 410 network error when session expired', async () => {
     const onGone = vi
       .fn()
       .mockResolvedValue('/api/stream/newtokenvalue0123456789012345678901/master.m3u8');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        status: 410,
+        json: async () => ({ detail: { code: 'expired', message: 'Playback session expired' } }),
+      })
+    );
     renderPlayer('/api/stream/oldtokenvalue01234567890123456789012/master.m3u8', { onGone });
     await waitFor(() => expect(hlsInstances.length).toBe(1));
     const errHandler = hlsInstances[0].handlers.ERROR?.[0];
@@ -155,11 +180,53 @@ describe('useHlsPlayer', () => {
       errHandler?.(null, {
         fatal: true,
         type: 'NETWORK_ERROR',
-        response: { code: 410 },
+        response: { code: 410, url: '/api/stream/oldtokenvalue01234567890123456789012/master.m3u8' },
       });
     });
     await waitFor(() => expect(onGone).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(hlsInstances.length).toBe(2));
+    vi.unstubAllGlobals();
+  });
+
+  it('does not refresh on explicit revocation 410', async () => {
+    const onGone = vi.fn();
+    const onFatal = vi.fn();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        status: 410,
+        json: async () => ({ detail: { code: 'revoked', message: 'Playback session revoked' } }),
+      })
+    );
+    let api: ReturnType<typeof useHlsPlayer> | null = null;
+    const video = mockVideo(false);
+    const { rerender } = renderHook(
+      ({ masterUrl }: { masterUrl: string | null }) => {
+        api = useHlsPlayer({ masterUrl, onGone, onFatal });
+        if (!api.videoRef.current) {
+          (api.videoRef as { current: HTMLVideoElement | null }).current = video;
+        }
+        return api;
+      },
+      { initialProps: { masterUrl: null as string | null } }
+    );
+    rerender({ masterUrl: '/api/stream/revokedtokenvalue0123456789012345678/master.m3u8' });
+    await waitFor(() => expect(hlsInstances.length).toBe(1));
+    const errHandler = hlsInstances[0].handlers.ERROR?.[0];
+    await act(async () => {
+      errHandler?.(null, {
+        fatal: true,
+        type: 'NETWORK_ERROR',
+        response: {
+          code: 410,
+          url: '/api/stream/revokedtokenvalue0123456789012345678/master.m3u8',
+        },
+      });
+    });
+    await waitFor(() => expect(onFatal).toHaveBeenCalled());
+    expect(onGone).not.toHaveBeenCalled();
+    expect(onFatal.mock.calls[0][0].code).toBe('session_revoked');
+    vi.unstubAllGlobals();
   });
 
   it('recovers recoverable media errors then stops', async () => {
@@ -308,8 +375,25 @@ describe('Fullscreen helpers', () => {
 });
 
 describe('supportsNativeHls export', () => {
-  it('detects capability from canPlayType', () => {
-    expect(supportsNativeHls(mockVideo(true))).toBe(true);
+  it('detects capability from canPlayType on Apple Safari only', () => {
+    const video = mockVideo(true);
+    const original = navigator.userAgent;
+    Object.defineProperty(navigator, 'userAgent', {
+      configurable: true,
+      get: () =>
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1',
+    });
+    expect(supportsNativeHls(video)).toBe(true);
+    Object.defineProperty(navigator, 'userAgent', {
+      configurable: true,
+      get: () =>
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    });
+    expect(supportsNativeHls(mockVideo(true))).toBe(false);
+    Object.defineProperty(navigator, 'userAgent', {
+      configurable: true,
+      get: () => original,
+    });
     expect(supportsNativeHls(mockVideo(false))).toBe(false);
   });
 
