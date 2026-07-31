@@ -1,4 +1,4 @@
-"""Schemas for media processing jobs and probe metadata."""
+"""Schemas for media processing jobs, probe metadata, and HLS packages."""
 
 from __future__ import annotations
 
@@ -72,7 +72,70 @@ class ProcessingJobCreateOut(BaseModel):
     created: bool
 
 
+class EncodeJobCreateOut(BaseModel):
+    job: ProcessingJobOut
+    package: "MediaPackageOut"
+    created: bool
+
+
 class ProcessingStatusOut(BaseModel):
     enabled: bool
     ffmpeg_available: bool
     ffprobe_available: bool
+
+
+class EncodingProfileOut(ORMModel):
+    id: str
+    name: str
+    label: str
+    height: int
+    video_bitrate: int
+    audio_bitrate: int
+    maxrate: int
+    bufsize: int
+    video_codec: str
+    audio_codec: str
+    video_profile: str
+    preset: str
+    enabled: bool
+    sort_order: int
+
+
+class MediaRenditionOut(ORMModel):
+    id: str
+    package_id: str
+    profile_id: str | None = None
+    label: str
+    height: int
+    width: int | None = None
+    bandwidth: int | None = None
+    average_bandwidth: int | None = None
+    playlist_path: str | None = None
+    segment_count: int = 0
+    video_codec: str | None = None
+    audio_codec: str | None = None
+    status: str
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class MediaPackageOut(ORMModel):
+    id: str
+    media_asset_id: str
+    processing_job_id: str | None = None
+    package_type: str
+    status: str
+    storage_path: str | None = None
+    master_playlist_path: str | None = None
+    source_width: int | None = None
+    source_height: int | None = None
+    duration_seconds: float | None = None
+    segment_duration_seconds: int
+    rendition_count: int = 0
+    error_code: str | None = None
+    error_message: str | None = None
+    created_by_admin_id: int | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    completed_at: datetime | None = None
+    renditions: list[MediaRenditionOut] = Field(default_factory=list)

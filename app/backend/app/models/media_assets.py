@@ -114,6 +114,9 @@ class MediaAsset(Base):
     processing_jobs = relationship(
         "MediaProcessingJob", back_populates="media_asset", cascade="all, delete-orphan"
     )
+    packages = relationship(
+        "MediaPackage", back_populates="media_asset", cascade="all, delete-orphan"
+    )
 
 
 class UploadSession(Base):

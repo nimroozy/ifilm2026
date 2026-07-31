@@ -15,6 +15,7 @@ from app.core.config import Settings
 from app.models.media_assets import MediaAsset, new_uuid, utcnow
 from app.models.media_processing import (
     ACTIVE_JOB_STATUSES,
+    JOB_TYPE_ENCODE_HLS,
     JOB_TYPE_PROBE,
     TERMINAL_JOB_STATUSES,
     MediaProcessingJob,
@@ -46,13 +47,17 @@ def default_worker_id(settings: Settings) -> str:
     return f"{socket.gethostname()}:{new_uuid()[:8]}"
 
 
-def _clip(message: str | None, limit: int = DIAGNOSTIC_MAX_CHARS) -> str | None:
+def clip_diagnostic(message: str | None, limit: int = DIAGNOSTIC_MAX_CHARS) -> str | None:
     if message is None:
         return None
     text_value = str(message).strip()
     if len(text_value) <= limit:
         return text_value
     return text_value[: limit - 3] + "..."
+
+
+def _clip(message: str | None, limit: int = DIAGNOSTIC_MAX_CHARS) -> str | None:
+    return clip_diagnostic(message, limit)
 
 
 def add_job_event(
@@ -202,11 +207,23 @@ def retry_job(db: Session, *, settings: Settings, job: MediaProcessingJob) -> Me
             status_code=status.HTTP_409_CONFLICT,
             detail="Maximum attempts exhausted",
         )
-    active = find_active_probe_job(db, job.media_asset_id)
+    if job.job_type == JOB_TYPE_PROBE:
+        active = find_active_probe_job(db, job.media_asset_id)
+        conflict_detail = "An active probe job already exists for this asset"
+    elif job.job_type == JOB_TYPE_ENCODE_HLS:
+        from app.services.media_processing.encode_job import find_active_encode_job
+
+        active = find_active_encode_job(db, job.media_asset_id)
+        conflict_detail = "An active HLS encode job already exists for this asset"
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported job type: {job.job_type}",
+        )
     if active is not None and active.id != job.id:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="An active probe job already exists for this asset",
+            detail=conflict_detail,
         )
 
     job.status = "queued"
@@ -224,6 +241,22 @@ def retry_job(db: Session, *, settings: Settings, job: MediaProcessingJob) -> Me
     if job.media_asset:
         job.media_asset.processing_status = "queued"
         db.add(job.media_asset)
+    if job.job_type == JOB_TYPE_ENCODE_HLS:
+        from app.models.media_encoding import MediaPackage
+
+        package = (
+            db.query(MediaPackage).filter(MediaPackage.processing_job_id == job.id).first()
+        )
+        if package is not None:
+            package.status = "pending"
+            package.error_code = None
+            package.error_message = None
+            package.completed_at = None
+            package.storage_path = None
+            package.master_playlist_path = None
+            package.work_path = None
+            package.rendition_count = 0
+            db.add(package)
     add_job_event(db, job, "queued", "Job re-queued after failure")
     db.add(job)
     try:
@@ -232,7 +265,7 @@ def retry_job(db: Session, *, settings: Settings, job: MediaProcessingJob) -> Me
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="An active probe job already exists for this asset",
+            detail=conflict_detail,
         ) from exc
     db.refresh(job)
     return job
@@ -255,6 +288,26 @@ def cancel_job(db: Session, job: MediaProcessingJob) -> MediaProcessingJob:
         }:
             job.media_asset.processing_status = "cancelled"
             db.add(job.media_asset)
+        if job.job_type == JOB_TYPE_ENCODE_HLS:
+            from app.models.media_encoding import MediaPackage
+            from app.services.media_processing.package_paths import (
+                remove_tree_if_exists,
+                work_package_dir,
+            )
+            from app.services.storage import media_root
+
+            package = (
+                db.query(MediaPackage).filter(MediaPackage.processing_job_id == job.id).first()
+            )
+            if package is not None:
+                package.status = "cancelled"
+                package.error_code = "cancelled"
+                package.error_message = "Job cancelled before execution"
+                if package.work_path:
+                    remove_tree_if_exists(media_root() / package.work_path)
+                remove_tree_if_exists(work_package_dir(job.id, create=False))
+                package.work_path = None
+                db.add(package)
         db.add(job)
         db.commit()
         db.refresh(job)
@@ -333,7 +386,7 @@ def claim_next_job(db: Session, *, settings: Settings, worker_id: str) -> MediaP
         job.media_asset.processing_status = "processing"
         db.add(job.media_asset)
     add_job_event(db, job, "claimed", f"Claimed by {worker_id}")
-    add_job_event(db, job, "started", "Probe execution started")
+    add_job_event(db, job, "started", f"{job.job_type} execution started")
     db.add(job)
     db.commit()
     db.refresh(job)
@@ -374,6 +427,25 @@ def recover_stale_jobs(db: Session, *, settings: Settings) -> int:
     if count:
         db.commit()
     return count
+
+
+def fail_or_retry(
+    db: Session,
+    *,
+    settings: Settings,
+    job: MediaProcessingJob,
+    error_code: str,
+    message: str,
+    transient: bool,
+) -> None:
+    _fail_or_retry(
+        db,
+        settings=settings,
+        job=job,
+        error_code=error_code,
+        message=message,
+        transient=transient,
+    )
 
 
 def _fail_or_retry(

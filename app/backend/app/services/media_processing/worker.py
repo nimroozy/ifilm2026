@@ -19,6 +19,8 @@ from app.services.media_processing.jobs import (
     heartbeat_job,
     recover_stale_jobs,
 )
+from app.models.media_processing import JOB_TYPE_ENCODE_HLS, JOB_TYPE_PROBE
+
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +53,25 @@ def run_once(db: Session, *, settings: Settings, worker_id: str) -> bool:
     if job is None:
         return False
     heartbeat_job(db, job)
-    execute_probe_job(db, settings=settings, job=job)
+    if job.job_type == JOB_TYPE_PROBE:
+        execute_probe_job(db, settings=settings, job=job)
+    elif job.job_type == JOB_TYPE_ENCODE_HLS:
+        from app.services.media_processing.encode_job import execute_encode_hls_job
+
+        execute_encode_hls_job(db, settings=settings, job=job)
+    else:
+        logger.error("Unsupported job type %s for job %s", job.job_type, job.id)
+        from app.services.media_processing.jobs import fail_or_retry
+
+        fail_or_retry(
+            db,
+            settings=settings,
+            job=job,
+            error_code="unsupported_job_type",
+            message=f"Unsupported job type: {job.job_type}",
+            transient=False,
+        )
+        db.commit()
     return True
 
 

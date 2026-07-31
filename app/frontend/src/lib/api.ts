@@ -438,6 +438,69 @@ export interface ProcessingJobDto {
   media_asset?: MediaAssetDto | null;
 }
 
+export interface EncodingProfileDto {
+  id: string;
+  name: string;
+  label: string;
+  height: number;
+  video_bitrate: number;
+  audio_bitrate: number;
+  maxrate: number;
+  bufsize: number;
+  video_codec: string;
+  audio_codec: string;
+  video_profile: string;
+  preset: string;
+  enabled: boolean;
+  sort_order: number;
+}
+
+export interface MediaRenditionDto {
+  id: string;
+  package_id: string;
+  profile_id: string | null;
+  label: string;
+  height: number;
+  width: number | null;
+  bandwidth: number | null;
+  average_bandwidth: number | null;
+  playlist_path: string | null;
+  segment_count: number;
+  video_codec: string | null;
+  audio_codec: string | null;
+  status: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface MediaPackageDto {
+  id: string;
+  media_asset_id: string;
+  processing_job_id: string | null;
+  package_type: string;
+  status: string;
+  storage_path: string | null;
+  master_playlist_path: string | null;
+  source_width: number | null;
+  source_height: number | null;
+  duration_seconds: number | null;
+  segment_duration_seconds: number;
+  rendition_count: number;
+  error_code: string | null;
+  error_message: string | null;
+  created_by_admin_id: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  completed_at?: string | null;
+  renditions: MediaRenditionDto[];
+}
+
+export interface EncodeJobCreateResult {
+  job: ProcessingJobDto;
+  package: MediaPackageDto;
+  created: boolean;
+}
+
 export interface ProcessingJobCreateResult {
   job: ProcessingJobDto;
   created: boolean;
@@ -897,9 +960,35 @@ export const adminApi = {
     return data;
   },
 
+  async queueMediaEncodeHls(assetId: string) {
+    const { data } = await adminHttp.post<EncodeJobCreateResult>(
+      `/admin/media/assets/${assetId}/processing/encode-hls`
+    );
+    return data;
+  },
+
   async listAssetProcessingJobs(assetId: string) {
     const { data } = await adminHttp.get<Envelope<ProcessingJobDto>>(
       `/admin/media/assets/${assetId}/processing`
+    );
+    return unwrapList(data);
+  },
+
+  async listAssetPackages(assetId: string) {
+    const { data } = await adminHttp.get<Envelope<MediaPackageDto>>(
+      `/admin/media/assets/${assetId}/packages`
+    );
+    return unwrapList(data);
+  },
+
+  async getMediaPackage(packageId: string) {
+    const { data } = await adminHttp.get<MediaPackageDto>(`/admin/media/packages/${packageId}`);
+    return data;
+  },
+
+  async listEncodingProfiles() {
+    const { data } = await adminHttp.get<Envelope<EncodingProfileDto>>(
+      '/admin/media/encoding/profiles'
     );
     return unwrapList(data);
   },

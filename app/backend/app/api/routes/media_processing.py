@@ -1,4 +1,4 @@
-"""Admin media processing endpoints (probe jobs)."""
+"""Admin media processing endpoints (probe + HLS encode jobs)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,11 @@ from app.core.features import require_feature
 from app.models.admin import AdminUser
 from app.schemas.common import Envelope, paginated
 from app.schemas.media_processing import (
+    EncodeJobCreateOut,
+    EncodingProfileOut,
     MediaAssetProbeOut,
+    MediaPackageOut,
+    MediaRenditionOut,
     ProcessingJobCreateOut,
     ProcessingJobEventOut,
     ProcessingJobOut,
@@ -20,6 +24,12 @@ from app.schemas.media_processing import (
 )
 from app.services import media_upload as upload_service
 from app.services.media_processing import jobs as processing_jobs
+from app.services.media_processing.encode_job import (
+    get_package,
+    list_encoding_profiles,
+    list_packages_for_asset,
+    queue_encode_hls_job,
+)
 from app.services.media_processing.worker import processing_binaries_ok
 
 router = APIRouter(tags=["media-processing"])
@@ -60,6 +70,39 @@ def _job_out(job, *, include_events: bool = False) -> ProcessingJobOut:
     return ProcessingJobOut.model_validate(payload)
 
 
+def _package_out(package, *, include_renditions: bool = True) -> MediaPackageOut:
+    renditions = []
+    if include_renditions:
+        renditions = [
+            MediaRenditionOut.model_validate(item) for item in (package.renditions or [])
+        ]
+    return MediaPackageOut.model_validate(
+        {
+            "id": package.id,
+            "media_asset_id": package.media_asset_id,
+            "processing_job_id": package.processing_job_id,
+            "package_type": package.package_type,
+            "status": package.status,
+            "storage_path": package.storage_path if package.status == "completed" else None,
+            "master_playlist_path": (
+                package.master_playlist_path if package.status == "completed" else None
+            ),
+            "source_width": package.source_width,
+            "source_height": package.source_height,
+            "duration_seconds": package.duration_seconds,
+            "segment_duration_seconds": package.segment_duration_seconds,
+            "rendition_count": package.rendition_count if package.status == "completed" else 0,
+            "error_code": package.error_code,
+            "error_message": package.error_message,
+            "created_by_admin_id": package.created_by_admin_id,
+            "created_at": package.created_at,
+            "updated_at": package.updated_at,
+            "completed_at": package.completed_at,
+            "renditions": renditions if package.status == "completed" else [],
+        }
+    )
+
+
 @router.get("/admin/media/processing/status", response_model=ProcessingStatusOut)
 def processing_feature_status(
     _: Annotated[AdminUser, Depends(require_permissions("processing.read"))],
@@ -70,6 +113,25 @@ def processing_feature_status(
         enabled=bool(settings.enable_media_processing),
         ffmpeg_available=bins["ffmpeg"],
         ffprobe_available=bins["ffprobe"],
+    )
+
+
+@router.get(
+    "/admin/media/encoding/profiles",
+    response_model=Envelope[EncodingProfileOut],
+)
+def list_profiles(
+    db: DbSession,
+    _: Annotated[AdminUser, Depends(require_permissions("processing.read"))],
+):
+    settings = get_settings()
+    require_feature("enable_media_processing", settings)
+    items = list_encoding_profiles(db)
+    return paginated(
+        [EncodingProfileOut.model_validate(item) for item in items],
+        total=len(items),
+        page=1,
+        page_size=max(len(items), 1),
     )
 
 
@@ -94,6 +156,32 @@ def queue_probe(
     return ProcessingJobCreateOut(job=_job_out(job, include_events=True), created=created)
 
 
+@router.post(
+    "/admin/media/assets/{asset_id}/processing/encode-hls",
+    response_model=EncodeJobCreateOut,
+)
+def queue_encode_hls(
+    asset_id: str,
+    db: DbSession,
+    response: Response,
+    admin: Annotated[AdminUser, Depends(require_permissions("processing.manage"))],
+):
+    settings = get_settings()
+    require_feature("enable_media_processing", settings)
+    asset = upload_service.get_asset(db, asset_id)
+    job, package, created = queue_encode_hls_job(
+        db, settings=settings, asset=asset, admin_id=admin.id
+    )
+    job = processing_jobs.get_job(db, job.id)
+    package = get_package(db, package.id)
+    response.status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+    return EncodeJobCreateOut(
+        job=_job_out(job, include_events=True),
+        package=_package_out(package),
+        created=created,
+    )
+
+
 @router.get(
     "/admin/media/assets/{asset_id}/processing",
     response_model=Envelope[ProcessingJobOut],
@@ -113,6 +201,39 @@ def list_asset_processing(
         page=1,
         page_size=max(len(items), 1),
     )
+
+
+@router.get(
+    "/admin/media/assets/{asset_id}/packages",
+    response_model=Envelope[MediaPackageOut],
+)
+def list_asset_packages(
+    asset_id: str,
+    db: DbSession,
+    _: Annotated[AdminUser, Depends(require_permissions("processing.read"))],
+):
+    settings = get_settings()
+    require_feature("enable_media_processing", settings)
+    upload_service.get_asset(db, asset_id)
+    items = list_packages_for_asset(db, asset_id)
+    return paginated(
+        [_package_out(item) for item in items],
+        total=len(items),
+        page=1,
+        page_size=max(len(items), 1),
+    )
+
+
+@router.get("/admin/media/packages/{package_id}", response_model=MediaPackageOut)
+def get_media_package(
+    package_id: str,
+    db: DbSession,
+    _: Annotated[AdminUser, Depends(require_permissions("processing.read"))],
+):
+    settings = get_settings()
+    require_feature("enable_media_processing", settings)
+    package = get_package(db, package_id)
+    return _package_out(package)
 
 
 @router.get("/admin/media/processing/jobs", response_model=Envelope[ProcessingJobOut])

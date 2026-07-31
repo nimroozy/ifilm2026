@@ -74,7 +74,11 @@ class Settings(BaseSettings):
     media_processing_max_attempts: int = 3
     media_processing_retry_base_seconds: int = 30
     media_processing_probe_timeout_seconds: int = 120
+    media_processing_encode_timeout_seconds: int = 3600
     media_processing_log_max_bytes: int = 65536
+    hls_segment_duration_seconds: int = 6
+    hls_max_height: int = 1080
+    hls_x264_preset: str = "veryfast"
 
     cdn_http_timeout_seconds: int = 10
 
