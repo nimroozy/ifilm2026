@@ -16,7 +16,15 @@ const ADMIN_TOKEN_KEY = 'ifilm_admin_token';
 export const ADMIN_UNAUTHORIZED_EVENT = 'ifilm:admin-unauthorized';
 
 export type ContentType = 'movie' | 'series' | 'episode';
-export type CatalogStatus = 'draft' | 'published' | 'archived';
+export type CatalogEntityType = 'movie' | 'series' | 'season' | 'episode';
+export type CatalogStatus =
+  | 'draft'
+  | 'in_review'
+  | 'approved'
+  | 'scheduled'
+  | 'published'
+  | 'unpublished'
+  | 'archived';
 
 export interface PageMeta {
   page: number;
@@ -115,6 +123,7 @@ export interface MovieDto {
   is_featured?: boolean;
   is_trending?: boolean;
   published_at?: string | null;
+  scheduled_publish_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
   genres?: GenreDto[] | string[];
@@ -158,6 +167,7 @@ export interface SeriesDto {
   is_featured?: boolean;
   is_trending?: boolean;
   published_at?: string | null;
+  scheduled_publish_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
   genres?: GenreDto[] | string[];
@@ -189,6 +199,7 @@ export interface SeasonDto {
   release_year?: number | null;
   status: CatalogStatus | string;
   episode_count?: number;
+  scheduled_publish_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 }
@@ -205,6 +216,7 @@ export interface EpisodeDto {
   thumbnail_url?: string;
   status: CatalogStatus | string;
   published_at?: string | null;
+  scheduled_publish_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
   hls_path?: string | null;
@@ -292,7 +304,6 @@ export type MovieCreatePayload = {
   poster_url?: string;
   backdrop_url?: string;
   trailer_url?: string;
-  status?: string;
   is_featured?: boolean;
   is_trending?: boolean;
   genre_ids?: number[];
@@ -324,7 +335,6 @@ export type SeriesCreatePayload = {
   poster_url?: string;
   backdrop_url?: string;
   trailer_url?: string;
-  status?: string;
   airing_status?: string;
   is_featured?: boolean;
   is_trending?: boolean;
@@ -343,7 +353,6 @@ export type SeasonCreatePayload = {
   description?: string;
   poster_url?: string;
   release_year?: number | null;
-  status?: string;
 };
 
 export type SeasonUpdatePayload = Partial<SeasonCreatePayload>;
@@ -355,7 +364,6 @@ export type EpisodeCreatePayload = {
   duration_minutes?: number | null;
   release_date?: string | null;
   thumbnail_url?: string;
-  status?: string;
 };
 
 export type EpisodeUpdatePayload = Partial<EpisodeCreatePayload>;
@@ -529,6 +537,58 @@ export interface StreamingStatusDto {
   enabled: boolean;
   supported_principals: string[];
   subscriber_entitlement: string;
+}
+
+export interface PublicationReadinessIssueDto {
+  code: string;
+  message: string;
+  field?: string | null;
+}
+
+export interface PublicationReadinessDto {
+  entity_type: CatalogEntityType;
+  entity_id: number;
+  status: CatalogStatus;
+  ready: boolean;
+  playable: boolean;
+  active_package_id?: string | null;
+  package_status?: string | null;
+  issues: PublicationReadinessIssueDto[];
+  allowed_actions: string[];
+  submitted_for_review_at?: string | null;
+  submitted_for_review_by?: number | null;
+  approved_at?: string | null;
+  approved_by?: number | null;
+  published_at?: string | null;
+  published_by?: number | null;
+  scheduled_publish_at?: string | null;
+  unpublished_at?: string | null;
+  unpublished_by?: number | null;
+  archived_at?: string | null;
+  archived_by?: number | null;
+  publication_version: number;
+}
+
+export interface PublicationHistoryEventDto {
+  id: number;
+  entity_type: CatalogEntityType | string;
+  entity_id: number;
+  from_status: CatalogStatus | string;
+  to_status: CatalogStatus | string;
+  actor_user_id?: number | null;
+  reason?: string | null;
+  event_type: string;
+  metadata_json?: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface PublicationActionDto {
+  detail: string;
+  entity_type: CatalogEntityType;
+  entity_id: number;
+  status: CatalogStatus;
+  scheduled_publish_at?: string | null;
+  publication_version: number;
 }
 
 export type CustomerPlaybackSessionRequest =
@@ -779,6 +839,73 @@ export const adminApi = {
 
   async dashboardStats(): Promise<DashboardStatsDto> {
     const { data } = await adminHttp.get<DashboardStatsDto>('/admin/dashboard/stats');
+    return data;
+  },
+
+  async getPublicationReadiness(entityType: CatalogEntityType, id: number) {
+    const { data } = await adminHttp.get<PublicationReadinessDto>(
+      `/admin/catalog/${entityType}/${id}/publication-readiness`
+    );
+    return data;
+  },
+
+  async getPublicationHistory(entityType: CatalogEntityType, id: number) {
+    const { data } = await adminHttp.get<PublicationHistoryEventDto[]>(
+      `/admin/catalog/${entityType}/${id}/publication-history`
+    );
+    return data;
+  },
+
+  async submitReview(entityType: CatalogEntityType, id: number, reason?: string) {
+    const { data } = await adminHttp.post<PublicationActionDto>(
+      `/admin/catalog/${entityType}/${id}/submit-review`,
+      { reason }
+    );
+    return data;
+  },
+
+  async approve(entityType: CatalogEntityType, id: number, reason?: string) {
+    const { data } = await adminHttp.post<PublicationActionDto>(
+      `/admin/catalog/${entityType}/${id}/approve`,
+      { reason }
+    );
+    return data;
+  },
+
+  async publish(entityType: CatalogEntityType, id: number, reason?: string) {
+    const { data } = await adminHttp.post<PublicationActionDto>(
+      `/admin/catalog/${entityType}/${id}/publish`,
+      { reason }
+    );
+    return data;
+  },
+
+  async schedule(
+    entityType: CatalogEntityType,
+    id: number,
+    scheduledPublishAt: string,
+    reason?: string
+  ) {
+    const { data } = await adminHttp.post<PublicationActionDto>(
+      `/admin/catalog/${entityType}/${id}/schedule`,
+      { scheduled_publish_at: scheduledPublishAt, reason }
+    );
+    return data;
+  },
+
+  async unpublish(entityType: CatalogEntityType, id: number, reason?: string) {
+    const { data } = await adminHttp.post<PublicationActionDto>(
+      `/admin/catalog/${entityType}/${id}/unpublish`,
+      { reason }
+    );
+    return data;
+  },
+
+  async archive(entityType: CatalogEntityType, id: number, reason?: string) {
+    const { data } = await adminHttp.post<PublicationActionDto>(
+      `/admin/catalog/${entityType}/${id}/archive`,
+      { reason }
+    );
     return data;
   },
 

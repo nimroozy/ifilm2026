@@ -3,12 +3,11 @@ import { Link, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Plus, Edit, Trash2, Eye, EyeOff } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import {
@@ -28,7 +27,6 @@ const createSchema = z.object({
   episode_number: z.coerce.number().int().min(0).max(10000),
   title: z.string().min(1, 'Title is required'),
   duration_minutes: z.coerce.number().int().min(0).max(10000).optional().or(z.literal('')),
-  status: z.enum(['draft', 'published', 'archived']),
 });
 
 type CreateValues = z.infer<typeof createSchema>;
@@ -48,7 +46,6 @@ export default function EpisodesPage() {
       episode_number: 1,
       title: '',
       duration_minutes: '' as unknown as number,
-      status: 'draft',
     },
   });
 
@@ -82,33 +79,16 @@ export default function EpisodesPage() {
           values.duration_minutes === '' || values.duration_minutes == null
             ? null
             : Number(values.duration_minutes),
-        status: values.status,
       });
       toast.success('Episode created');
       form.reset({
         episode_number: Number(values.episode_number) + 1,
         title: '',
         duration_minutes: '' as unknown as number,
-        status: 'draft',
       });
       load();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Create failed');
-    }
-  }
-
-  async function togglePublish(ep: EpisodeDto) {
-    try {
-      if (ep.status === 'published') {
-        await adminApi.unpublishEpisode(ep.id);
-        toast.success('Episode unpublished');
-      } else {
-        await adminApi.publishEpisode(ep.id);
-        toast.success('Episode published');
-      }
-      load();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Publish failed');
     }
   }
 
@@ -195,28 +175,6 @@ export default function EpisodesPage() {
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name="status"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Status</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="w-[130px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="draft">Draft</SelectItem>
-                        <SelectItem value="published">Published</SelectItem>
-                        <SelectItem value="archived">Archived</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
               <Button type="submit" className="gap-2 bg-primary text-primary-foreground">
                 <Plus className="h-4 w-4" />
                 Add
@@ -257,18 +215,13 @@ export default function EpisodesPage() {
                             <Edit className="h-3.5 w-3.5" />
                           </Link>
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => togglePublish(ep)}
-                          aria-label={ep.status === 'published' ? 'Unpublish' : 'Publish'}
-                        >
-                          {ep.status === 'published' ? (
-                            <EyeOff className="h-3.5 w-3.5" />
-                          ) : (
+                        <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+                          <Link
+                            to={`/admin/episodes/${ep.id}/edit`}
+                            aria-label="Manage episode publishing"
+                          >
                             <Eye className="h-3.5 w-3.5" />
-                          )}
+                          </Link>
                         </Button>
                         <Button
                           variant="ghost"

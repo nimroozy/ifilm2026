@@ -8,10 +8,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { adminApi, ApiError } from '@/lib/api';
+import { adminApi, ApiError, type CatalogStatus } from '@/lib/api';
 import { ErrorState, LoadingBlock } from './adminShared';
+import PublishingPanel from './PublishingPanel';
 
 const schema = z.object({
   episode_number: z.coerce.number().int().min(0).max(10000),
@@ -24,7 +24,6 @@ const schema = z.object({
     .refine((v) => !v || v.startsWith('http://') || v.startsWith('https://'), {
       message: 'URL must start with http:// or https://',
     }),
-  status: z.enum(['draft', 'published', 'archived']),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -36,6 +35,7 @@ export default function EpisodeFormPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [seasonId, setSeasonId] = useState<number | null>(null);
+  const [currentStatus, setCurrentStatus] = useState<CatalogStatus | string>('draft');
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -45,7 +45,6 @@ export default function EpisodeFormPage() {
       description: '',
       duration_minutes: '' as unknown as number,
       thumbnail_url: '',
-      status: 'draft',
     },
   });
 
@@ -58,13 +57,13 @@ export default function EpisodeFormPage() {
         const ep = await adminApi.getEpisode(episodeId);
         if (cancelled) return;
         setSeasonId(ep.season_id);
+        setCurrentStatus(ep.status);
         form.reset({
           episode_number: ep.episode_number,
           title: ep.title,
           description: ep.description || '',
           duration_minutes: (ep.duration_minutes ?? ep.duration ?? '') as unknown as number,
           thumbnail_url: ep.thumbnail_url || ep.thumbnail || '',
-          status: (ep.status as FormValues['status']) || 'draft',
         });
       } catch (err) {
         if (!cancelled) setError(err instanceof ApiError ? err.message : 'Failed to load episode');
@@ -88,7 +87,6 @@ export default function EpisodeFormPage() {
             ? null
             : Number(values.duration_minutes),
         thumbnail_url: values.thumbnail_url || '',
-        status: values.status,
       });
       toast.success('Episode updated');
       if (seasonId) navigate(`/admin/seasons/${seasonId}/episodes`);
@@ -110,6 +108,13 @@ export default function EpisodeFormPage() {
           </Button>
         )}
       </div>
+
+      <PublishingPanel
+        entityType="episode"
+        entityId={episodeId}
+        currentStatus={currentStatus}
+        onChanged={setCurrentStatus}
+      />
 
       <Card className="bg-card border-border">
         <CardHeader>
@@ -179,28 +184,6 @@ export default function EpisodeFormPage() {
                     <FormControl>
                       <Input {...field} />
                     </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="status"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Status</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="draft">Draft</SelectItem>
-                        <SelectItem value="published">Published</SelectItem>
-                        <SelectItem value="archived">Archived</SelectItem>
-                      </SelectContent>
-                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}

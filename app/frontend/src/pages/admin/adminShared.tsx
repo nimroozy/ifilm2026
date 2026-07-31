@@ -9,6 +9,10 @@ export function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
     published: 'bg-green-500/20 text-green-500',
     draft: 'bg-yellow-500/20 text-yellow-500',
+    in_review: 'bg-blue-500/20 text-blue-500',
+    approved: 'bg-emerald-500/20 text-emerald-500',
+    scheduled: 'bg-violet-500/20 text-violet-500',
+    unpublished: 'bg-orange-500/20 text-orange-500',
     archived: 'bg-muted text-muted-foreground',
     completed: 'bg-green-500/20 text-green-500',
     pending: 'bg-yellow-500/20 text-yellow-500',
@@ -16,9 +20,14 @@ export function StatusBadge({ status }: { status: string }) {
     failed: 'bg-red-500/20 text-red-500',
     cancelled: 'bg-muted text-muted-foreground',
   };
+  const labels: Record<string, string> = {
+    in_review: 'In review',
+  };
   return (
-    <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium capitalize ${styles[status] || 'bg-muted text-muted-foreground'}`}>
-      {status}
+    <span
+      className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium capitalize ${styles[status] || 'bg-muted text-muted-foreground'}`}
+    >
+      {labels[status] || status}
     </span>
   );
 }

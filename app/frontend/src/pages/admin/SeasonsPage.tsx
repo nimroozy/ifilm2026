@@ -8,7 +8,6 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import {
@@ -28,7 +27,6 @@ const createSchema = z.object({
   season_number: z.coerce.number().int().min(0).max(500),
   title: z.string().optional(),
   release_year: z.coerce.number().int().min(1888).max(2100).optional().or(z.literal('')),
-  status: z.enum(['draft', 'published', 'archived']),
 });
 
 type CreateValues = z.infer<typeof createSchema>;
@@ -44,7 +42,7 @@ export default function SeasonsPage() {
 
   const form = useForm<CreateValues>({
     resolver: zodResolver(createSchema),
-    defaultValues: { season_number: 1, title: '', release_year: '' as unknown as number, status: 'draft' },
+    defaultValues: { season_number: 1, title: '', release_year: '' as unknown as number },
   });
 
   const load = useCallback(async () => {
@@ -75,14 +73,12 @@ export default function SeasonsPage() {
           values.release_year === '' || values.release_year == null
             ? null
             : Number(values.release_year),
-        status: values.status,
       });
       toast.success('Season created');
       form.reset({
         season_number: Number(values.season_number) + 1,
         title: '',
         release_year: '' as unknown as number,
-        status: 'draft',
       });
       load();
     } catch (err) {
@@ -155,28 +151,6 @@ export default function SeasonsPage() {
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name="status"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Status</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="w-[130px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="draft">Draft</SelectItem>
-                        <SelectItem value="published">Published</SelectItem>
-                        <SelectItem value="archived">Archived</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
               <Button type="submit" className="gap-2 bg-primary text-primary-foreground">
                 <Plus className="h-4 w-4" />
                 Add
@@ -213,7 +187,7 @@ export default function SeasonsPage() {
                     <TableCell>
                       <div className="flex gap-1">
                         <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
-                          <Link to={`/admin/seasons/${season.id}/edit`} aria-label="Edit season">
+                          <Link to={`/admin/seasons/${season.id}/edit`} aria-label="Manage season publishing">
                             <Edit className="h-3.5 w-3.5" />
                           </Link>
                         </Button>

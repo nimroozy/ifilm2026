@@ -9,10 +9,10 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { adminApi, ApiError, type GenreDto } from '@/lib/api';
+import { adminApi, ApiError, type CatalogStatus, type GenreDto } from '@/lib/api';
 import { csvToList, ErrorState, listToCsv, LoadingBlock, POSTER_FALLBACK } from './adminShared';
+import PublishingPanel from './PublishingPanel';
 
 export const movieFormSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -37,7 +37,6 @@ export const movieFormSchema = z.object({
     .refine((v) => !v || v.startsWith('http://') || v.startsWith('https://'), {
       message: 'Backdrop URL must start with http:// or https://',
     }),
-  status: z.enum(['draft', 'published', 'archived']),
   is_featured: z.boolean().default(false),
   is_trending: z.boolean().default(false),
   director: z.string().optional(),
@@ -65,7 +64,6 @@ function emptyValues(): MovieFormValues {
     imdb_rating: '' as unknown as number,
     poster_url: '',
     backdrop_url: '',
-    status: 'draft',
     is_featured: false,
     is_trending: false,
     director: '',
@@ -86,6 +84,7 @@ export default function MovieFormPage() {
   const [loading, setLoading] = useState(isEdit);
   const [error, setError] = useState<string | null>(null);
   const [previewBroken, setPreviewBroken] = useState(false);
+  const [currentStatus, setCurrentStatus] = useState<CatalogStatus | string>('draft');
 
   const form = useForm<MovieFormValues>({
     resolver: zodResolver(movieFormSchema),
@@ -114,6 +113,7 @@ export default function MovieFormPage() {
       try {
         const movie = await adminApi.getMovie(Number(id));
         if (cancelled) return;
+        setCurrentStatus(movie.status);
         form.reset({
           title: movie.title,
           original_title: movie.original_title || '',
@@ -127,7 +127,6 @@ export default function MovieFormPage() {
           imdb_rating: (movie.imdb_rating ?? movie.rating ?? '') as unknown as number,
           poster_url: movie.poster_url || movie.poster || '',
           backdrop_url: movie.backdrop_url || movie.backdrop || '',
-          status: (movie.status as MovieFormValues['status']) || 'draft',
           is_featured: movie.is_featured ?? movie.featured ?? false,
           is_trending: movie.is_trending ?? false,
           director: movie.director || '',
@@ -179,7 +178,6 @@ export default function MovieFormPage() {
         values.imdb_rating === '' || values.imdb_rating == null ? null : Number(values.imdb_rating),
       poster_url: values.poster_url || '',
       backdrop_url: values.backdrop_url || '',
-      status: values.status,
       is_featured: values.is_featured,
       is_trending: values.is_trending,
       director: values.director || '',
@@ -221,6 +219,15 @@ export default function MovieFormPage() {
           <Link to="/admin/movies">Back</Link>
         </Button>
       </div>
+
+      {isEdit && id && (
+        <PublishingPanel
+          entityType="movie"
+          entityId={Number(id)}
+          currentStatus={currentStatus}
+          onChanged={setCurrentStatus}
+        />
+      )}
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6" noValidate>
@@ -355,28 +362,6 @@ export default function MovieFormPage() {
                     <FormControl>
                       <Input {...field} />
                     </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="status"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Status</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="draft">Draft</SelectItem>
-                        <SelectItem value="published">Published</SelectItem>
-                        <SelectItem value="archived">Archived</SelectItem>
-                      </SelectContent>
-                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
