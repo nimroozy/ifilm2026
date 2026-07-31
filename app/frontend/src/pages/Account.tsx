@@ -10,8 +10,38 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useLang, useAuth } from '@/components/CustomerLayout';
 import { devices, episodes, watchHistory, movies, series } from '@/data/mockData';
-import { api, tokenStore, type WatchProgressDto } from '@/lib/api';
+import { api, ApiError, tokenStore, type DeviceDto, type WatchProgressDto } from '@/lib/api';
 import { isMockMode } from '@/lib/dataMode';
+
+function loginErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    const detail = error.details;
+    if (detail && typeof detail === 'object' && detail !== null && 'code' in detail) {
+      const code = String((detail as { code?: string }).code || '');
+      const message = String((detail as { message?: string }).message || error.message);
+      switch (code) {
+        case 'account_suspended':
+          return 'Your account is suspended. Contact support.';
+        case 'account_disabled':
+          return 'Your account is disabled.';
+        case 'service_expired':
+          return 'Your service has expired. Contact support to renew.';
+        case 'device_limit_exceeded':
+          return 'Too many devices. Remove a device and try again.';
+        case 'provider_unavailable':
+          return 'Sign-in is temporarily unavailable. Try again later.';
+        case 'rate_limited':
+          return 'Too many attempts. Wait a moment and try again.';
+        default:
+          return message || 'Invalid username or password';
+      }
+    }
+    if (error.status === 401) return 'Invalid username or password';
+    if (error.status === 429) return 'Too many attempts. Wait a moment and try again.';
+    if (error.status === 503) return 'Sign-in is temporarily unavailable. Try again later.';
+  }
+  return 'Invalid username or password';
+}
 
 // ============ LOGIN PAGE ============
 export function LoginPage() {
@@ -23,6 +53,7 @@ export function LoginPage() {
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const mockMode = isMockMode();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,8 +62,8 @@ export function LoginPage() {
     try {
       await login(username, password, remember);
       navigate('/');
-    } catch {
-      setError('Invalid username or password');
+    } catch (err) {
+      setError(loginErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -49,18 +80,18 @@ export function LoginPage() {
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
             {error && (
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm" role="alert">
                 <AlertCircle className="h-4 w-4 flex-shrink-0" />
                 <span>{error}</span>
               </div>
             )}
             <div className="space-y-2">
               <Label htmlFor="username">{t.login.username}</Label>
-              <Input id="username" value={username} onChange={e => setUsername(e.target.value)} placeholder="mobin_user_001" className="bg-background border-border" />
+              <Input id="username" value={username} onChange={e => setUsername(e.target.value)} autoComplete="username" className="bg-background border-border" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">{t.login.password}</Label>
-              <Input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" className="bg-background border-border" />
+              <Input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" className="bg-background border-border" />
             </div>
             <div className="flex items-center gap-2">
               <Checkbox id="remember" checked={remember} onCheckedChange={(v) => setRemember(v === true)} />
@@ -73,7 +104,9 @@ export function LoginPage() {
               {t.login.support}
             </Button>
           </form>
-          <p className="text-xs text-muted-foreground text-center mt-4">Demo: mobin_user_001 / password</p>
+          {mockMode && (
+            <p className="text-xs text-muted-foreground text-center mt-4">Demo: mobin_user_001 / password</p>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -85,8 +118,32 @@ export function ProfilePage() {
   const { t } = useLang();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const mockMode = isMockMode();
+  const [deviceCount, setDeviceCount] = useState<string>(mockMode ? '3 devices' : '…');
+
+  useEffect(() => {
+    if (mockMode || !user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await api.listDevices();
+        if (!cancelled) setDeviceCount(`${list.length} / ${user.maxDevices} devices`);
+      } catch {
+        if (!cancelled) setDeviceCount(`${user.maxDevices} max`);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mockMode, user]);
 
   if (!user) return <div className="min-h-screen flex items-center justify-center"><Button onClick={() => navigate('/login')}>{t.login.signIn}</Button></div>;
+
+  const statusLabel = user.status || 'unknown';
+  const statusClass =
+    statusLabel === 'active' && user.entitlementAllowed !== false
+      ? 'bg-green-500/20 text-green-400'
+      : 'bg-amber-500/20 text-amber-300';
 
   return (
     <div className="min-h-screen">
@@ -94,7 +151,6 @@ export function ProfilePage() {
         <h1 className="text-2xl md:text-3xl font-serif font-bold text-foreground mb-6">{t.profile.title}</h1>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* User Info Card */}
           <Card className="bg-card border-border md:col-span-1">
             <CardContent className="pt-6">
               <div className="flex flex-col items-center text-center">
@@ -104,21 +160,25 @@ export function ProfilePage() {
                 <h3 className="text-lg font-semibold text-foreground">{user.name}</h3>
                 <p className="text-sm text-muted-foreground">@{user.username}</p>
                 <div className="w-full mt-4 space-y-3 text-sm">
-                  <div className="flex justify-between"><span className="text-muted-foreground">Branch:</span><span className="text-foreground">{user.branch}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Package:</span><Badge variant="secondary">{user.package}</Badge></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Status:</span><Badge className="bg-green-500/20 text-green-400">Active</Badge></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Expires:</span><span className="text-foreground">{user.expiration}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Branch:</span><span className="text-foreground">{user.branch || '—'}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Package:</span><Badge variant="secondary">{user.package || '—'}</Badge></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Status:</span><Badge className={statusClass}>{statusLabel}</Badge></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Service:</span><span className="text-foreground">{user.serviceStatus}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Expires:</span><span className="text-foreground">{user.expiration || '—'}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Entitlement:</span><span className="text-foreground">{user.entitlementAllowed === false ? 'Denied' : user.entitlementAllowed ? 'Allowed' : '—'}</span></div>
+                  {user.safeReason && (
+                    <p className="text-xs text-muted-foreground text-start pt-1">{user.safeReason}</p>
+                  )}
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Quick Links */}
           <div className="md:col-span-2 space-y-4">
             {[
-              { label: t.profile.devices, path: '/devices', count: '3 devices' },
-              { label: t.profile.watchlist, path: '/watchlist', count: '12 items' },
-              { label: t.profile.history, path: '/history', count: '24 watched' },
+              { label: t.profile.devices, path: '/devices', count: deviceCount },
+              { label: t.profile.watchlist, path: '/watchlist', count: mockMode ? '12 items' : 'Open' },
+              { label: t.profile.history, path: '/history', count: mockMode ? '24 watched' : 'Open' },
             ].map(item => (
               <Card key={item.path} className="bg-card border-border hover:bg-card/80 cursor-pointer transition-colors" onClick={() => navigate(item.path)}>
                 <CardContent className="flex items-center justify-between py-4">
@@ -159,7 +219,50 @@ export function ProfilePage() {
 // ============ DEVICE MANAGEMENT PAGE ============
 export function DevicesPage() {
   const { t } = useLang();
-  const [deviceList, setDeviceList] = useState(devices);
+  const { user } = useAuth();
+  const mockMode = isMockMode();
+  const [deviceList, setDeviceList] = useState<DeviceDto[]>([]);
+  const [loading, setLoading] = useState(!mockMode);
+  const [error, setError] = useState('');
+
+  const loadDevices = useCallback(async () => {
+    if (mockMode) {
+      setDeviceList(
+        devices.map((d) => ({
+          id: d.id,
+          client_device_id: `mock-${d.id}`,
+          name: d.name,
+          device_type: d.type,
+          browser: d.browser,
+          ip: d.ip,
+          last_seen_at: d.lastActive,
+          current: d.current,
+        })),
+      );
+      setLoading(false);
+      return;
+    }
+    if (!tokenStore.get()) {
+      setError('Sign in required');
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      const list = await api.listDevices();
+      setDeviceList(list);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to load devices');
+      setDeviceList([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [mockMode]);
+
+  useEffect(() => {
+    void loadDevices();
+  }, [loadDevices]);
 
   const getDeviceIcon = (type: string) => {
     switch (type) {
@@ -170,18 +273,37 @@ export function DevicesPage() {
     }
   };
 
-  const removeDevice = (id: number) => {
-    setDeviceList(prev => prev.filter(d => d.id !== id));
+  const removeDevice = async (id: number) => {
+    if (mockMode) {
+      setDeviceList(prev => prev.filter(d => d.id !== id));
+      return;
+    }
+    await api.revokeDevice(id);
+    await loadDevices();
   };
 
   return (
     <div className="min-h-screen">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
-        <h1 className="text-2xl md:text-3xl font-serif font-bold text-foreground mb-6">{t.profile.devices}</h1>
-
+        <h1 className="text-2xl md:text-3xl font-serif font-bold text-foreground mb-2">{t.profile.devices}</h1>
+        {user && (
+          <p className="text-sm text-muted-foreground mb-6">
+            Device limit: {user.maxDevices}
+            {user.safeReason ? ` — ${user.safeReason}` : ''}
+          </p>
+        )}
+        {error && (
+          <div className="mb-4 text-sm text-destructive" role="alert">{error}</div>
+        )}
+        {loading ? (
+          <p className="text-muted-foreground">Loading devices…</p>
+        ) : (
         <div className="space-y-3">
+          {deviceList.length === 0 && (
+            <p className="text-muted-foreground">No active devices.</p>
+          )}
           {deviceList.map(device => {
-            const Icon = getDeviceIcon(device.type);
+            const Icon = getDeviceIcon(device.device_type);
             return (
               <Card key={device.id} className="bg-card border-border">
                 <CardContent className="flex items-center gap-4 py-4">
@@ -190,21 +312,29 @@ export function DevicesPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <h3 className="font-medium text-foreground">{device.name}</h3>
+                      <h3 className="font-medium text-foreground">{device.name || 'Device'}</h3>
                       {device.current && <Badge className="bg-green-500/20 text-green-400 text-[10px]">Current</Badge>}
                     </div>
                     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mt-1">
-                      <span>{device.browser}</span>
-                      <span>•</span>
-                      <span>{device.lastActive}</span>
-                      <span>•</span>
-                      <span>IP: {device.ip}</span>
+                      <span>{device.browser || device.device_type}</span>
+                      {device.last_seen_at && (
+                        <>
+                          <span>•</span>
+                          <span>{device.last_seen_at}</span>
+                        </>
+                      )}
+                      {device.ip && (
+                        <>
+                          <span>•</span>
+                          <span>IP: {device.ip}</span>
+                        </>
+                      )}
                     </div>
                   </div>
                   {!device.current && (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive hover:bg-destructive/10">
+                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive hover:bg-destructive/10" aria-label={`Remove ${device.name}`}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </AlertDialogTrigger>
@@ -215,7 +345,7 @@ export function DevicesPage() {
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => removeDevice(device.id)} className="bg-destructive text-destructive-foreground">{t.common.remove}</AlertDialogAction>
+                          <AlertDialogAction onClick={() => void removeDevice(device.id)} className="bg-destructive text-destructive-foreground">{t.common.remove}</AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
@@ -225,6 +355,7 @@ export function DevicesPage() {
             );
           })}
         </div>
+        )}
       </div>
     </div>
   );

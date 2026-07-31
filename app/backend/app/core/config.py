@@ -25,6 +25,16 @@ class Settings(BaseSettings):
     jwt_secret: str = ""
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
+    refresh_token_expire_days: int = 30
+
+    # Subscriber identity: fixture | radius | disabled
+    # fixture is rejected outside development/test.
+    subscriber_identity_mode: str = "disabled"
+    subscriber_max_devices_default: int = 3
+    entitlement_cache_ttl_seconds: int = 300
+    entitlement_cache_grace_seconds: int = 0  # expired cache never authorizes
+    subscriber_login_rate_limit: int = 10
+    subscriber_login_rate_window_seconds: int = 60
 
     admin_bootstrap_username: str = "admin"
     # Required only for the explicit seed command; never defaults to a known password.
@@ -149,9 +159,22 @@ class Settings(BaseSettings):
     def normalize_env(self) -> Settings:
         self.app_env = (self.app_env or "development").strip().lower()
         self.radius_mode = (self.radius_mode or "live").strip().lower()
+        self.subscriber_identity_mode = (
+            self.subscriber_identity_mode or "disabled"
+        ).strip().lower()
         self.csp_mode = (self.csp_mode or "").strip().lower()
         if self.csp_mode and self.csp_mode not in {"production", "development"}:
             raise ValueError("CSP_MODE must be production, development, or empty")
+        if self.subscriber_identity_mode not in {"fixture", "radius", "disabled"}:
+            raise ValueError(
+                "SUBSCRIBER_IDENTITY_MODE must be fixture, radius, or disabled"
+            )
+        # Legacy bridge: ENABLE_RADIUS_LOGIN + RADIUS_MODE=mock → fixture identity.
+        if self.subscriber_identity_mode == "disabled" and self.enable_radius_login:
+            if self.radius_mode == "mock":
+                self.subscriber_identity_mode = "fixture"
+            elif self.radius_mode == "live":
+                self.subscriber_identity_mode = "radius"
         return self
 
 

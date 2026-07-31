@@ -25,9 +25,14 @@ def _headers(token: str) -> dict[str, str]:
 def _subscriber(db_session, *, username: str = "watcher") -> tuple[Subscriber, str]:
     user = Subscriber(
         username=username,
-        hashed_password=hash_password("watch-pass-ok"),
+        hashed_password=None,
         name=username,
         status="active",
+        package="Standard",
+        service_status="active",
+        identity_provider="local",
+        external_subject=None,
+        max_devices=3,
     )
     db_session.add(user)
     db_session.commit()

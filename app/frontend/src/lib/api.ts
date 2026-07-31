@@ -11,6 +11,8 @@ import { getAPIBaseURL, type RuntimeConfig } from './config';
 export const client = createClient();
 
 const TOKEN_KEY = 'ifilm_access_token';
+const REFRESH_TOKEN_KEY = 'ifilm_refresh_token';
+const DEVICE_ID_KEY = 'ifilm_device_id';
 const ADMIN_TOKEN_KEY = 'ifilm_admin_token';
 
 export const ADMIN_UNAUTHORIZED_EVENT = 'ifilm:admin-unauthorized';
@@ -256,6 +258,40 @@ export interface SubscriberDto {
   status: string;
   package: string;
   expiration: string;
+  service_status?: string;
+  max_devices?: number;
+  identity_provider?: string;
+  external_subject?: string | null;
+  valid_from?: string | null;
+  valid_until?: string | null;
+}
+
+export interface EntitlementDto {
+  allowed: boolean;
+  account_status: string;
+  service_status: string;
+  package_name: string;
+  branch_code: string;
+  valid_from?: string | null;
+  valid_until?: string | null;
+  denial_code?: string | null;
+  safe_reason?: string | null;
+  max_devices: number;
+  source: string;
+  checked_at?: string | null;
+  from_cache?: boolean;
+}
+
+export interface DeviceDto {
+  id: number;
+  client_device_id: string;
+  name: string;
+  device_type: string;
+  browser: string;
+  ip: string;
+  first_seen_at?: string | null;
+  last_seen_at?: string | null;
+  current?: boolean;
 }
 
 export interface StreamManifest {
@@ -271,7 +307,9 @@ export interface StreamManifest {
 
 export interface TokenResponse {
   access_token: string;
+  refresh_token?: string;
   token_type: string;
+  expires_in?: number;
 }
 
 export interface CatalogListParams {
@@ -744,8 +782,15 @@ export const tokenStore = {
   set(token: string) {
     localStorage.setItem(TOKEN_KEY, token);
   },
+  getRefresh(): string | null {
+    return localStorage.getItem(REFRESH_TOKEN_KEY);
+  },
+  setRefresh(token: string) {
+    localStorage.setItem(REFRESH_TOKEN_KEY, token);
+  },
   clear() {
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
   },
   getAdmin(): string | null {
     return localStorage.getItem(ADMIN_TOKEN_KEY);
@@ -757,6 +802,23 @@ export const tokenStore = {
     localStorage.removeItem(ADMIN_TOKEN_KEY);
   },
 };
+
+/** Application-generated stable device id (not a browser fingerprint). */
+export function getOrCreateDeviceId(): string {
+  let id = localStorage.getItem(DEVICE_ID_KEY);
+  if (!id) {
+    id =
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID().replace(/-/g, '').slice(0, 32)
+        : `dev${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+    localStorage.setItem(DEVICE_ID_KEY, id);
+  }
+  return id;
+}
+
+export function clearSensitiveAuthState() {
+  tokenStore.clear();
+}
 
 function clearAdminAndNotify() {
   tokenStore.clearAdmin();
@@ -777,25 +839,58 @@ export const api = {
   },
 
   async login(username: string, password: string, rememberDevice = false) {
-    const { data } = await http.post<TokenResponse>('/auth/login', {
+    const { data } = await http.post<TokenResponse>('/auth/subscriber/login', {
       username,
       password,
       remember_device: rememberDevice,
+      device_id: getOrCreateDeviceId(),
+      device_name: typeof navigator !== 'undefined' ? navigator.platform || 'Web' : 'Web',
+      device_type: 'desktop',
+      browser: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 100) : '',
     });
     tokenStore.set(data.access_token);
+    if (data.refresh_token) tokenStore.setRefresh(data.refresh_token);
+    return data;
+  },
+
+  async refresh() {
+    const refresh = tokenStore.getRefresh();
+    if (!refresh) throw new ApiError('No refresh token', 401);
+    const { data } = await http.post<TokenResponse>('/auth/subscriber/refresh', {
+      refresh_token: refresh,
+    });
+    tokenStore.set(data.access_token);
+    if (data.refresh_token) tokenStore.setRefresh(data.refresh_token);
     return data;
   },
 
   async logout() {
     try {
-      await http.post('/auth/logout');
+      await http.post('/auth/subscriber/logout', {
+        refresh_token: tokenStore.getRefresh(),
+      });
     } finally {
-      tokenStore.clear();
+      clearSensitiveAuthState();
     }
   },
 
   async me(): Promise<SubscriberDto> {
-    const { data } = await http.get<SubscriberDto>('/auth/me');
+    const { data } = await http.get<SubscriberDto>('/me');
+    return data;
+  },
+
+  async entitlement(): Promise<EntitlementDto> {
+    const { data } = await http.get<EntitlementDto>('/me/entitlement');
+    return data;
+  },
+
+  async listDevices(): Promise<DeviceDto[]> {
+    const { data } = await http.get<DeviceDto[]>('/me/devices');
+    return data;
+  },
+
+  async revokeDevice(id: number) {
+    const { data } = await http.delete<{ detail: string }>(`/me/devices/${id}`);
     return data;
   },
 

@@ -46,13 +46,26 @@ export function LangProvider({ children }: { children: React.ReactNode }) {
 }
 
 // ============ AUTH CONTEXT ============
-type AuthUser = { name: string; username: string; branch: string; package: string; expiration: string };
+type AuthUser = {
+  name: string;
+  username: string;
+  branch: string;
+  package: string;
+  expiration: string;
+  status: string;
+  serviceStatus: string;
+  maxDevices: number;
+  entitlementAllowed?: boolean;
+  denialCode?: string | null;
+  safeReason?: string | null;
+};
 
 interface AuthContextType {
   isLoggedIn: boolean;
   login: (username?: string, password?: string, rememberDevice?: boolean) => Promise<void>;
   logout: () => Promise<void>;
   user: AuthUser | null;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -60,6 +73,7 @@ const AuthContext = createContext<AuthContextType>({
   login: async () => {},
   logout: async () => {},
   user: null,
+  refreshProfile: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -70,12 +84,64 @@ const mockUser: AuthUser = {
   branch: 'Kabul',
   package: 'Premium 50Mbps',
   expiration: '2025-03-15',
+  status: 'active',
+  serviceStatus: 'active',
+  maxDevices: 3,
+  entitlementAllowed: true,
 };
+
+function mapSubscriber(me: {
+  name: string;
+  username: string;
+  branch: string;
+  package: string;
+  expiration: string;
+  status: string;
+  service_status?: string;
+  max_devices?: number;
+}, entitlement?: {
+  allowed: boolean;
+  denial_code?: string | null;
+  safe_reason?: string | null;
+  max_devices?: number;
+} | null): AuthUser {
+  return {
+    name: me.name || me.username,
+    username: me.username,
+    branch: me.branch,
+    package: me.package,
+    expiration: me.expiration,
+    status: me.status,
+    serviceStatus: me.service_status || 'unknown',
+    maxDevices: entitlement?.max_devices ?? me.max_devices ?? 3,
+    entitlementAllowed: entitlement?.allowed,
+    denialCode: entitlement?.denial_code,
+    safeReason: entitlement?.safe_reason,
+  };
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const mockMode = isMockMode();
   const [user, setUser] = useState<AuthUser | null>(() => (mockMode ? mockUser : null));
   const [isLoggedIn, setIsLoggedIn] = useState(mockMode);
+
+  const refreshProfile = async () => {
+    if (mockMode) return;
+    if (!tokenStore.get()) {
+      setUser(null);
+      setIsLoggedIn(false);
+      return;
+    }
+    const me = await api.me();
+    let entitlement = null;
+    try {
+      entitlement = await api.entitlement();
+    } catch {
+      entitlement = null;
+    }
+    setUser(mapSubscriber(me, entitlement));
+    setIsLoggedIn(true);
+  };
 
   useEffect(() => {
     if (mockMode) return;
@@ -89,16 +155,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       try {
-        const me = await api.me();
-        if (cancelled) return;
-        setUser({
-          name: me.name || me.username,
-          username: me.username,
-          branch: me.branch,
-          package: me.package,
-          expiration: me.expiration,
-        });
-        setIsLoggedIn(true);
+        await refreshProfile();
       } catch {
         tokenStore.clear();
         if (!cancelled) {
@@ -125,15 +182,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!username || !password) throw new Error('Username and password are required');
     try {
       await api.login(username, password, rememberDevice);
-      const me = await api.me();
-      setUser({
-        name: me.name || me.username,
-        username: me.username,
-        branch: me.branch,
-        package: me.package,
-        expiration: me.expiration,
-      });
-      setIsLoggedIn(true);
+      await refreshProfile();
     } catch (error) {
       tokenStore.clear();
       setUser(null);
@@ -155,7 +204,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ isLoggedIn, login, logout, user: isLoggedIn ? user : null }}>
+    <AuthContext.Provider value={{ isLoggedIn, login, logout, user: isLoggedIn ? user : null, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );

@@ -54,6 +54,11 @@ class MediaPlaybackSession(Base):
     user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
     revoke_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     access_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    device_session_id: Mapped[int | None] = mapped_column(
+        ForeignKey("subscriber_device_sessions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     media_asset = relationship("MediaAsset")
     media_package = relationship("MediaPackage")

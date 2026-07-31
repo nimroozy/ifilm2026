@@ -111,7 +111,8 @@ def streaming_status():
         enabled=bool(settings.enable_local_streaming),
         supported_principals=["admin", "subscriber"],
         subscriber_entitlement=(
-            "deferred — published catalog visibility only; no subscription/payment rules"
+            "active account + active package entitlement + published catalog + active HLS; "
+            "admins retain operational bypass"
         ),
     )
 
@@ -126,6 +127,7 @@ def create_customer_playback_session(
     request: Request,
     db: DbSession,
     principal: Annotated[PlaybackPrincipal, Depends(get_playback_principal)],
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)] = None,
 ):
     """Create a protected playback session for the customer player (or admin ops test)."""
     require_local_streaming()
@@ -137,6 +139,15 @@ def create_customer_playback_session(
             db, content_type=body.content_type, content_id=body.content_id
         )
     created_by_admin = principal if isinstance(principal, AdminUser) else None
+    device_session_id = None
+    if credentials is not None:
+        try:
+            payload = safe_decode_token(credentials.credentials)
+            raw = payload.get("device_session_id")
+            if raw is not None:
+                device_session_id = int(raw)
+        except (TokenError, TypeError, ValueError):
+            device_session_id = None
     session, raw_token = create_playback_session(
         db,
         principal=principal,
@@ -144,6 +155,7 @@ def create_customer_playback_session(
         client_ip=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
         created_by_admin=created_by_admin,
+        device_session_id=device_session_id,
     )
     return _created_response(session, raw_token)
 

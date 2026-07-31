@@ -70,6 +70,14 @@ def collect_runtime_errors(settings: Settings) -> list[str]:
     if settings.radius_mode == "mock" and not is_dev_like(settings.app_env):
         errors.append("RADIUS_MODE=mock is only allowed when APP_ENV is development or test")
 
+    if settings.subscriber_identity_mode == "fixture" and not is_dev_like(settings.app_env):
+        errors.append(
+            "SUBSCRIBER_IDENTITY_MODE=fixture is only allowed when APP_ENV is development or test"
+        )
+
+    if settings.subscriber_identity_mode == "fixture" and not settings.radius_mock_users:
+        errors.append("SUBSCRIBER_IDENTITY_MODE=fixture requires RADIUS_MOCK_USERS")
+
     if is_prod_like(settings.app_env):
         if settings.jwt_secret in UNSAFE_JWT_SECRETS or len(settings.jwt_secret) < 32:
             errors.append("JWT_SECRET is missing, too short, or uses an unsafe default")
