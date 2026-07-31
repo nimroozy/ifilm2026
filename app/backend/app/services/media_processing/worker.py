@@ -10,7 +10,7 @@ from types import FrameType
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
-from app.db.session import SessionLocal
+from app.db.session import SessionLocal, get_engine
 from app.models.media_processing import JOB_TYPE_ENCODE_HLS, JOB_TYPE_PROBE
 from app.services.media_processing.ffmpeg import binary_available, resolve_binary
 from app.services.media_processing.jobs import (
@@ -130,6 +130,8 @@ def run_forever(*, settings: Settings | None = None) -> None:
     )
     signal.signal(signal.SIGTERM, _handle_signal)
     signal.signal(signal.SIGINT, _handle_signal)
+
+    get_engine()
 
     while not _shutdown:
         db = SessionLocal()

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Simplify: archive named docker volumes by project prefix.
+# Archive PostgreSQL + media volumes + env (full + redacted). Never uploads off-host.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 ENV_FILE="$ROOT/deploy/staging/.env.staging"
@@ -15,14 +15,17 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
-# shellcheck disable=SC1090
-set -a
-# shellcheck source=/dev/null
-source <(grep -E '^(POSTGRES_|[A-Z0-9_]+=)' "$ENV_FILE" | sed 's/\r$//')
-set +a
+while IFS= read -r line; do
+  case "$line" in
+    POSTGRES_USER=*|POSTGRES_DB=*)
+      export "$line"
+      ;;
+  esac
+done < <(grep -E '^(POSTGRES_USER|POSTGRES_DB)=' "$ENV_FILE" | sed 's/\r$//')
 
 echo "==> PostgreSQL dump"
 "${COMPOSE[@]}" exec -T postgres pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc >"$OUT/postgres.dump"
+[[ -s "$OUT/postgres.dump" ]] || { echo "empty postgres.dump" >&2; exit 1; }
 
 archive_volume() {
   local name_regex=$1 out_name=$2
@@ -41,11 +44,22 @@ archive_volume 'staging_media_originals' media_originals.tar.gz
 archive_volume 'staging_media_packages' media_packages.tar.gz
 
 cp "$ENV_FILE" "$OUT/env.staging.full"
-sed -E \
-  -e 's/(PASSWORD|SECRET|TOKEN)=.*/\1=REDACTED/' \
-  -e 's/(RADIUS_MOCK_USERS)=.*/\1=REDACTED/' \
-  "$ENV_FILE" >"$OUT/env.staging.redacted"
-chmod 600 "$OUT/env.staging.full"
+python3 - <<PY
+from pathlib import Path
+import re
+src = Path("$ENV_FILE").read_text()
+red = []
+for line in src.splitlines():
+    if re.match(r'^(POSTGRES_PASSWORD|JWT_SECRET|PLAYBACK_TOKEN_SECRET|ADMIN_BOOTSTRAP_PASSWORD|REDIS_PASSWORD|RADIUS_SECRET)\s*=', line):
+        key = line.split("=", 1)[0]
+        red.append(f"{key}=REDACTED")
+    elif line.startswith("RADIUS_MOCK_USERS="):
+        red.append("RADIUS_MOCK_USERS=REDACTED")
+    else:
+        red.append(line)
+Path("$OUT/env.staging.redacted").write_text("\n".join(red) + "\n")
+PY
+chmod 600 "$OUT/env.staging.full" "$OUT/env.staging.redacted"
 
 cat >"$OUT/MANIFEST.txt" <<EOF
 backup_utc=$STAMP

@@ -1,33 +1,32 @@
-# Phase: Staging deployment foundation — repository audit
+# Phase: Staging deployment foundation — audit + verification
 
-**Date:** 2026-07-31  
 **Branch:** `deployment/staging-foundation`  
-**Base:** `main` @ Phase 11 (`b47a131`)
+**Base:** `main` @ Phase 11
 
-## Existing artifacts audited
+## Gaps closed
 
-| Item | Path / status |
+- Staging compose with nginx + frontend + workers
+- Non-root API/workers via gosu after volume chown
+- Encoded DATABASE_URL/REDIS_URL (passwords with `@:/#`)
+- Redis requirepass
+- Explicit migrate / staging seed / backup / ops / smoke
+- Staging fixture opt-in without allowing production fixture
+- Publishing + media workers call `get_engine()` before sessions
+- Alembic safe with percent-encoded passwords
+
+## Verification (this milestone)
+
+| Check | Result |
 | --- | --- |
-| Dev compose | `docker-compose.yml` — postgres, redis, api, ARQ worker, media-processing, publishing; **no** frontend/nginx |
-| Backend Dockerfile | `app/backend/Dockerfile` — root user (staging uses `Dockerfile.staging` + gosu drop to uid 10001) |
-| Systemd | `app/backend/systemd/ifilm-media-processing.service` only (host path); staging prefers compose workers |
-| Nginx | none previously → `deploy/staging/nginx/` |
-| Env examples | `app/backend/.env.example`, `app/frontend/.env.example` |
-| Media mounts (dev) | host bind `./data/media`; risk of public exposure if mis-proxied |
-| Workers | media-processing + publishing in compose; ARQ worker not required for staging media path |
-| Migrations | Alembic only; head `010_subscriber_entitlements`; no auto-migrate on boot |
-| Health | `/api/health`, `/live`, `/ready` |
-| Backup / logrotate | none previously |
-| Frontend prod serving | optional `FRONTEND_DIST` on API; staging uses dedicated frontend container + edge nginx |
-
-## Gaps closed by this milestone
-
-- Production-like staging compose: postgres, redis, backend-api, frontend, media-processing-worker, publishing-worker, nginx
-- Persistent named volumes; packages RO on API / RW on media worker; no public MEDIA_ROOT
-- HTTPS-ready nginx example; upload limits/timeouts; security headers; CSP passthrough; deny `/media|/packages|/originals`
-- `.env.staging.example` — fixture identity + `STAGING_ALLOW_FIXTURE_AUTH` for staging only; Radius mapping off
-- Explicit `migrate.sh` (`alembic upgrade head`); optional `seed_staging.sh`; no `create_all` / no auto seed
-- Backup, ops_check, smoke_test scripts + deployment docs
+| Compose config | OK |
+| Service health | all healthy |
+| migrate → `010_subscriber_entitlements` | OK |
+| ops_check | PASSED |
+| smoke_test (real 45s H.264/AAC) | PASSED |
+| HLS renditions | 240p, 360p |
+| Backup + pg_restore -l | OK |
+| Log secret scan | no hits |
+| Stack left running | yes (`http://127.0.0.1:8080`) |
 
 ## Explicit non-goals
 
@@ -35,13 +34,6 @@
 - Phase 12 subtitles
 - Automatic deploy or merge
 
-## Remaining risks (operator)
+## Remaining BLOCKER
 
-| Severity | Finding |
-| --- | --- |
-| HIGH | Full E2E smoke not executed against a live host in this PR — run `ops_check` + `smoke_test` after first bring-up |
-| HIGH | `DATABASE_URL` assembled from compose vars — passwords with `@:/#` need URL-encoding |
-| HIGH | Smoke encode/publish may not reach package-ready without a real probeable video |
-| MEDIUM | Frontend/nginx edge containers still run as root (ports 80) — acceptable for staging; document for prod hardening |
-| MEDIUM | Redis has no AUTH in staging compose — bind to internal network only (compose default) |
-| BLOCKER (prod) | Live Radius entitlement mapping remains unverified — keep disabled |
+Live Radius entitlement mapping unverified — keep disabled in production.

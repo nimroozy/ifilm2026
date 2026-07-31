@@ -78,8 +78,9 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?}
       MEDIA_ROOT: /data/media
       ARTWORK_ROOT: /data/artwork
-      APP_ENV: ${APP_ENV:-staging}
-      DEBUG: ${DEBUG:-false}
+      # Force staging — do not interpolate host APP_ENV (agents/CI often set APP_ENV=test).
+      APP_ENV: staging
+      DEBUG: "false"
       JWT_SECRET: ${JWT_SECRET:?missing}
       PLAYBACK_TOKEN_SECRET: ${PLAYBACK_TOKEN_SECRET:?missing}
       ENABLE_UPLOADS: ${ENABLE_UPLOADS:-true}

@@ -61,9 +61,11 @@ text = text.replace(
     "PLAYBACK_TOKEN_SECRET=" + os.environ["PREPARE_PLAYBACK"],
     1,
 )
+# Quote password so docker env-file parsers do not treat '#' as a comment.
+pg_pass = os.environ["PREPARE_PG_PASS"]
 text = text.replace(
     "POSTGRES_PASSWORD=REPLACE_WITH_STRONG_UNIQUE_PASSWORD",
-    "POSTGRES_PASSWORD=" + os.environ["PREPARE_PG_PASS"],
+    "POSTGRES_PASSWORD='" + pg_pass.replace("'", "'\"'\"'") + "'",
     1,
 )
 text = text.replace(

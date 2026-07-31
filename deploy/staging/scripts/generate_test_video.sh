@@ -4,15 +4,19 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 OUT_DIR="${STAGING_TEST_DIR:-$ROOT/deploy/staging/.tmp-smoke}"
 OUT_FILE="${1:-$OUT_DIR/staging-smoke.mp4}"
-DURATION="${STAGING_TEST_DURATION:-12}"
+# >= 45s so Continue Watching min threshold (30s) can be exercised.
+DURATION="${STAGING_TEST_DURATION:-45}"
 
 mkdir -p "$OUT_DIR"
 rm -f "$OUT_FILE"
+UNIQUE_TAG="${STAGING_TEST_UNIQUE:-$(date -u +%Y%m%d%H%M%S)-$$}"
 
+# Unique drawtext so each generation has a distinct checksum (duplicate-upload guard).
 ffmpeg -hide_banner -loglevel error -y \
   -f lavfi -i "testsrc=size=640x360:rate=25" \
   -f lavfi -i "sine=frequency=1000:sample_rate=48000" \
   -t "$DURATION" \
+  -vf "drawtext=text='ifilm-staging-${UNIQUE_TAG}':x=10:y=10:fontsize=18:fontcolor=white" \
   -c:v libx264 -pix_fmt yuv420p -profile:v baseline -level 3.0 \
   -c:a aac -b:a 128k \
   -shortest \
@@ -40,7 +44,7 @@ assert audio.get("codec_name") == "aac", audio
 assert int(video.get("width") or 0) == 640
 assert int(video.get("height") or 0) == 360
 duration = float((probe.get("format") or {}).get("duration") or 0)
-assert 9.0 <= duration <= 25.0, duration
+assert 40.0 <= duration <= 90.0, duration
 print(
     f"OK video=h264 640x360 audio=aac duration={duration:.2f}s "
     f"file={out_file} sha256={sha}"

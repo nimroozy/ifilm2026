@@ -18,11 +18,14 @@ echo "==> Docker Compose config"
 if "${COMPOSE[@]}" config -q; then ok "compose config"; else bad "compose config"; fi
 
 if [[ -f "$ENV_FILE" ]]; then
-  # shellcheck disable=SC1090
-  set -a
-  # shellcheck source=/dev/null
-  source <(grep -E '^[A-Z0-9_]+=' "$ENV_FILE" | sed 's/\r$//')
-  set +a
+  # Load only simple KEY=value scalars needed for checks (avoid spaces/JSON breakage).
+  while IFS= read -r line; do
+    case "$line" in
+      POSTGRES_USER=*|POSTGRES_DB=*|POSTGRES_PASSWORD=*|STAGING_HTTP_PORT=*|REDIS_PASSWORD=*)
+        export "$line"
+        ;;
+    esac
+  done < <(grep -E '^(POSTGRES_USER|POSTGRES_DB|POSTGRES_PASSWORD|STAGING_HTTP_PORT|REDIS_PASSWORD)=' "$ENV_FILE" | sed 's/\r$//')
 
   echo "==> Service status"
   ps_out=$("${COMPOSE[@]}" ps 2>&1 || true)
@@ -44,10 +47,13 @@ if [[ -f "$ENV_FILE" ]]; then
     [[ "$c" == "404" || "$c" == "403" ]] && ok "deny $path ($c)" || bad "deny $path ($c)"
   done
 
-  echo "==> Alembic head"
+  echo "==> Alembic head / current"
   head=$("${COMPOSE[@]}" exec -T backend-api sh -c 'set -a; . /run/ifilm/runtime.env; set +a; alembic heads' 2>/dev/null | tr -d '\r' || true)
-  echo "$head"
-  echo "$head" | grep -Eq '010_subscriber_entitlements' && ok "alembic head" || bad "unexpected alembic head"
+  current=$("${COMPOSE[@]}" exec -T backend-api sh -c 'set -a; . /run/ifilm/runtime.env; set +a; alembic current' 2>/dev/null | tr -d '\r' || true)
+  echo "heads: $head"
+  echo "current: $current"
+  echo "$head" | grep -Eq '010_subscriber_entitlements' && ok "alembic heads file" || bad "unexpected alembic head"
+  echo "$current" | grep -Eq '010_subscriber_entitlements' && ok "alembic current applied" || bad "alembic current not at head"
 
   echo "==> PostgreSQL connectivity"
   "${COMPOSE[@]}" exec -T postgres pg_isready -U "${POSTGRES_USER:-ifilm_staging}" -d "${POSTGRES_DB:-ifilm_staging}" \
