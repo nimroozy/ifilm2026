@@ -37,13 +37,18 @@ services:
       REDIS_REQUIRED: "true"
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in your environment}
       MEDIA_ROOT: /data/media
-      HLS_PUBLIC_BASE_URL: http://localhost:8000/media/hls
+      ARTWORK_ROOT: /data/artwork
+      # Legacy placeholder HLS URL removed; protected streaming uses /api/stream/{token}/…
+      HLS_PUBLIC_BASE_URL: http://localhost:8000/api/stream
       ENABLE_UPLOADS: ${ENABLE_UPLOADS:-false}
       ENABLE_ENCODING: ${ENABLE_ENCODING:-false}
       ENABLE_CDN_SYNC: ${ENABLE_CDN_SYNC:-false}
       ENABLE_RADIUS_LOGIN: ${ENABLE_RADIUS_LOGIN:-false}
       ENABLE_MEDIA_PROCESSING: ${ENABLE_MEDIA_PROCESSING:-false}
       ENABLE_HLS_ENCODING: ${ENABLE_HLS_ENCODING:-false}
+      ENABLE_LOCAL_STREAMING: ${ENABLE_LOCAL_STREAMING:-false}
+      PLAYBACK_TOKEN_SECRET: ${PLAYBACK_TOKEN_SECRET:-}
+      PLAYBACK_TOKEN_TTL_SECONDS: ${PLAYBACK_TOKEN_TTL_SECONDS:-3600}
       FFMPEG_BINARY: ${FFMPEG_BINARY:-ffmpeg}
       FFPROBE_BINARY: ${FFPROBE_BINARY:-ffprobe}
       RADIUS_ENABLED: ${RADIUS_ENABLED:-false}
@@ -52,7 +57,23 @@ services:
       RADIUS_MOCK_USERS: ${RADIUS_MOCK_USERS:-[]}
     volumes:
       - ./app/backend:/app
-      - ifilm_media:/data/media
+      # Uploads require API write access to originals + temp only.
+      - ifilm_media_originals:/data/media/originals
+      - ifilm_media_temp:/data/media/temp
+      - ifilm_media_trailers:/data/media/trailers
+      - ifilm_media_subtitles:/data/media/subtitles
+      - ifilm_media_posters:/data/media/posters
+      - ifilm_media_backdrops:/data/media/backdrops
+      # Completed packages (+ encode workspaces under packages/work): READ-ONLY for API.
+      - type: volume
+        source: ifilm_media_packages
+        target: /data/media/packages
+        read_only: true
+      # Public artwork only (never packages/originals).
+      - type: volume
+        source: ifilm_artwork
+        target: /data/artwork
+        read_only: true
     ports:
       - "8000:8000"
     depends_on:
@@ -82,7 +103,9 @@ services:
       RADIUS_SECRET: ${RADIUS_SECRET:-}
     volumes:
       - ./app/backend:/app
-      - ifilm_media:/data/media
+      - ifilm_media_originals:/data/media/originals
+      - ifilm_media_temp:/data/media/temp
+      - ifilm_media_packages:/data/media/packages
     depends_on:
       postgres:
         condition: service_healthy
@@ -116,10 +139,11 @@ services:
       HLS_MAX_HEIGHT: ${HLS_MAX_HEIGHT:-1080}
       HLS_X264_PRESET: ${HLS_X264_PRESET:-veryfast}
     volumes:
-      # Intentional RW mount: the same worker probes originals and writes HLS
-      # packages under MEDIA_ROOT/packages (plus temporary workspaces).
+      # Source uploads: read-only for encode/probe.
+      - ifilm_media_originals:/data/media/originals:ro
+      # Packages + temporary encode workspaces under packages/work: read-write.
+      - ifilm_media_packages:/data/media/packages
       - ./app/backend:/app
-      - ifilm_media:/data/media
     depends_on:
       postgres:
         condition: service_healthy
@@ -136,4 +160,11 @@ services:
 
 volumes:
   ifilm_pg:
-  ifilm_media:
+  ifilm_media_originals:
+  ifilm_media_temp:
+  ifilm_media_trailers:
+  ifilm_media_subtitles:
+  ifilm_media_posters:
+  ifilm_media_backdrops:
+  ifilm_media_packages:
+  ifilm_artwork:

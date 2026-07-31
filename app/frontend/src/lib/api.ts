@@ -479,6 +479,9 @@ export interface MediaPackageDto {
   processing_job_id: string | null;
   package_type: string;
   status: string;
+  is_active?: boolean;
+  activated_at?: string | null;
+  superseded_at?: string | null;
   storage_path: string | null;
   master_playlist_path: string | null;
   source_width: number | null;
@@ -493,6 +496,39 @@ export interface MediaPackageDto {
   updated_at?: string | null;
   completed_at?: string | null;
   renditions: MediaRenditionDto[];
+}
+
+export interface PlaybackSessionDto {
+  id: string;
+  media_asset_id: string;
+  media_package_id: string;
+  principal_type: string;
+  principal_id: string;
+  status: string;
+  expires_at: string;
+  revoked_at?: string | null;
+  created_at?: string | null;
+  last_accessed_at?: string | null;
+  created_by_admin_id?: number | null;
+  client_ip?: string | null;
+  user_agent?: string | null;
+  revoke_reason?: string | null;
+  access_count: number;
+}
+
+export interface PlaybackSessionCreatedDto {
+  id: string;
+  media_asset_id: string;
+  media_package_id: string;
+  expires_at: string;
+  playback_token: string;
+  master_playlist_url: string;
+}
+
+export interface StreamingStatusDto {
+  enabled: boolean;
+  supported_principals: string[];
+  subscriber_entitlement: string;
 }
 
 export interface EncodeJobCreateResult {
@@ -705,11 +741,12 @@ export const api = {
     return data;
   },
 
-  async getStream(contentType: ContentType, contentId: number, episodeId?: number) {
-    const { data } = await http.get<StreamManifest>(`/stream/${contentType}/${contentId}`, {
-      params: episodeId != null ? { episode_id: episodeId } : undefined,
-    });
-    return data;
+  /** @deprecated Legacy placeholder stream removed in Phase 7. Use admin playback sessions. */
+  async getStream(_contentType: ContentType, _contentId: number, _episodeId?: number) {
+    throw new ApiError(
+      'Legacy stream endpoint removed. Use POST /api/admin/playback/sessions for protected HLS.',
+      410
+    );
   },
 };
 
@@ -1022,6 +1059,49 @@ export const adminApi = {
   async cancelProcessingJob(jobId: string) {
     const { data } = await adminHttp.delete<ProcessingJobDto>(
       `/admin/media/processing/jobs/${jobId}`
+    );
+    return data;
+  },
+
+  async getStreamingStatus() {
+    const { data } = await adminHttp.get<StreamingStatusDto>('/streaming/status');
+    return data;
+  },
+
+  async listPlaybackSessions(params?: {
+    page?: number;
+    page_size?: number;
+    media_asset_id?: string;
+    media_package_id?: string;
+    principal_type?: string;
+    principal_id?: string;
+    status?: string;
+  }) {
+    const { data } = await adminHttp.get<Envelope<PlaybackSessionDto>>('/admin/playback/sessions', {
+      params,
+    });
+    return unwrapList(data);
+  },
+
+  async createPlaybackSession(mediaAssetId: string) {
+    const { data } = await adminHttp.post<PlaybackSessionCreatedDto>('/admin/playback/sessions', {
+      media_asset_id: mediaAssetId,
+    });
+    return data;
+  },
+
+  async revokePlaybackSession(sessionId: string) {
+    const { data } = await adminHttp.post<PlaybackSessionDto>(
+      `/admin/playback/sessions/${sessionId}/revoke`
+    );
+    return data;
+  },
+
+  async revokePlaybackSessionsForAsset(mediaAssetId: string) {
+    const { data } = await adminHttp.post<{ revoked: number }>(
+      '/admin/playback/sessions/revoke-asset',
+      null,
+      { params: { media_asset_id: mediaAssetId } }
     );
     return data;
   },

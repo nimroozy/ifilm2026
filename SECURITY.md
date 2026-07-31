@@ -20,6 +20,12 @@ Report suspected security issues privately to the repository maintainers. Do not
   - `ENABLE_ENCODING=false`
   - `ENABLE_CDN_SYNC=false`
   - `ENABLE_RADIUS_LOGIN=false`
+  - `ENABLE_MEDIA_PROCESSING=false`
+  - `ENABLE_HLS_ENCODING=false`
+  - `ENABLE_LOCAL_STREAMING=false`
+- When `ENABLE_LOCAL_STREAMING=true`, `PLAYBACK_TOKEN_SECRET` must be set (≥32 chars, no unsafe defaults).
+- The full `MEDIA_ROOT` is **not** publicly mounted. HLS packages are only served via protected `/api/stream/{token}/…` routes. Optional artwork uses a separate `ARTWORK_ROOT` at `/artwork`.
+- Playback tokens must never appear in logs, admin list responses, or metrics (paths are redacted).
 
 ## Authentication notes
 

@@ -99,11 +99,9 @@ def test_series_seasons_episodes_and_stream(client, admin_headers):
     movies = client.get("/api/movies").json()["data"]
     assert movies
     movie_id = movies[0]["id"]
+    # Legacy placeholder /api/stream/{type}/{id} was removed in Phase 7.
     stream = client.get(f"/api/stream/movie/{movie_id}")
-    assert stream.status_code == 200
-    body = stream.json()
-    assert body["playlist_url"].endswith("master.m3u8")
-    assert body["qualities"]
+    assert stream.status_code == 404
 
 
 def test_genres_and_dashboard_stats(client, admin_headers):
@@ -130,16 +128,13 @@ def test_genres_and_dashboard_stats(client, admin_headers):
     assert deleted.status_code == 200
 
 
-def test_hls_service_and_cdn_sync(client, admin_headers):
-    from app.services.hls import build_master_playlist, write_placeholder_package
+def test_hls_playlist_helper_and_cdn_sync(client, admin_headers):
+    from app.services.hls import build_master_playlist
     from app.services.radius import RadiusService
 
     playlist = build_master_playlist(["720p", "480p"])
     assert "#EXTM3U" in playlist
     assert "720p/index.m3u8" in playlist
-
-    relative = write_placeholder_package("movie", 999, ["720p"])
-    assert relative.startswith("movie/999")
 
     result = RadiusService().authenticate(TEST_FIXTURE_USER, TEST_FIXTURE_PASSWORD)
     assert result.success is True

@@ -328,17 +328,20 @@ export default function MediaAssetDetailPage() {
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <StatusBadge status={pkg.status} />
+                  {pkg.is_active ? (
+                    <span className="text-xs text-primary font-medium">Active</span>
+                  ) : null}
                   <span>{pkg.package_type}</span>
                   <span className="text-muted-foreground font-mono text-xs">{pkg.id}</span>
                 </div>
                 {pkg.status === 'completed' ? (
                   <>
-                    <p className="font-mono text-xs break-all">
-                      Master: {pkg.master_playlist_path || '—'}
-                    </p>
                     <p>
                       Renditions:{' '}
                       {pkg.renditions.map((r) => r.label).join(', ') || pkg.rendition_count}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Filesystem paths are not exposed. Use Playback sessions for protected URLs.
                     </p>
                   </>
                 ) : (

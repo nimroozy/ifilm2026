@@ -23,6 +23,7 @@ import GenresPage from '@/pages/admin/GenresPage';
 import MediaUploadPage from '@/pages/admin/MediaUploadPage';
 import MediaAssetDetailPage from '@/pages/admin/MediaAssetDetailPage';
 import MediaProcessingJobsPage from '@/pages/admin/MediaProcessingJobsPage';
+import PlaybackSessionsPage from '@/pages/admin/PlaybackSessionsPage';
 import AdminPlaceholderPage from '@/pages/admin/AdminPlaceholderPage';
 
 const queryClient = new QueryClient();
@@ -73,6 +74,7 @@ const AppRoutes = () => (
       <Route path="genres" element={<GenresPage />} />
       <Route path="tools/upload" element={<MediaUploadPage />} />
       <Route path="media/processing" element={<MediaProcessingJobsPage />} />
+      <Route path="media/playback-sessions" element={<PlaybackSessionsPage />} />
       <Route path="media/:assetId" element={<MediaAssetDetailPage />} />
       <Route path="tools/encoding" element={<AdminPlaceholderPage section="encoding" />} />
       <Route path="tools/cdn" element={<AdminPlaceholderPage section="cdn" />} />

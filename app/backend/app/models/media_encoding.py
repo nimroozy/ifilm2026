@@ -13,6 +13,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -20,8 +21,11 @@ from app.db.base import Base
 from app.models.media_assets import new_uuid, utcnow
 
 PACKAGE_TYPE_HLS_VOD = "hls_vod"
-PACKAGE_ACTIVE_STATUSES = frozenset({"pending", "encoding", "validating", "promoting"})
+# In-flight encode statuses (not playback-active). Playback uses is_active.
+PACKAGE_IN_FLIGHT_STATUSES = frozenset({"pending", "encoding", "validating", "promoting"})
 PACKAGE_TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled"})
+# Back-compat alias — historically misnamed; means in-flight encode work.
+PACKAGE_ACTIVE_STATUSES = PACKAGE_IN_FLIGHT_STATUSES
 
 
 class MediaEncodingProfile(Base):
@@ -59,6 +63,15 @@ class MediaPackage(Base):
         Index("ix_media_packages_media_asset_id", "media_asset_id"),
         Index("ix_media_packages_status", "status"),
         Index("ix_media_packages_processing_job_id", "processing_job_id"),
+        Index("ix_media_packages_is_active", "is_active"),
+        # At most one active HLS package per asset (playback selection).
+        Index(
+            "uq_media_packages_one_active_hls",
+            "media_asset_id",
+            unique=True,
+            sqlite_where=text("is_active = 1 AND package_type = 'hls_vod'"),
+            postgresql_where=text("is_active = true AND package_type = 'hls_vod'"),
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
@@ -72,6 +85,9 @@ class MediaPackage(Base):
         String(32), nullable=False, default=PACKAGE_TYPE_HLS_VOD
     )
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     storage_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     master_playlist_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     work_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)

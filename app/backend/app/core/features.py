@@ -30,3 +30,12 @@ def require_hls_encoding(settings: Settings | None = None) -> None:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="HLS encoding is disabled",
         )
+
+
+def require_local_streaming(settings: Settings | None = None) -> None:
+    cfg = settings or get_settings()
+    if not bool(cfg.enable_local_streaming):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Local streaming is disabled",
+        )
