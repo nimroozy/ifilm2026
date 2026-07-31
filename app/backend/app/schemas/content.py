@@ -5,7 +5,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.models.enums import CATALOG_STATUSES
 from app.schemas.common import ORMModel
 from app.utils.slug import normalize_slug
 
@@ -136,9 +135,10 @@ class CatalogFieldsMixin(BaseModel):
     @field_validator("status")
     @classmethod
     def validate_status(cls, value: str) -> str:
-        if value not in CATALOG_STATUSES:
-            raise ValueError(f"status must be one of {', '.join(CATALOG_STATUSES)}")
-        return value
+        # Creates always start as draft; workflow owns all transitions.
+        if value not in ("draft",):
+            raise ValueError("status must be draft on create; use publishing workflow endpoints")
+        return "draft"
 
     @field_validator("slug")
     @classmethod
@@ -186,7 +186,6 @@ class MovieUpdate(BaseModel):
     poster_url: str | None = None
     backdrop_url: str | None = None
     trailer_url: str | None = None
-    status: str | None = None
     is_featured: bool | None = None
     is_trending: bool | None = None
     genre_ids: list[int] | None = None
@@ -252,15 +251,6 @@ class MovieUpdate(BaseModel):
             raise ValueError("URL must start with http:// or https://")
         return value
 
-    @field_validator("status")
-    @classmethod
-    def validate_status(cls, value: str | None) -> str | None:
-        if value is None:
-            return value
-        if value not in CATALOG_STATUSES:
-            raise ValueError(f"status must be one of {', '.join(CATALOG_STATUSES)}")
-        return value
-
     @field_validator("slug")
     @classmethod
     def validate_slug(cls, value: str | None) -> str | None:
@@ -294,6 +284,7 @@ class MovieOut(ORMModel):
     is_featured: bool = False
     is_trending: bool = False
     published_at: datetime | None = None
+    scheduled_publish_at: datetime | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
     genres: list[GenreOut] = Field(default_factory=list)
@@ -362,6 +353,7 @@ class SeriesOut(ORMModel):
     is_featured: bool = False
     is_trending: bool = False
     published_at: datetime | None = None
+    scheduled_publish_at: datetime | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
     genres: list[GenreOut] = Field(default_factory=list)
@@ -408,9 +400,9 @@ class SeasonCreate(BaseModel):
     @field_validator("status")
     @classmethod
     def validate_status(cls, value: str) -> str:
-        if value not in CATALOG_STATUSES:
-            raise ValueError(f"status must be one of {', '.join(CATALOG_STATUSES)}")
-        return value
+        if value not in ("draft",):
+            raise ValueError("status must be draft on create; use publishing workflow endpoints")
+        return "draft"
 
     @field_validator("release_year")
     @classmethod
@@ -428,7 +420,6 @@ class SeasonUpdate(BaseModel):
     description: str | None = None
     poster_url: str | None = None
     release_year: int | None = None
-    status: str | None = None
 
     @field_validator("title", "description", "poster_url", mode="before")
     @classmethod
@@ -444,15 +435,6 @@ class SeasonUpdate(BaseModel):
             raise ValueError("URL must start with http:// or https://")
         return value
 
-    @field_validator("status")
-    @classmethod
-    def validate_status(cls, value: str | None) -> str | None:
-        if value is None:
-            return value
-        if value not in CATALOG_STATUSES:
-            raise ValueError(f"status must be one of {', '.join(CATALOG_STATUSES)}")
-        return value
-
 
 class SeasonOut(ORMModel):
     id: int
@@ -463,6 +445,8 @@ class SeasonOut(ORMModel):
     poster_url: str = ""
     release_year: int | None = None
     status: str
+    published_at: datetime | None = None
+    scheduled_publish_at: datetime | None = None
     episode_count: int = 0
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -501,9 +485,9 @@ class EpisodeCreate(BaseModel):
     @field_validator("status")
     @classmethod
     def validate_status(cls, value: str) -> str:
-        if value not in CATALOG_STATUSES:
-            raise ValueError(f"status must be one of {', '.join(CATALOG_STATUSES)}")
-        return value
+        if value not in ("draft",):
+            raise ValueError("status must be draft on create; use publishing workflow endpoints")
+        return "draft"
 
 
 class EpisodeUpdate(BaseModel):
@@ -513,7 +497,6 @@ class EpisodeUpdate(BaseModel):
     duration_minutes: int | None = Field(default=None, ge=0, le=10000)
     release_date: date | None = None
     thumbnail_url: str | None = None
-    status: str | None = None
 
     @field_validator("title", "description", "thumbnail_url", mode="before")
     @classmethod
@@ -536,15 +519,6 @@ class EpisodeUpdate(BaseModel):
             raise ValueError("URL must start with http:// or https://")
         return value
 
-    @field_validator("status")
-    @classmethod
-    def validate_status(cls, value: str | None) -> str | None:
-        if value is None:
-            return value
-        if value not in CATALOG_STATUSES:
-            raise ValueError(f"status must be one of {', '.join(CATALOG_STATUSES)}")
-        return value
-
 
 class EpisodeOut(ORMModel):
     id: int
@@ -558,6 +532,7 @@ class EpisodeOut(ORMModel):
     thumbnail_url: str = ""
     status: str
     published_at: datetime | None = None
+    scheduled_publish_at: datetime | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
     hls_path: str | None = None

@@ -14,7 +14,7 @@ from app.models.content import Genre, Movie, Series
 from app.models.media_assets import new_uuid
 from app.models.media_encoding import MediaEncodingProfile
 from app.models.user import Subscriber
-from app.services.catalog import publish_entity, utcnow
+from app.services.catalog import utcnow
 from app.utils.slug import normalize_slug
 
 SUPER_PERMISSIONS = [
@@ -28,6 +28,12 @@ SUPER_PERMISSIONS = [
     "genres",
     "genres.read",
     "genres.manage",
+    "catalog.read",
+    "catalog.edit",
+    "catalog.review",
+    "catalog.approve",
+    "catalog.publish",
+    "catalog.archive",
     "upload",
     "upload.read",
     "upload.manage",
@@ -230,7 +236,8 @@ def seed_development_data(db: Session, *, include_demo_catalog: bool = True) -> 
             updated_at=utcnow(),
         )
         movie.genre_links = movie_genres
-        publish_entity(movie)
+        # Demo catalog remains draft until an active HLS package exists and
+        # the publishing workflow is used (Phase 9).
         db.add(movie)
 
     if include_demo_catalog and db.query(Series).count() == 0:
@@ -258,7 +265,7 @@ def seed_development_data(db: Session, *, include_demo_catalog: bool = True) -> 
             updated_at=utcnow(),
         )
         series.genre_links = series_genres
-        publish_entity(series)
+        # Demo series remains draft until episodes + packages are ready.
         db.add(series)
 
     db.commit()

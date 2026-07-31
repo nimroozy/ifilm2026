@@ -2,8 +2,25 @@
 
 from __future__ import annotations
 
-CATALOG_STATUSES = ("draft", "published", "archived")
+# Explicit publishing lifecycle (Phase 9). String-backed VARCHAR storage.
+PUBLICATION_STATUSES = (
+    "draft",
+    "in_review",
+    "approved",
+    "scheduled",
+    "published",
+    "unpublished",
+    "archived",
+)
+
+# Backward-compatible alias used by older imports/schemas.
+CATALOG_STATUSES = PUBLICATION_STATUSES
 CatalogStatus = str
+PublicationStatus = str
+
+PUBLIC_VISIBLE_STATUSES = frozenset({"published"})
+
+ENTITY_TYPES = ("movie", "series", "season", "episode")
 
 SORT_OPTIONS = (
     "newest",

@@ -17,6 +17,12 @@ from app.schemas.content import (
     SeasonOut,
     SeriesOut,
 )
+from app.services.publishing.visibility import (
+    apply_public_visibility,
+    public_episode_count_for_season,
+    public_episode_count_for_series,
+    public_season_count,
+)
 from app.utils.slug import slug_or_from_title
 
 
@@ -67,6 +73,7 @@ def movie_out(movie: Movie) -> MovieOut:
         is_featured=bool(movie.is_featured),
         is_trending=bool(movie.is_trending),
         published_at=movie.published_at,
+        scheduled_publish_at=getattr(movie, "scheduled_publish_at", None),
         created_at=movie.created_at,
         updated_at=movie.updated_at,
         genres=genres,
@@ -88,10 +95,15 @@ def movie_out(movie: Movie) -> MovieOut:
     )
 
 
-def series_out(series: Series) -> SeriesOut:
+def series_out(series: Series, *, public_counts: bool = False) -> SeriesOut:
     genres = [genre_out(g, movie_count=0, series_count=0) for g in (series.genre_links or [])]
-    seasons = [s for s in (series.seasons or []) if s.deleted_at is None]
-    episode_count = sum(len([e for e in (s.episodes or []) if e.deleted_at is None]) for s in seasons)
+    if public_counts:
+        season_count = public_season_count(series)
+        episode_count = public_episode_count_for_series(series)
+    else:
+        seasons = [s for s in (series.seasons or []) if s.deleted_at is None]
+        season_count = len(seasons)
+        episode_count = sum(len([e for e in (s.episodes or []) if e.deleted_at is None]) for s in seasons)
     return SeriesOut(
         id=series.id,
         title=series.title,
@@ -114,10 +126,11 @@ def series_out(series: Series) -> SeriesOut:
         is_featured=bool(series.is_featured),
         is_trending=bool(series.is_trending),
         published_at=series.published_at,
+        scheduled_publish_at=getattr(series, "scheduled_publish_at", None),
         created_at=series.created_at,
         updated_at=series.updated_at,
         genres=genres,
-        season_count=len(seasons),
+        season_count=season_count,
         episode_count=episode_count,
         audio=series.audio or [],
         subtitles=series.subtitles or [],
@@ -126,7 +139,7 @@ def series_out(series: Series) -> SeriesOut:
         views=series.views or 0,
         type="series",
         year=series.release_year,
-        seasons=len(seasons),
+        seasons=season_count,
         episodes=episode_count,
         rating=series.imdb_rating,
         poster=series.poster_url or "",
@@ -135,8 +148,11 @@ def series_out(series: Series) -> SeriesOut:
     )
 
 
-def season_out(season: Season) -> SeasonOut:
-    episodes = [e for e in (season.episodes or []) if e.deleted_at is None]
+def season_out(season: Season, *, public_counts: bool = False) -> SeasonOut:
+    if public_counts:
+        episode_count = public_episode_count_for_season(season)
+    else:
+        episode_count = len([e for e in (season.episodes or []) if e.deleted_at is None])
     return SeasonOut(
         id=season.id,
         series_id=season.series_id,
@@ -146,7 +162,9 @@ def season_out(season: Season) -> SeasonOut:
         poster_url=season.poster_url or "",
         release_year=season.release_year,
         status=season.status,
-        episode_count=len(episodes),
+        published_at=getattr(season, "published_at", None),
+        scheduled_publish_at=getattr(season, "scheduled_publish_at", None),
+        episode_count=episode_count,
         created_at=season.created_at,
         updated_at=season.updated_at,
     )
@@ -165,6 +183,7 @@ def episode_out(episode: Episode) -> EpisodeOut:
         thumbnail_url=episode.thumbnail_url or "",
         status=episode.status,
         published_at=episode.published_at,
+        scheduled_publish_at=getattr(episode, "scheduled_publish_at", None),
         created_at=episode.created_at,
         updated_at=episode.updated_at,
         hls_path=episode.hls_path,
@@ -250,7 +269,7 @@ def filter_catalog_query(
 ):
     query = not_deleted(query, model)
     if published_only:
-        query = query.filter(model.status == "published")
+        query = apply_public_visibility(query, model)
     elif status:
         query = query.filter(model.status == status)
     if q:
@@ -305,7 +324,7 @@ def resolve_movie(db: Session, id_or_slug: str, *, published_only: bool = False)
     else:
         query = query.filter(Movie.slug == id_or_slug)
     if published_only:
-        query = query.filter(Movie.status == "published")
+        query = apply_public_visibility(query, Movie)
     movie = query.first()
     if not movie:
         raise HTTPException(status_code=404, detail="Movie not found")
@@ -323,7 +342,7 @@ def resolve_series(db: Session, id_or_slug: str, *, published_only: bool = False
     else:
         query = query.filter(Series.slug == id_or_slug)
     if published_only:
-        query = query.filter(Series.status == "published")
+        query = apply_public_visibility(query, Series)
     series = query.first()
     if not series:
         raise HTTPException(status_code=404, detail="Series not found")
@@ -331,30 +350,37 @@ def resolve_series(db: Session, id_or_slug: str, *, published_only: bool = False
 
 
 def soft_delete(entity) -> None:
+    """Legacy soft-delete helper — prefer publishing workflow archive()."""
     entity.deleted_at = utcnow()
     entity.status = "archived"
+    entity.archived_at = getattr(entity, "archived_at", None) or utcnow()
 
 
 def publish_entity(entity) -> None:
+    """Legacy helper retained for bootstrap/tests — prefer workflow.publish()."""
     entity.status = "published"
     entity.published_at = entity.published_at or utcnow()
+    entity.deleted_at = None
 
 
 def unpublish_entity(entity) -> None:
-    entity.status = "draft"
+    """Legacy helper — prefer workflow.unpublish() (sets unpublished, not draft)."""
+    entity.status = "unpublished"
+    entity.unpublished_at = utcnow()
+    entity.scheduled_publish_at = None
 
 
 def publish_episode(db: Session, episode: Episode) -> Episode:
+    """Legacy episode publish — prefer workflow; parents need not be published for status,
+    but public visibility still requires the chain (see visibility.episode_is_public)."""
     season = db.get(Season, episode.season_id)
     if not season or season.deleted_at is not None:
         raise HTTPException(status_code=400, detail="Cannot publish episode without a season")
     series = db.get(Series, episode.series_id)
     if not series or series.deleted_at is not None:
         raise HTTPException(status_code=400, detail="Cannot publish episode without a series")
-    if season.status != "published":
-        raise HTTPException(status_code=400, detail="Parent season must be published before publishing an episode")
-    if series.status != "published":
-        raise HTTPException(status_code=400, detail="Parent series must be published before publishing an episode")
+    if season.status == "archived" or series.status == "archived":
+        raise HTTPException(status_code=400, detail="Cannot publish episode under archived parent")
     publish_entity(episode)
     return episode
 

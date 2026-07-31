@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Edit, Trash2, Eye, EyeOff } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -81,21 +81,6 @@ export default function MoviesListPage() {
     }
   }
 
-  async function togglePublish(movie: MovieDto) {
-    try {
-      if (movie.status === 'published') {
-        await adminApi.unpublishMovie(movie.id);
-        toast.success('Movie unpublished');
-      } else {
-        await adminApi.publishMovie(movie.id);
-        toast.success('Movie published');
-      }
-      load();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Publish action failed');
-    }
-  }
-
   const years = Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - i);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -140,7 +125,11 @@ export default function MoviesListPage() {
           <SelectContent>
             <SelectItem value="all">All statuses</SelectItem>
             <SelectItem value="draft">Draft</SelectItem>
+            <SelectItem value="in_review">In review</SelectItem>
+            <SelectItem value="approved">Approved</SelectItem>
+            <SelectItem value="scheduled">Scheduled</SelectItem>
             <SelectItem value="published">Published</SelectItem>
+            <SelectItem value="unpublished">Unpublished</SelectItem>
             <SelectItem value="archived">Archived</SelectItem>
           </SelectContent>
         </Select>
@@ -227,18 +216,10 @@ export default function MoviesListPage() {
                             <Edit className="h-3.5 w-3.5" />
                           </Link>
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => togglePublish(m)}
-                          aria-label={m.status === 'published' ? 'Unpublish' : 'Publish'}
-                        >
-                          {m.status === 'published' ? (
-                            <EyeOff className="h-3.5 w-3.5" />
-                          ) : (
+                        <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+                          <Link to={`/admin/movies/${m.id}/edit`} aria-label="Manage movie publishing">
                             <Eye className="h-3.5 w-3.5" />
-                          )}
+                          </Link>
                         </Button>
                         <Button
                           variant="ghost"

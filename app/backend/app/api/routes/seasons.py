@@ -20,12 +20,11 @@ from app.schemas.content import (
 from app.services.catalog import (
     episode_out,
     not_deleted,
-    publish_episode,
     season_out,
     soft_delete,
-    unpublish_entity,
     utcnow,
 )
+from app.services.publishing import workflow as publishing_workflow
 
 router = APIRouter(tags=["seasons"])
 
@@ -150,7 +149,6 @@ def update_season(
         )
     for key, value in data.items():
         setattr(season, key, value)
-    # Season has status but no published_at; do not call publish_entity().
     season.updated_at = utcnow()
     db.add(season)
     db.commit()
@@ -207,10 +205,8 @@ def create_episode(
     episode = Episode(
         season_id=season.id,
         series_id=season.series_id,
-        **payload.model_dump(),
+        **{**payload.model_dump(), "status": "draft"},
     )
-    if episode.status == "published":
-        publish_episode(db, episode)
     db.add(episode)
     db.commit()
     return episode_out(_get_episode(db, episode.id))
@@ -243,10 +239,6 @@ def update_episode(
         )
     for key, value in data.items():
         setattr(episode, key, value)
-    if payload.status == "published":
-        publish_episode(db, episode)
-    elif payload.status == "draft":
-        unpublish_entity(episode)
     episode.updated_at = utcnow()
     db.add(episode)
     db.commit()
@@ -271,12 +263,11 @@ def delete_episode(
 def publish_episode_route(
     episode_id: int,
     db: DbSession,
-    _: Annotated[AdminUser, Depends(require_permissions("series.manage"))],
+    admin: Annotated[AdminUser, Depends(require_permissions("catalog.publish"))],
 ) -> PublishAction:
-    episode = _get_episode(db, episode_id)
-    publish_episode(db, episode)
-    episode.updated_at = utcnow()
-    db.add(episode)
+    episode = publishing_workflow.workflow_http(
+        publishing_workflow.publish, db, entity_type="episode", entity_id=episode_id, actor=admin
+    )
     db.commit()
     return PublishAction(detail="ok", status=episode.status)
 
@@ -285,11 +276,10 @@ def publish_episode_route(
 def unpublish_episode(
     episode_id: int,
     db: DbSession,
-    _: Annotated[AdminUser, Depends(require_permissions("series.manage"))],
+    admin: Annotated[AdminUser, Depends(require_permissions("catalog.publish"))],
 ) -> PublishAction:
-    episode = _get_episode(db, episode_id)
-    unpublish_entity(episode)
-    episode.updated_at = utcnow()
-    db.add(episode)
+    episode = publishing_workflow.workflow_http(
+        publishing_workflow.unpublish, db, entity_type="episode", entity_id=episode_id, actor=admin
+    )
     db.commit()
     return PublishAction(detail="ok", status=episode.status)

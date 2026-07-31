@@ -42,8 +42,12 @@ export interface SeriesDetailResult {
   episodes: ReturnType<typeof mapEpisodeDto>[];
 }
 
+function publishedMockItems<T extends { catalogStatus?: string }>(items: T[]): T[] {
+  return items.filter((item) => (item.catalogStatus ?? 'published') === 'published');
+}
+
 function filterMockMovies(params?: CatalogListParams): Movie[] {
-  let result = [...mockMovies];
+  let result = publishedMockItems(mockMovies);
   if (params?.q) {
     const q = params.q.toLowerCase();
     result = result.filter(
@@ -74,7 +78,7 @@ function filterMockMovies(params?: CatalogListParams): Movie[] {
 }
 
 function filterMockSeries(params?: CatalogListParams): Series[] {
-  let result = [...mockSeries];
+  let result = publishedMockItems(mockSeries);
   if (params?.q) {
     const q = params.q.toLowerCase();
     result = result.filter(
@@ -121,7 +125,9 @@ export async function fetchMovies(params?: CatalogListParams): Promise<CatalogLi
 export async function fetchMovie(idOrSlug: number | string): Promise<CatalogMovie> {
   if (isMockMode()) {
     const id = typeof idOrSlug === 'number' ? idOrSlug : Number(idOrSlug);
-    const movie = mockMovies.find((m) => m.id === id || String(m.id) === String(idOrSlug));
+    const movie = publishedMockItems(mockMovies).find(
+      (m) => m.id === id || String(m.id) === String(idOrSlug)
+    );
     if (!movie) throw new Error('Movie not found');
     return movie;
   }
@@ -144,9 +150,11 @@ export async function fetchSeries(params?: CatalogListParams): Promise<CatalogLi
 export async function fetchSeriesDetail(idOrSlug: number | string): Promise<SeriesDetailResult> {
   if (isMockMode()) {
     const id = typeof idOrSlug === 'number' ? idOrSlug : Number(idOrSlug);
-    const show = mockSeries.find((s) => s.id === id || String(s.id) === String(idOrSlug));
+    const show = publishedMockItems(mockSeries).find(
+      (s) => s.id === id || String(s.id) === String(idOrSlug)
+    );
     if (!show) throw new Error('Series not found');
-    const eps = mockEpisodes
+    const eps = publishedMockItems(mockEpisodes)
       .filter((e) => e.seriesId === show.id)
       .map((e) => ({
         id: e.id,
@@ -207,14 +215,14 @@ export async function fetchSearch(q: string): Promise<CatalogSearchResult> {
   if (isMockMode()) {
     const query = q.toLowerCase().trim();
     if (!query) return { movies: [], series: [] };
-    const movies = mockMovies.filter(
+    const movies = publishedMockItems(mockMovies).filter(
       (m) =>
         m.title.toLowerCase().includes(query) ||
         m.originalTitle.includes(q) ||
         m.cast.some((c) => c.toLowerCase().includes(query)) ||
         m.director.toLowerCase().includes(query)
     );
-    const series = mockSeries.filter(
+    const series = publishedMockItems(mockSeries).filter(
       (s) => s.title.toLowerCase().includes(query) || s.originalTitle.includes(q)
     );
     return { movies, series };
@@ -236,7 +244,7 @@ export async function fetchGenres(): Promise<{ id?: number; name: string; slug?:
 
 export async function fetchFeaturedMovies(limit = 8): Promise<CatalogMovie[]> {
   if (isMockMode()) {
-    return mockMovies.filter((m) => m.featured).slice(0, limit);
+    return publishedMockItems(mockMovies).filter((m) => m.featured).slice(0, limit);
   }
   const page = await api.listMovies({ featured: true, page_size: limit, sort: 'newest' });
   return page.items.map(mapMovieDto);
@@ -244,7 +252,7 @@ export async function fetchFeaturedMovies(limit = 8): Promise<CatalogMovie[]> {
 
 export async function fetchTrendingMovies(limit = 12): Promise<CatalogMovie[]> {
   if (isMockMode()) {
-    return [...mockMovies].sort((a, b) => b.views - a.views).slice(0, limit);
+    return publishedMockItems(mockMovies).sort((a, b) => b.views - a.views).slice(0, limit);
   }
   const page = await api.listMovies({ trending: true, page_size: limit, sort: 'views_desc' });
   if (page.items.length) return page.items.map(mapMovieDto);
@@ -254,20 +262,22 @@ export async function fetchTrendingMovies(limit = 12): Promise<CatalogMovie[]> {
 
 export async function fetchHomeCatalog() {
   if (isMockMode()) {
+    const movies = publishedMockItems(mockMovies);
+    const series = publishedMockItems(mockSeries);
     return {
-      featured: mockMovies.filter((m) => m.featured),
-      trending: [...mockMovies].sort((a, b) => b.views - a.views).slice(0, 12),
-      recentlyAdded: [...mockMovies].sort((a, b) => b.year - a.year || b.id - a.id).slice(0, 12),
-      popular: mockMovies.filter((m) => m.rating >= 8.0).slice(0, 12),
-      afghanMovies: mockMovies.filter((m) => m.country === 'Afghanistan').slice(0, 12),
-      persianDubbed: mockMovies.filter((m) => m.dubbed.includes('Persian')).slice(0, 12),
-      pashtoDubbed: mockMovies.filter((m) => m.dubbed.includes('Pashto')).slice(0, 12),
-      actionMovies: mockMovies.filter((m) => m.genres.includes('Action')).slice(0, 12),
-      comedyMovies: mockMovies.filter((m) => m.genres.includes('Comedy')).slice(0, 12),
-      familyMovies: mockMovies
+      featured: movies.filter((m) => m.featured),
+      trending: [...movies].sort((a, b) => b.views - a.views).slice(0, 12),
+      recentlyAdded: [...movies].sort((a, b) => b.year - a.year || b.id - a.id).slice(0, 12),
+      popular: movies.filter((m) => m.rating >= 8.0).slice(0, 12),
+      afghanMovies: movies.filter((m) => m.country === 'Afghanistan').slice(0, 12),
+      persianDubbed: movies.filter((m) => m.dubbed.includes('Persian')).slice(0, 12),
+      pashtoDubbed: movies.filter((m) => m.dubbed.includes('Pashto')).slice(0, 12),
+      actionMovies: movies.filter((m) => m.genres.includes('Action')).slice(0, 12),
+      comedyMovies: movies.filter((m) => m.genres.includes('Comedy')).slice(0, 12),
+      familyMovies: movies
         .filter((m) => m.genres.includes('Family') || m.genres.includes('Animation'))
         .slice(0, 12),
-      popularSeries: [...mockSeries].sort((a, b) => b.views - a.views).slice(0, 12),
+      popularSeries: [...series].sort((a, b) => b.views - a.views).slice(0, 12),
     };
   }
 

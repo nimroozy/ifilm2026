@@ -221,7 +221,6 @@ describe('admin auth & catalog pages', () => {
   it('validates movie form title is required', () => {
     const result = movieFormSchema.safeParse({
       title: '',
-      status: 'draft',
       is_featured: false,
       is_trending: false,
       genre_ids: [],
@@ -260,6 +259,7 @@ describe('admin auth & catalog pages', () => {
       expect(createMovie).toHaveBeenCalled();
     });
     expect(createMovie.mock.calls[0][0].title).toBe('New Film');
+    expect(createMovie.mock.calls[0][0]).not.toHaveProperty('status');
     void navigateSpy;
   });
 
@@ -283,7 +283,6 @@ describe('admin auth & catalog pages', () => {
   it('validates series form title', () => {
     const result = seriesFormSchema.safeParse({
       title: '',
-      status: 'draft',
       airing_status: 'Ongoing',
       is_featured: false,
       is_trending: false,

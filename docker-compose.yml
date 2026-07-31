@@ -158,6 +158,25 @@ services:
       retries: 3
       start_period: 10s
 
+  publishing-worker:
+    build:
+      context: ./app/backend
+    command: python -m app.workers.publishing
+    environment:
+      APP_ENV: development
+      DEBUG: "false"
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-ifilm}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ifilm}
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in your environment}
+      MEDIA_ROOT: /data/media
+    volumes:
+      - ./app/backend:/app
+      - ifilm_media_packages:/data/media/packages:ro
+      - ifilm_media_originals:/data/media/originals:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   ifilm_pg:
   ifilm_media_originals:

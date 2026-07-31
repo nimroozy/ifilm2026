@@ -7,6 +7,7 @@ from app.core.deps import DbSession
 from app.models.content import Movie, Series
 from app.schemas.content import MovieOut, SeriesOut
 from app.services.catalog import movie_out, not_deleted, series_out
+from app.services.publishing.visibility import apply_public_visibility
 
 router = APIRouter(tags=["search"])
 
@@ -17,9 +18,8 @@ def search(db: DbSession, q: str = Query("", min_length=0)) -> dict[str, list[Mo
         return {"movies": [], "series": []}
     like = f"%{q.strip()}%"
     movies = (
-        not_deleted(db.query(Movie), Movie)
+        apply_public_visibility(not_deleted(db.query(Movie), Movie), Movie)
         .options(joinedload(Movie.genre_links))
-        .filter(Movie.status == "published")
         .filter(
             Movie.title.ilike(like)
             | Movie.original_title.ilike(like)
@@ -31,9 +31,8 @@ def search(db: DbSession, q: str = Query("", min_length=0)) -> dict[str, list[Mo
         .all()
     )
     series_items = (
-        not_deleted(db.query(Series), Series)
+        apply_public_visibility(not_deleted(db.query(Series), Series), Series)
         .options(joinedload(Series.genre_links), joinedload(Series.seasons))
-        .filter(Series.status == "published")
         .filter(
             Series.title.ilike(like)
             | Series.original_title.ilike(like)
@@ -45,5 +44,5 @@ def search(db: DbSession, q: str = Query("", min_length=0)) -> dict[str, list[Mo
     )
     return {
         "movies": [movie_out(m) for m in movies],
-        "series": [series_out(s) for s in series_items],
+        "series": [series_out(s, public_counts=True) for s in series_items],
     }

@@ -63,6 +63,7 @@ export interface Movie {
   dubbed: string[];
   progress?: number;
   views: number;
+  catalogStatus?: string;
 }
 
 const posterColors = ['4a1942', '2d3436', '0c3547', '1a1a2e', '16213e', '0f3460', '533483', '2c3e50', '1b2838', '2d132c', '3c1053', '11324d', '1c2833', '0b0c10', '1a1a2e', '162447', '1f4037', '2c3333', '3d0000', '1b1b2f', '0a1931', '2b2d42', '3d405b', '14213d', '1d3557', '264653', '2a2d34', '1e1e2e', '0d1b2a', '1a1a2e'];
@@ -123,6 +124,7 @@ export interface Series {
   type: 'series';
   newEpisode: boolean;
   views: number;
+  catalogStatus?: string;
 }
 
 export interface Episode {
@@ -136,6 +138,7 @@ export interface Episode {
   thumbnail: string;
   watched: boolean;
   progress?: number;
+  catalogStatus?: string;
 }
 
 export const series: Series[] = [

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Edit, Trash2, Eye, EyeOff, Layers } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Eye, Layers } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -69,21 +69,6 @@ export default function SeriesListPage() {
     }
   }
 
-  async function togglePublish(item: SeriesDto) {
-    try {
-      if (item.status === 'published') {
-        await adminApi.unpublishSeries(item.id);
-        toast.success('Series unpublished');
-      } else {
-        await adminApi.publishSeries(item.id);
-        toast.success('Series published');
-      }
-      load();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Publish action failed');
-    }
-  }
-
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
@@ -127,7 +112,11 @@ export default function SeriesListPage() {
           <SelectContent>
             <SelectItem value="all">All statuses</SelectItem>
             <SelectItem value="draft">Draft</SelectItem>
+            <SelectItem value="in_review">In review</SelectItem>
+            <SelectItem value="approved">Approved</SelectItem>
+            <SelectItem value="scheduled">Scheduled</SelectItem>
             <SelectItem value="published">Published</SelectItem>
+            <SelectItem value="unpublished">Unpublished</SelectItem>
             <SelectItem value="archived">Archived</SelectItem>
           </SelectContent>
         </Select>
@@ -177,18 +166,10 @@ export default function SeriesListPage() {
                             <Layers className="h-3.5 w-3.5" />
                           </Link>
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => togglePublish(s)}
-                          aria-label={s.status === 'published' ? 'Unpublish' : 'Publish'}
-                        >
-                          {s.status === 'published' ? (
-                            <EyeOff className="h-3.5 w-3.5" />
-                          ) : (
+                        <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+                          <Link to={`/admin/series/${s.id}/edit`} aria-label="Manage series publishing">
                             <Eye className="h-3.5 w-3.5" />
-                          )}
+                          </Link>
                         </Button>
                         <Button
                           variant="ghost"

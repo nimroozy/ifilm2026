@@ -8,6 +8,7 @@ afterEach(() => {
 
 describe('getAPIBaseURL', () => {
   it('returns the default API base URL when runtime config is unavailable', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', '');
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({

@@ -11,8 +11,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { adminApi, ApiError, type GenreDto } from '@/lib/api';
+import { adminApi, ApiError, type CatalogStatus, type GenreDto } from '@/lib/api';
 import { csvToList, ErrorState, listToCsv, LoadingBlock, POSTER_FALLBACK } from './adminShared';
+import PublishingPanel from './PublishingPanel';
 
 export const seriesFormSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -37,7 +38,6 @@ export const seriesFormSchema = z.object({
     .refine((v) => !v || v.startsWith('http://') || v.startsWith('https://'), {
       message: 'Backdrop URL must start with http:// or https://',
     }),
-  status: z.enum(['draft', 'published', 'archived']),
   airing_status: z.enum(['Ongoing', 'Completed', 'Upcoming']),
   is_featured: z.boolean().default(false),
   is_trending: z.boolean().default(false),
@@ -64,7 +64,6 @@ function emptyValues(): SeriesFormValues {
     imdb_rating: '' as unknown as number,
     poster_url: '',
     backdrop_url: '',
-    status: 'draft',
     airing_status: 'Ongoing',
     is_featured: false,
     is_trending: false,
@@ -84,6 +83,7 @@ export default function SeriesFormPage() {
   const [loading, setLoading] = useState(isEdit);
   const [error, setError] = useState<string | null>(null);
   const [previewBroken, setPreviewBroken] = useState(false);
+  const [currentStatus, setCurrentStatus] = useState<CatalogStatus | string>('draft');
 
   const form = useForm<SeriesFormValues>({
     resolver: zodResolver(seriesFormSchema),
@@ -109,6 +109,7 @@ export default function SeriesFormPage() {
       try {
         const item = await adminApi.getSeries(Number(id));
         if (cancelled) return;
+        setCurrentStatus(item.status);
         form.reset({
           title: item.title,
           original_title: item.original_title || '',
@@ -122,7 +123,6 @@ export default function SeriesFormPage() {
           imdb_rating: (item.imdb_rating ?? item.rating ?? '') as unknown as number,
           poster_url: item.poster_url || item.poster || '',
           backdrop_url: item.backdrop_url || item.backdrop || '',
-          status: (item.status as SeriesFormValues['status']) || 'draft',
           airing_status: (item.airing_status as SeriesFormValues['airing_status']) || 'Ongoing',
           is_featured: item.is_featured ?? item.featured ?? false,
           is_trending: item.is_trending ?? false,
@@ -169,7 +169,6 @@ export default function SeriesFormPage() {
         values.imdb_rating === '' || values.imdb_rating == null ? null : Number(values.imdb_rating),
       poster_url: values.poster_url || '',
       backdrop_url: values.backdrop_url || '',
-      status: values.status,
       airing_status: values.airing_status,
       is_featured: values.is_featured,
       is_trending: values.is_trending,
@@ -216,6 +215,15 @@ export default function SeriesFormPage() {
           </Button>
         </div>
       </div>
+
+      {isEdit && id && (
+        <PublishingPanel
+          entityType="series"
+          entityId={Number(id)}
+          currentStatus={currentStatus}
+          onChanged={setCurrentStatus}
+        />
+      )}
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6" noValidate>
@@ -298,28 +306,6 @@ export default function SeriesFormPage() {
                     <FormControl>
                       <Input type="number" step="0.1" {...field} value={field.value ?? ''} />
                     </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="status"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Catalog status</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="draft">Draft</SelectItem>
-                        <SelectItem value="published">Published</SelectItem>
-                        <SelectItem value="archived">Archived</SelectItem>
-                      </SelectContent>
-                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
