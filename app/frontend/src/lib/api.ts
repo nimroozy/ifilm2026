@@ -531,6 +531,11 @@ export interface StreamingStatusDto {
   subscriber_entitlement: string;
 }
 
+export type CustomerPlaybackSessionRequest =
+  | { media_asset_id: string; content_type?: never; content_id?: never }
+  | { media_asset_id?: never; content_type: 'movie' | 'episode'; content_id: number };
+
+
 export interface EncodeJobCreateResult {
   job: ProcessingJobDto;
   package: MediaPackageDto;
@@ -741,12 +746,19 @@ export const api = {
     return data;
   },
 
-  /** @deprecated Legacy placeholder stream removed in Phase 7. Use admin playback sessions. */
-  async getStream(_contentType: ContentType, _contentId: number, _episodeId?: number) {
-    throw new ApiError(
-      'Legacy stream endpoint removed. Use POST /api/admin/playback/sessions for protected HLS.',
-      410
-    );
+  async createPlaybackSession(body: CustomerPlaybackSessionRequest) {
+    const { data } = await http.post<PlaybackSessionCreatedDto>('/playback/sessions', body);
+    return data;
+  },
+
+  async revokePlaybackSession(sessionId: string) {
+    const { data } = await http.post<PlaybackSessionDto>(`/playback/sessions/${sessionId}/revoke`);
+    return data;
+  },
+
+  async getStreamingStatus() {
+    const { data } = await http.get<StreamingStatusDto>('/streaming/status');
+    return data;
   },
 };
 
@@ -1087,6 +1099,12 @@ export const adminApi = {
     const { data } = await adminHttp.post<PlaybackSessionCreatedDto>('/admin/playback/sessions', {
       media_asset_id: mediaAssetId,
     });
+    return data;
+  },
+
+  /** Same /playback/sessions endpoint; sends admin JWT for ops tests. */
+  async createPlayerPlaybackSession(body: CustomerPlaybackSessionRequest) {
+    const { data } = await adminHttp.post<PlaybackSessionCreatedDto>('/playback/sessions', body);
     return data;
   },
 

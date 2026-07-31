@@ -26,6 +26,23 @@ Report suspected security issues privately to the repository maintainers. Do not
 - When `ENABLE_LOCAL_STREAMING=true`, `PLAYBACK_TOKEN_SECRET` must be set (≥32 chars, no unsafe defaults).
 - The full `MEDIA_ROOT` is **not** publicly mounted. HLS packages are only served via protected `/api/stream/{token}/…` routes. Optional artwork uses a separate `ARTWORK_ROOT` at `/artwork`.
 - Playback tokens must never appear in logs, admin list responses, or metrics (paths are redacted).
+- Customer player keeps playback URLs only in short-lived component memory.
+- Content-Security-Policy is enforced by FastAPI `SecurityHeadersMiddleware`
+  (`app/core/csp.py`). Prefer serving the built SPA via `FRONTEND_DIST` so HTML
+  and API share one authoritative CSP. Production includes at minimum:
+  - `default-src 'self'`
+  - `object-src 'none'`
+  - `base-uri 'self'`
+  - `frame-ancestors 'none'`
+  - `form-action 'self'`
+  - `media-src 'self' blob:`
+  - `connect-src 'self' blob:`
+  - `worker-src 'self' blob:`
+  - `script-src 'self'` (no `unsafe-eval` in production)
+  - `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`
+  - `font-src 'self' data: https://fonts.gstatic.com`
+  Set `CSP_MODE=development` only for Vite HMR (adds `unsafe-eval` + local ws origins).
+  Do not open arbitrary remote media origins.
 
 ## Authentication notes
 

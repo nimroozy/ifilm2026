@@ -92,6 +92,12 @@ class Settings(BaseSettings):
 
     cdn_http_timeout_seconds: int = 10
 
+    # Optional absolute path to a built SPA (app/frontend/dist). When set, the API
+    # serves the production frontend so CSP headers apply to the HTML document.
+    frontend_dist: str = ""
+    # Force CSP profile: production | development | "" (derive from APP_ENV).
+    csp_mode: str = ""
+
     radius_enabled: bool = False
     radius_mode: str = "live"  # mock | live — mock only allowed in development/test
     radius_server: str = "127.0.0.1"
@@ -135,6 +141,9 @@ class Settings(BaseSettings):
     def normalize_env(self) -> Settings:
         self.app_env = (self.app_env or "development").strip().lower()
         self.radius_mode = (self.radius_mode or "live").strip().lower()
+        self.csp_mode = (self.csp_mode or "").strip().lower()
+        if self.csp_mode and self.csp_mode not in {"production", "development"}:
+            raise ValueError("CSP_MODE must be production, development, or empty")
         return self
 
 

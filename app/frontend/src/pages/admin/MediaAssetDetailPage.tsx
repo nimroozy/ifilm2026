@@ -343,6 +343,13 @@ export default function MediaAssetDetailPage() {
                     <p className="text-xs text-muted-foreground">
                       Filesystem paths are not exposed. Use Playback sessions for protected URLs.
                     </p>
+                    {pkg.is_active ? (
+                      <Button asChild size="sm" variant="secondary">
+                        <Link to={`/player/asset/${assetId}`} data-testid="admin-play-test">
+                          Open protected player
+                        </Link>
+                      </Button>
+                    ) : null}
                   </>
                 ) : (
                   <p className="text-muted-foreground">

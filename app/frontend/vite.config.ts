@@ -79,6 +79,31 @@ export default defineConfig(({ command }) => {
         },
       },
       watch: { usePolling: true, interval: 600 },
+      // Looser CSP for Vite HMR only. Production CSP is enforced by the API
+      // SecurityHeadersMiddleware (authoritative) when serving FRONTEND_DIST.
+      headers: {
+        'Content-Security-Policy':
+          "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' blob: ws: wss: http://127.0.0.1:8000 http://localhost:8000 http://127.0.0.1:3000 http://localhost:3000; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self';",
+      },
+    },
+    preview: {
+      host: '127.0.0.1',
+      port: 4173,
+      proxy: {
+        '/api': {
+          target: `http://localhost:${process.env.BACKEND_PORT || '8000'}`,
+          changeOrigin: true,
+        },
+      },
+      // Mirrors backend production CSP for preview-only hosting. Prefer serving
+      // dist via FRONTEND_DIST on the API so one middleware owns the header.
+      headers: {
+        'Content-Security-Policy':
+          "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' blob:; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self';",
+        'X-Content-Type-Options': 'nosniff',
+        'Referrer-Policy': 'no-referrer',
+        'X-Frame-Options': 'DENY',
+      },
     },
     build: {
       rollupOptions: {
