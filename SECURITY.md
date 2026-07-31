@@ -26,6 +26,12 @@ Report suspected security issues privately to the repository maintainers. Do not
 - When `ENABLE_LOCAL_STREAMING=true`, `PLAYBACK_TOKEN_SECRET` must be set (≥32 chars, no unsafe defaults).
 - The full `MEDIA_ROOT` is **not** publicly mounted. HLS packages are only served via protected `/api/stream/{token}/…` routes. Optional artwork uses a separate `ARTWORK_ROOT` at `/artwork`.
 - Playback tokens must never appear in logs, admin list responses, or metrics (paths are redacted).
+- Customer player keeps playback URLs only in short-lived component memory.
+- When enabling CSP for the SPA host, include at minimum:
+  - `media-src 'self' blob:`
+  - `connect-src 'self' blob:` (plus your API origin if not same-origin)
+  - `worker-src 'self' blob:` (hls.js workers)
+  Do not open arbitrary remote media origins.
 
 ## Authentication notes
 

@@ -89,7 +89,7 @@ function HeroBanner({ featured }: { featured: CatalogMovie[] }) {
             <div className="flex items-center gap-3 pt-2">
               <Button
                 size="lg"
-                onClick={() => navigate(`/player/${movie.id}`)}
+                onClick={() => navigate(`/player/movie/${movie.id}`)}
                 className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 font-semibold shadow-lg"
               >
                 <Play className="h-5 w-5 fill-current" />
@@ -227,7 +227,7 @@ function ContinueWatchingRow() {
           <div
             key={item.id}
             onClick={() =>
-              navigate(item.type === 'series' ? `/series/${item.contentId}` : `/player/${item.contentId}`)
+              navigate(item.type === 'series' ? `/series/${item.contentId}` : `/player/movie/${item.contentId}`)
             }
             className="flex-shrink-0 w-[200px] md:w-[280px] cursor-pointer group/card"
           >

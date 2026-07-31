@@ -314,7 +314,7 @@ export function HistoryPage() {
             {history.map(item => (
               <Card key={item.id} className="bg-card border-border">
                 <CardContent className="flex items-center gap-4 py-3">
-                  <div className="relative w-[100px] md:w-[140px] flex-shrink-0 cursor-pointer" onClick={() => navigate(`/player/${item.contentId}`)}>
+                  <div className="relative w-[100px] md:w-[140px] flex-shrink-0 cursor-pointer" onClick={() => navigate(`/player/movie/${item.contentId}`)}>
                     <img src={item.poster} alt={item.title} className="w-full aspect-video rounded object-cover" />
                     {item.progress < 100 && (
                       <div className="absolute bottom-0 left-0 right-0 h-1 bg-muted"><div className="h-full bg-primary" style={{ width: `${item.progress}%` }} /></div>

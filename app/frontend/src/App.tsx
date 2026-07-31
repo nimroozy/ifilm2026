@@ -5,7 +5,8 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import CustomerLayout, { LangProvider, AuthProvider } from '@/components/CustomerLayout';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Index from '@/pages/Index';
-import { MoviesPage, SeriesPage, MovieDetailsPage, SeriesDetailsPage, PlayerPage, SearchPage } from '@/pages/Browse';
+import { MoviesPage, SeriesPage, MovieDetailsPage, SeriesDetailsPage, SearchPage } from '@/pages/Browse';
+import PlayerPage from '@/pages/PlayerPage';
 import { LoginPage, ProfilePage, DevicesPage, WatchlistPage, HistoryPage } from '@/pages/Account';
 import RequireAdmin from '@/pages/admin/RequireAdmin';
 import AdminLayout from '@/pages/admin/AdminLayout';
@@ -48,6 +49,9 @@ const AppRoutes = () => (
     <Route path="/watchlist" element={<CustomerRoute><WatchlistPage /></CustomerRoute>} />
     <Route path="/history" element={<CustomerRoute><HistoryPage /></CustomerRoute>} />
     {/* Player - fullscreen, no layout */}
+    <Route path="/player/movie/:id" element={<PlayerPage />} />
+    <Route path="/player/episode/:id" element={<PlayerPage />} />
+    <Route path="/player/asset/:assetId" element={<PlayerPage />} />
     <Route path="/player/:id" element={<PlayerPage />} />
 
     {/* Admin */}

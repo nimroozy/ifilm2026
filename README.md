@@ -35,10 +35,13 @@ Frontend data mode:
 | Probe (ffprobe) | `ENABLE_MEDIA_PROCESSING` | [docs/media/MEDIA_PROCESSING_FOUNDATION.md](./docs/media/MEDIA_PROCESSING_FOUNDATION.md) |
 | HLS encoding | `ENABLE_MEDIA_PROCESSING` + `ENABLE_HLS_ENCODING` | [docs/media/HLS_ENCODING_PIPELINE.md](./docs/media/HLS_ENCODING_PIPELINE.md) |
 | Protected streaming | `ENABLE_LOCAL_STREAMING` | [docs/media/STREAMING_SERVICE.md](./docs/media/STREAMING_SERVICE.md) |
+| Adaptive customer player | (uses streaming) | [docs/media/VIDEO_PLAYER.md](./docs/media/VIDEO_PLAYER.md) |
 
 **Important:** The full `MEDIA_ROOT` is **not** publicly mounted. Anonymous `/media/**` access was removed. HLS packages are delivered only via protected `/api/stream/{token}/…` routes. Optional artwork may be served from `ARTWORK_ROOT` at `/artwork`.
 
 Alembic head: `007_streaming_service`.
+
+Uploads, ffprobe processing, local HLS encoding, protected streaming, and the adaptive customer HLS video player are implemented. Persistent watch history, CDN, DRM, and payments remain deferred.
 
 ## Security and readiness
 

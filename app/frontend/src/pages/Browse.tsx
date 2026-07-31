@@ -11,20 +11,11 @@ import {
   List,
   Search as SearchIcon,
   X,
-  Volume2,
-  Maximize,
-  SkipForward,
-  SkipBack,
-  Settings,
-  Pause,
-  Wifi,
-  Monitor,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Slider } from '@/components/ui/slider';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useLang } from '@/components/CustomerLayout';
 import { movies as mockMovies } from '@/data/mockData';
@@ -446,7 +437,7 @@ export function MovieDetailsPage() {
             <div className="flex flex-wrap items-center gap-3 pt-2">
               <Button
                 size="lg"
-                onClick={() => navigate(`/player/${movie.id}`)}
+                onClick={() => navigate(`/player/movie/${movie.id}`)}
                 className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 font-semibold"
               >
                 <Play className="h-5 w-5 fill-current" />
@@ -581,7 +572,10 @@ export function SeriesDetailsPage() {
             </div>
             <Button
               size="lg"
-              onClick={() => navigate(`/player/${show.id}`)}
+              onClick={() => {
+                const first = showEpisodes[0];
+                if (first) navigate(`/player/episode/${first.id}`);
+              }}
               className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2"
             >
               <Play className="h-5 w-5 fill-current" />
@@ -614,7 +608,7 @@ export function SeriesDetailsPage() {
               showEpisodes.map((ep) => (
                 <div
                   key={ep.id}
-                  onClick={() => navigate(`/player/${show.id}?ep=${ep.id}`)}
+                  onClick={() => navigate(`/player/episode/${ep.id}`)}
                   className="flex gap-4 p-3 rounded-lg bg-card hover:bg-card/80 cursor-pointer transition-colors"
                 >
                   <div className="relative w-[120px] md:w-[160px] flex-shrink-0">
@@ -647,131 +641,9 @@ export function SeriesDetailsPage() {
   );
 }
 
-// ============ VIDEO PLAYER PAGE (mock UI only — playback not connected) ============
-export function PlayerPage() {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const [isPlaying, setIsPlaying] = useState(true);
-  const [progress, setProgress] = useState([32]);
-  const [volume, setVolume] = useState([80]);
-  const [showControls, setShowControls] = useState(true);
-  const [quality, setQuality] = useState('1080p');
-  const [showSkipIntro, setShowSkipIntro] = useState(true);
-
-  const movie = mockMovies.find((m) => m.id === Number(id)) || mockMovies[0];
-  const cdnNode = 'Kabul CDN';
-
-  return (
-    <div className="fixed inset-0 bg-black z-50 flex flex-col" onMouseMove={() => setShowControls(true)}>
-      <div className="flex-1 relative flex items-center justify-center bg-gradient-to-br from-black via-gray-900 to-black">
-        <img src={movie.backdrop} alt={movie.title} className="absolute inset-0 w-full h-full object-cover opacity-30" />
-        <div className="absolute inset-0 flex items-center justify-center">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setIsPlaying(!isPlaying)}
-            className="h-20 w-20 rounded-full bg-black/40 hover:bg-black/60 text-white"
-          >
-            {isPlaying ? <Pause className="h-10 w-10" /> : <Play className="h-10 w-10 fill-white" />}
-          </Button>
-        </div>
-
-        {showSkipIntro && (
-          <Button
-            onClick={() => setShowSkipIntro(false)}
-            className="absolute bottom-24 right-6 bg-foreground/20 backdrop-blur-sm text-white border border-white/30 hover:bg-foreground/30"
-          >
-            Skip Intro →
-          </Button>
-        )}
-
-        <div
-          className={`absolute top-0 left-0 right-0 p-4 flex items-center justify-between bg-gradient-to-b from-black/60 to-transparent transition-opacity ${showControls ? 'opacity-100' : 'opacity-0'}`}
-        >
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="text-white hover:bg-white/10">
-            <X className="h-6 w-6" />
-          </Button>
-          <div className="text-center">
-            <h3 className="text-white font-medium text-sm">{movie.title}</h3>
-          </div>
-          <div className="flex items-center gap-1 text-xs text-white/70">
-            <Wifi className="h-3.5 w-3.5 text-green-400" />
-            <span>{cdnNode}</span>
-          </div>
-        </div>
-
-        <div
-          className={`absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent transition-opacity ${showControls ? 'opacity-100' : 'opacity-0'}`}
-        >
-          <div className="mb-3">
-            <Slider
-              value={progress}
-              onValueChange={setProgress}
-              max={100}
-              step={1}
-              className="w-full [&_[role=slider]]:bg-primary [&_[role=slider]]:border-primary"
-            />
-            <div className="flex justify-between text-xs text-white/70 mt-1">
-              <span>0:41:12</span>
-              <span>2:08:00</span>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" className="text-white hover:bg-white/10">
-                <SkipBack className="h-5 w-5" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsPlaying(!isPlaying)}
-                className="text-white hover:bg-white/10"
-              >
-                {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6 fill-white" />}
-              </Button>
-              <Button variant="ghost" size="icon" className="text-white hover:bg-white/10">
-                <SkipForward className="h-5 w-5" />
-              </Button>
-              <div className="flex items-center gap-1 ml-2 w-24">
-                <Volume2 className="h-4 w-4 text-white" />
-                <Slider
-                  value={volume}
-                  onValueChange={setVolume}
-                  max={100}
-                  step={1}
-                  className="[&_[role=slider]]:bg-white [&_[role=slider]]:border-white"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center gap-1">
-              <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-[10px]">{quality}</Badge>
-              <Select value={quality} onValueChange={setQuality}>
-                <SelectTrigger className="w-auto h-8 bg-transparent border-none text-white text-xs gap-1 px-2">
-                  <Settings className="h-4 w-4" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="auto">Auto</SelectItem>
-                  <SelectItem value="1080p">1080p</SelectItem>
-                  <SelectItem value="720p">720p</SelectItem>
-                  <SelectItem value="480p">480p</SelectItem>
-                  <SelectItem value="360p">360p</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button variant="ghost" size="icon" className="text-white hover:bg-white/10">
-                <Monitor className="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="icon" className="text-white hover:bg-white/10">
-                <Maximize className="h-5 w-5" />
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+// ============ VIDEO PLAYER PAGE ============
+// Real adaptive HLS player lives in pages/PlayerPage.tsx (Phase 8).
+export { default as PlayerPage } from '@/pages/PlayerPage';
 
 // ============ SEARCH PAGE ============
 export function SearchPage() {

@@ -8,15 +8,24 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.security import HTTPAuthorizationCredentials
 
 from app.core.config import get_settings
-from app.core.deps import DbSession, require_permissions
+from app.core.deps import (
+    DbSession,
+    bearer,
+    get_current_admin,
+    get_current_subscriber,
+    require_permissions,
+)
 from app.core.features import require_local_streaming
+from app.core.security import TokenError, safe_decode_token
 from app.models.admin import AdminUser
-from app.models.media_assets import MediaAsset
 from app.models.media_playback import MediaPlaybackSession
+from app.models.user import Subscriber
 from app.schemas.common import Envelope, paginated
 from app.schemas.streaming import (
+    CustomerPlaybackSessionCreate,
     PlaybackSessionCreate,
     PlaybackSessionCreated,
     PlaybackSessionOut,
@@ -24,6 +33,7 @@ from app.schemas.streaming import (
     StreamingStatusOut,
 )
 from app.services.streaming.delivery import deliver_master, deliver_segment, deliver_variant
+from app.services.streaming.resolve import get_playable_asset_by_id, get_playable_asset_for_content
 from app.services.streaming.sessions import (
     create_playback_session,
     master_playlist_url,
@@ -31,6 +41,43 @@ from app.services.streaming.sessions import (
     revoke_sessions_for_asset,
     revoke_sessions_for_user,
 )
+
+PlaybackPrincipal = AdminUser | Subscriber
+
+
+def get_playback_principal(
+    db: DbSession,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)] = None,
+) -> PlaybackPrincipal:
+    """Accept either an admin or subscriber JWT for player session creation."""
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    try:
+        payload = safe_decode_token(credentials.credentials)
+    except TokenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        ) from exc
+    typ = payload.get("typ")
+    if typ == "admin":
+        return get_current_admin(db, credentials)
+    if typ == "subscriber":
+        return get_current_subscriber(db, credentials)
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unsupported token type")
+
+
+def _created_response(session: MediaPlaybackSession, raw_token: str) -> PlaybackSessionCreated:
+    settings = get_settings()
+    return PlaybackSessionCreated(
+        id=session.id,
+        media_asset_id=session.media_asset_id,
+        media_package_id=session.media_package_id,
+        expires_at=session.expires_at,
+        playback_token=raw_token,
+        master_playlist_url=master_playlist_url(
+            api_prefix=settings.api_prefix, token=raw_token
+        ),
+    )
 
 router = APIRouter(tags=["streaming"])
 
@@ -70,6 +117,61 @@ def streaming_status():
 
 
 @router.post(
+    "/playback/sessions",
+    response_model=PlaybackSessionCreated,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_customer_playback_session(
+    body: CustomerPlaybackSessionCreate,
+    request: Request,
+    db: DbSession,
+    principal: Annotated[PlaybackPrincipal, Depends(get_playback_principal)],
+):
+    """Create a protected playback session for the customer player (or admin ops test)."""
+    require_local_streaming()
+    if body.media_asset_id:
+        asset = get_playable_asset_by_id(db, body.media_asset_id)
+    else:
+        assert body.content_type is not None and body.content_id is not None
+        asset = get_playable_asset_for_content(
+            db, content_type=body.content_type, content_id=body.content_id
+        )
+    created_by_admin = principal if isinstance(principal, AdminUser) else None
+    session, raw_token = create_playback_session(
+        db,
+        principal=principal,
+        media_asset=asset,
+        client_ip=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+        created_by_admin=created_by_admin,
+    )
+    return _created_response(session, raw_token)
+
+
+@router.post(
+    "/playback/sessions/{session_id}/revoke",
+    response_model=PlaybackSessionOut,
+)
+def revoke_own_playback_session(
+    session_id: str,
+    db: DbSession,
+    principal: Annotated[PlaybackPrincipal, Depends(get_playback_principal)],
+):
+    """Revoke a session owned by the current principal."""
+    require_local_streaming()
+    session = db.get(MediaPlaybackSession, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Playback session not found")
+    if isinstance(principal, AdminUser):
+        principal_type, principal_id = "admin", str(principal.id)
+    else:
+        principal_type, principal_id = "subscriber", str(principal.id)
+    if session.principal_type != principal_type or session.principal_id != principal_id:
+        raise HTTPException(status_code=403, detail="Cannot revoke another user's session")
+    return _session_out(revoke_session(db, session, reason="owner_revoke"))
+
+
+@router.post(
     "/admin/playback/sessions",
     response_model=PlaybackSessionCreated,
     status_code=status.HTTP_201_CREATED,
@@ -81,9 +183,7 @@ def admin_create_playback_session(
     admin: Annotated[AdminUser, Depends(require_permissions("streaming.manage"))],
 ):
     require_local_streaming()
-    asset = db.get(MediaAsset, body.media_asset_id)
-    if asset is None:
-        raise HTTPException(status_code=404, detail="Media asset not found")
+    asset = get_playable_asset_by_id(db, body.media_asset_id)
     session, raw_token = create_playback_session(
         db,
         principal=admin,
@@ -92,17 +192,7 @@ def admin_create_playback_session(
         user_agent=request.headers.get("user-agent"),
         created_by_admin=admin,
     )
-    settings = get_settings()
-    return PlaybackSessionCreated(
-        id=session.id,
-        media_asset_id=session.media_asset_id,
-        media_package_id=session.media_package_id,
-        expires_at=session.expires_at,
-        playback_token=raw_token,
-        master_playlist_url=master_playlist_url(
-            api_prefix=settings.api_prefix, token=raw_token
-        ),
-    )
+    return _created_response(session, raw_token)
 
 
 @router.get("/admin/playback/sessions", response_model=Envelope[PlaybackSessionOut])
