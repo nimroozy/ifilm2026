@@ -105,4 +105,4 @@ pnpm exec playwright test -c playwright.phase8.config.ts
 
 ## Deferred
 
-Watch history / Continue Watching, payments/entitlement, DRM, subtitle packaging, CDN/Cloudflare/R2/S3, casting, TV apps, analytics, offline downloads.
+Watch history / Continue Watching are implemented for authenticated subscribers (see [docs/user/WATCH_HISTORY.md](../user/WATCH_HISTORY.md)). Still deferred: payments/entitlement, DRM, subtitle packaging, CDN/Cloudflare/R2/S3, casting, TV apps, analytics platform, offline downloads.
