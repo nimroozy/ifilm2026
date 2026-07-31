@@ -70,6 +70,14 @@ class Settings(BaseSettings):
     enable_hls_encoding: bool = False
     enable_local_streaming: bool = False
 
+    # Watch progress / Continue Watching (Phase 10)
+    enable_watch_history: bool = True
+    watch_progress_min_seconds: int = 30
+    watch_progress_complete_percent: int = 90
+    watch_progress_save_interval_seconds: int = 20
+    watch_progress_resume_margin_seconds: int = 10
+    continue_watching_limit: int = 20
+
     # Opaque playback token HMAC secret (required when streaming enabled).
     playback_token_secret: str = ""
     playback_token_ttl_seconds: int = 3600

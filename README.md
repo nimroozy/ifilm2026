@@ -23,6 +23,12 @@ Docs:
 - [docs/catalog/FRONTEND_INTEGRATION.md](./docs/catalog/FRONTEND_INTEGRATION.md)
 - [docs/catalog/TEST_REPORT.md](./docs/catalog/TEST_REPORT.md)
 
+## Watch history
+
+Authenticated subscribers get persistent progress, Resume/Start Over, Continue Watching, and Watch History.
+
+- [docs/user/WATCH_HISTORY.md](./docs/user/WATCH_HISTORY.md)
+
 Frontend data mode:
 
 - `VITE_DATA_MODE=mock` (default) — local fixtures

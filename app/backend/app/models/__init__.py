@@ -7,7 +7,8 @@ from app.models.media_encoding import MediaEncodingProfile, MediaPackage, MediaR
 from app.models.media_playback import MediaPlaybackSession
 from app.models.media_processing import MediaProcessingJob, MediaProcessingJobEvent
 from app.models.publication import MediaPublicationEvent
-from app.models.user import Device, Subscriber, WatchHistory, WatchlistItem
+from app.models.user import Device, Subscriber, WatchlistItem
+from app.models.watch_progress import UserWatchProgress
 
 __all__ = [
     "AdminRole",
@@ -33,6 +34,6 @@ __all__ = [
     "Subscriber",
     "UploadJob",
     "UploadSession",
-    "WatchHistory",
+    "UserWatchProgress",
     "WatchlistItem",
 ]

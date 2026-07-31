@@ -9,6 +9,7 @@ from app.api.routes import (
     encoding,
     genres,
     health,
+    me,
     media_processing,
     media_upload,
     movies,
@@ -24,6 +25,7 @@ api_router = APIRouter()
 api_router.include_router(health.router)
 api_router.include_router(config.router)
 api_router.include_router(auth.router)
+api_router.include_router(me.router)
 api_router.include_router(admin_auth.router)
 api_router.include_router(movies.router)
 api_router.include_router(series.router)
