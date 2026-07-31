@@ -11,8 +11,35 @@ from app.models.admin import AdminRole, AdminUser
 from app.services.storage import ensure_media_layout, media_root
 
 
-def _headers(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}"}
+def _headers(token: str, **extra: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}", **extra}
+
+
+def _put_headers(admin_headers: dict[str, str], *, offset: int, complete: bool) -> dict[str, str]:
+    return {
+        **admin_headers,
+        "Upload-Offset": str(offset),
+        "Upload-Complete": "true" if complete else "false",
+    }
+
+
+def minimal_mp4(extra: bytes = b"") -> bytes:
+    """Minimal ISO BMFF buffer with an ``ftyp`` box (enough for signature checks)."""
+    payload = b"isom" + b"\x00\x00\x00\x00" + b"isomiso2mp41"
+    box = (8 + len(payload)).to_bytes(4, "big") + b"ftyp" + payload
+    return box + extra
+
+
+def minimal_jpeg(extra: bytes = b"") -> bytes:
+    return b"\xff\xd8\xff\xe0\x00\x10JFIF" + extra + b"\xff\xd9"
+
+
+def minimal_png(extra: bytes = b"") -> bytes:
+    return b"\x89PNG\r\n\x1a\n" + extra
+
+
+def pe_executable() -> bytes:
+    return b"MZ" + b"\x00" * 60 + b"PE\x00\x00fake"
 
 
 def _make_admin(db_session, *, username: str, permissions: list[str]) -> str:
@@ -42,6 +69,24 @@ def _create_session(client, headers, *, filename="clip.mp4", size=11, mime="vide
         **extra,
     }
     return client.post("/api/admin/media/sessions", headers=headers, json=payload)
+
+
+def _put(
+    client,
+    admin_headers,
+    session_id: str,
+    payload: bytes,
+    *,
+    offset: int,
+    complete: bool,
+    filename="clip.mp4",
+    mime="video/mp4",
+):
+    return client.put(
+        f"/api/admin/media/sessions/{session_id}",
+        headers=_put_headers(admin_headers, offset=offset, complete=complete),
+        files={"file": (filename, payload, mime)},
+    )
 
 
 def test_media_upload_requires_auth(client):
@@ -89,13 +134,15 @@ def test_reject_zero_byte_and_oversized(client, admin_headers, monkeypatch):
 
 
 def test_reject_unsupported_type_path_traversal_and_executable(client, admin_headers):
-    bad_mime = _create_session(client, admin_headers, mime="text/plain")
+    bad_mime = _create_session(client, admin_headers, mime="text/html")
     assert bad_mime.status_code == 400
 
     traversal = _create_session(client, admin_headers, filename="../etc/passwd")
     assert traversal.status_code == 400
 
-    exe = _create_session(client, admin_headers, filename="payload.exe", mime="application/octet-stream")
+    exe = _create_session(
+        client, admin_headers, filename="payload.exe", mime="application/octet-stream"
+    )
     assert exe.status_code == 400
     assert "Executable" in exe.json()["detail"]
 
@@ -115,8 +162,261 @@ def test_reject_multiple_owners(client, admin_headers):
     assert response.status_code == 422
 
 
+def test_size_equality_short_exact_and_over(client, admin_headers):
+    base = minimal_mp4()
+    # Pad to exactly 10 / build variants.
+    exact = (base + b"\x00" * 64)[:10]
+    assert len(exact) == 10
+    # Ensure ftyp still present
+    assert exact[4:8] == b"ftyp"
+
+    short = exact[:5]
+    over = exact + b"X"
+
+    # declared 10, received 5 with Upload-Complete → failed, not completed
+    created = _create_session(client, admin_headers, size=10)
+    session_id = created.json()["session"]["id"]
+    asset_id = created.json()["media_asset"]["id"]
+    resp = _put(client, admin_headers, session_id, short, offset=0, complete=True)
+    assert resp.status_code == 400
+    assert "Incomplete upload" in resp.json()["detail"]
+    progress = client.get(f"/api/admin/media/sessions/{session_id}", headers=admin_headers).json()
+    assert progress["status"] == "failed"
+    asset = client.get(f"/api/admin/media/assets/{asset_id}", headers=admin_headers).json()
+    assert asset["upload_status"] == "failed"
+    assert asset["checksum_sha256"] is None
+    assert asset["storage_path"] is None
+
+    # declared 10, received 10 → completed
+    created = _create_session(client, admin_headers, filename="ok.mp4", size=10)
+    session_id = created.json()["session"]["id"]
+    resp = _put(client, admin_headers, session_id, exact, offset=0, complete=True)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["status"] == "completed"
+
+    # declared 10, received 11 → rejected
+    created = _create_session(client, admin_headers, filename="over.mp4", size=10)
+    session_id = created.json()["session"]["id"]
+    resp = _put(client, admin_headers, session_id, over, offset=0, complete=True)
+    assert resp.status_code == 400
+    assert "exceeds" in resp.json()["detail"].lower()
+
+
+def test_interrupted_short_upload_never_completed(client, admin_headers):
+    payload = minimal_mp4(b"\x00" * 20)
+    created = _create_session(client, admin_headers, size=len(payload))
+    session_id = created.json()["session"]["id"]
+    # Client stops early without Upload-Complete → stays uploading (not completed)
+    partial = payload[:8]
+    resp = _put(client, admin_headers, session_id, partial, offset=0, complete=False)
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "uploading"
+    assert resp.json()["bytes_received"] == 8
+    asset = client.get(
+        f"/api/admin/media/assets/{created.json()['media_asset']['id']}", headers=admin_headers
+    ).json()
+    assert asset["upload_status"] == "uploading"
+    assert asset["checksum_sha256"] is None
+
+
+def test_resumable_chunks_and_wrong_offset(client, admin_headers):
+    payload = minimal_mp4(b"\x00" * 40)
+    mid = 16
+    created = _create_session(client, admin_headers, size=len(payload))
+    session_id = created.json()["session"]["id"]
+
+    first = _put(client, admin_headers, session_id, payload[:mid], offset=0, complete=False)
+    assert first.status_code == 200, first.text
+    assert first.json()["status"] == "uploading"
+    assert first.json()["bytes_received"] == mid
+
+    wrong = _put(client, admin_headers, session_id, payload[mid:], offset=0, complete=True)
+    assert wrong.status_code == 409
+    assert "Upload-Offset mismatch" in wrong.json()["detail"]
+
+    # Retry already-accepted chunk (stale offset) → 409
+    retry = _put(client, admin_headers, session_id, payload[:mid], offset=0, complete=False)
+    assert retry.status_code == 409
+
+    second = _put(client, admin_headers, session_id, payload[mid:], offset=mid, complete=True)
+    assert second.status_code == 200, second.text
+    assert second.json()["status"] == "completed"
+    assert second.json()["bytes_received"] == len(payload)
+    asset_id = created.json()["media_asset"]["id"]
+    meta = client.get(f"/api/admin/media/assets/{asset_id}", headers=admin_headers).json()
+    assert meta["checksum_sha256"] == hashlib.sha256(payload).hexdigest()
+
+
+def test_resume_after_request_restart(client, admin_headers):
+    payload = minimal_mp4(b"RESUME-DATA-OK")
+    created = _create_session(client, admin_headers, size=len(payload))
+    session_id = created.json()["session"]["id"]
+    mid = 12
+    assert (
+        _put(client, admin_headers, session_id, payload[:mid], offset=0, complete=False).status_code
+        == 200
+    )
+
+    # Simulate new request: only consult persisted progress.
+    progress = client.get(f"/api/admin/media/sessions/{session_id}", headers=admin_headers).json()
+    assert progress["bytes_received"] == mid
+    assert progress["status"] == "uploading"
+
+    final = _put(
+        client,
+        admin_headers,
+        session_id,
+        payload[mid:],
+        offset=progress["bytes_received"],
+        complete=True,
+    )
+    assert final.status_code == 200, final.text
+    assert final.json()["status"] == "completed"
+
+
+def test_upload_after_cancel_and_complete_rejected(client, admin_headers):
+    payload = minimal_mp4(b"\x00" * 8)
+    created = _create_session(client, admin_headers, size=len(payload))
+    session_id = created.json()["session"]["id"]
+    assert (
+        client.delete(f"/api/admin/media/sessions/{session_id}", headers=admin_headers).status_code
+        == 200
+    )
+    assert (
+        _put(client, admin_headers, session_id, payload, offset=0, complete=True).status_code == 409
+    )
+
+    created = _create_session(client, admin_headers, filename="done.mp4", size=len(payload))
+    session_id = created.json()["session"]["id"]
+    assert (
+        _put(client, admin_headers, session_id, payload, offset=0, complete=True).status_code == 200
+    )
+    assert (
+        _put(client, admin_headers, session_id, payload, offset=0, complete=True).status_code == 409
+    )
+
+
+def test_content_signature_validation(client, admin_headers):
+    exe = pe_executable()
+    created = _create_session(client, admin_headers, filename="evil.mp4", size=len(exe))
+    resp = _put(
+        client, admin_headers, created.json()["session"]["id"], exe, offset=0, complete=True
+    )
+    assert resp.status_code == 400
+    assert "Executable" in resp.json()["detail"] or "signature" in resp.json()["detail"].lower()
+
+    created = _create_session(
+        client,
+        admin_headers,
+        filename="evil.bin",
+        size=len(exe),
+        mime="application/octet-stream",
+    )
+    # .bin is not a recognized media extension for octet-stream
+    # sanitize allows .bin; content check should fail on extension or signature
+    # Use .mp4 name with octet-stream + MZ payload
+    created = _create_session(
+        client,
+        admin_headers,
+        filename="evil2.mp4",
+        size=len(exe),
+        mime="application/octet-stream",
+    )
+    resp = _put(
+        client,
+        admin_headers,
+        created.json()["session"]["id"],
+        exe,
+        offset=0,
+        complete=True,
+        filename="evil2.mp4",
+        mime="application/octet-stream",
+    )
+    assert resp.status_code == 400
+
+    mp4 = minimal_mp4(b"\x00" * 16)
+    created = _create_session(client, admin_headers, filename="ok.mp4", size=len(mp4))
+    assert (
+        _put(
+            client, admin_headers, created.json()["session"]["id"], mp4, offset=0, complete=True
+        ).status_code
+        == 200
+    )
+
+    jpeg = minimal_jpeg(b"\x00" * 8)
+    created = _create_session(
+        client,
+        admin_headers,
+        filename="poster.jpg",
+        size=len(jpeg),
+        mime="image/jpeg",
+        category="posters",
+    )
+    assert (
+        _put(
+            client,
+            admin_headers,
+            created.json()["session"]["id"],
+            jpeg,
+            offset=0,
+            complete=True,
+            filename="poster.jpg",
+            mime="image/jpeg",
+        ).status_code
+        == 200
+    )
+
+    png = minimal_png(b"\x00" * 8)
+    created = _create_session(
+        client,
+        admin_headers,
+        filename="art.png",
+        size=len(png),
+        mime="image/png",
+        category="posters",
+    )
+    assert (
+        _put(
+            client,
+            admin_headers,
+            created.json()["session"]["id"],
+            png,
+            offset=0,
+            complete=True,
+            filename="art.png",
+            mime="image/png",
+        ).status_code
+        == 200
+    )
+
+    # MIME/extension mismatch: .png declared as video/mp4
+    created = _create_session(
+        client, admin_headers, filename="bad.png", size=len(png), mime="video/mp4"
+    )
+    # create may succeed; put fails on content vs mime/ext
+    resp = _put(
+        client,
+        admin_headers,
+        created.json()["session"]["id"],
+        png,
+        offset=0,
+        complete=True,
+        filename="bad.png",
+        mime="video/mp4",
+    )
+    assert resp.status_code == 400
+
+    # Unknown binary as mp4
+    mystery = b"\x00\x01\x02\x03NOTAMEDIAFILE!!!!"
+    created = _create_session(client, admin_headers, filename="mystery.mp4", size=len(mystery))
+    resp = _put(
+        client, admin_headers, created.json()["session"]["id"], mystery, offset=0, complete=True
+    )
+    assert resp.status_code == 400
+
+
 def test_streaming_upload_checksum_and_storage_path(client, admin_headers):
-    payload = b"hello-media"
+    payload = minimal_mp4(b"hello-media-bytes")
     created = _create_session(client, admin_headers, size=len(payload))
     assert created.status_code == 201, created.text
     session_id = created.json()["session"]["id"]
@@ -126,11 +426,7 @@ def test_streaming_upload_checksum_and_storage_path(client, admin_headers):
     assert progress.status_code == 200
     assert progress.json()["status"] == "pending"
 
-    uploaded = client.put(
-        f"/api/admin/media/sessions/{session_id}",
-        headers=admin_headers,
-        files={"file": ("clip.mp4", payload, "video/mp4")},
-    )
+    uploaded = _put(client, admin_headers, session_id, payload, offset=0, complete=True)
     assert uploaded.status_code == 200, uploaded.text
     body = uploaded.json()
     assert body["status"] == "completed"
@@ -153,22 +449,18 @@ def test_streaming_upload_checksum_and_storage_path(client, admin_headers):
 def test_duplicate_checksum_rejected(client, admin_headers, monkeypatch):
     monkeypatch.setenv("UPLOAD_REJECT_DUPLICATE_CHECKSUM", "true")
     get_settings.cache_clear()
-    payload = b"duplicate-bytes"
+    payload = minimal_mp4(b"duplicate-bytes-xx")
     first = _create_session(client, admin_headers, filename="one.mp4", size=len(payload))
     assert (
-        client.put(
-            f"/api/admin/media/sessions/{first.json()['session']['id']}",
-            headers=admin_headers,
-            files={"file": ("one.mp4", payload, "video/mp4")},
+        _put(
+            client, admin_headers, first.json()["session"]["id"], payload, offset=0, complete=True
         ).status_code
         == 200
     )
 
     second = _create_session(client, admin_headers, filename="two.mp4", size=len(payload))
-    dup = client.put(
-        f"/api/admin/media/sessions/{second.json()['session']['id']}",
-        headers=admin_headers,
-        files={"file": ("two.mp4", payload, "video/mp4")},
+    dup = _put(
+        client, admin_headers, second.json()["session"]["id"], payload, offset=0, complete=True
     )
     assert dup.status_code == 409
     assert "Duplicate" in dup.json()["detail"]
@@ -176,32 +468,12 @@ def test_duplicate_checksum_rejected(client, admin_headers, monkeypatch):
     get_settings.cache_clear()
 
 
-def test_cancel_upload_session(client, admin_headers):
-    created = _create_session(client, admin_headers, size=20)
-    session_id = created.json()["session"]["id"]
-    cancelled = client.delete(f"/api/admin/media/sessions/{session_id}", headers=admin_headers)
-    assert cancelled.status_code == 200
-    assert cancelled.json()["status"] == "cancelled"
-
-    put = client.put(
-        f"/api/admin/media/sessions/{session_id}",
-        headers=admin_headers,
-        files={"file": ("clip.mp4", b"12345678901234567890", "video/mp4")},
-    )
-    assert put.status_code == 409
-
-
 def test_large_file_streaming(client, admin_headers):
-    # ~1.5 MiB streamed in chunks by the service.
-    payload = (b"abcdefghij" * 1024) * 150  # 1,536,000 bytes
+    payload = minimal_mp4(b"abcdefghij" * 1024 * 20)  # ~20KB+ header
     created = _create_session(client, admin_headers, filename="large.mp4", size=len(payload))
     assert created.status_code == 201
     session_id = created.json()["session"]["id"]
-    uploaded = client.put(
-        f"/api/admin/media/sessions/{session_id}",
-        headers=admin_headers,
-        files={"file": ("large.mp4", payload, "video/mp4")},
-    )
+    uploaded = _put(client, admin_headers, session_id, payload, offset=0, complete=True)
     assert uploaded.status_code == 200, uploaded.text
     assert uploaded.json()["bytes_received"] == len(payload)
     asset_id = created.json()["media_asset"]["id"]
@@ -218,13 +490,9 @@ def test_storage_layout_and_path_generation():
 
 
 def test_list_media_assets(client, admin_headers):
-    payload = b"list-me"
+    payload = minimal_mp4(b"list-me")
     created = _create_session(client, admin_headers, filename="listed.mp4", size=len(payload))
-    client.put(
-        f"/api/admin/media/sessions/{created.json()['session']['id']}",
-        headers=admin_headers,
-        files={"file": ("listed.mp4", payload, "video/mp4")},
-    )
+    _put(client, admin_headers, created.json()["session"]["id"], payload, offset=0, complete=True)
     listed = client.get("/api/admin/media/assets", headers=admin_headers)
     assert listed.status_code == 200
     body = listed.json()

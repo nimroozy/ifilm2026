@@ -38,8 +38,15 @@ class Settings(BaseSettings):
         default_factory=lambda: [
             "video/mp4",
             "video/x-matroska",
+            "video/webm",
             "video/quicktime",
             "video/x-msvideo",
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "text/vtt",
+            "application/x-subrip",
+            "text/plain",
             "application/octet-stream",
         ]
     )

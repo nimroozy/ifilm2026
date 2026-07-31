@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Header, Query, UploadFile, status
 
 from app.core.config import get_settings
 from app.core.deps import DbSession, require_permissions
@@ -51,7 +51,11 @@ def create_media_upload_session(
     return UploadSessionCreateOut(
         session=UploadSessionOut.model_validate(
             {
-                **{k: v for k, v in upload_service.session_out_dict(session).items() if k != "media_asset"},
+                **{
+                    k: v
+                    for k, v in upload_service.session_out_dict(session).items()
+                    if k != "media_asset"
+                },
                 "media_asset": MediaAssetOut.model_validate(asset),
             }
         ),
@@ -65,11 +69,35 @@ async def put_media_upload_file(
     db: DbSession,
     _: Annotated[AdminUser, Depends(require_permissions("upload.manage"))],
     file: UploadFile = File(...),
+    upload_offset: Annotated[int, Header(alias="Upload-Offset")] = 0,
+    upload_complete: Annotated[str | None, Header(alias="Upload-Complete")] = None,
 ):
+    """Append a chunk to an upload session.
+
+    Headers:
+    - ``Upload-Offset``: byte offset where this chunk begins (must equal
+      ``bytes_received``). ``0`` truncates/creates the temp file for a fresh
+      pending/uploading session.
+    - ``Upload-Complete``: ``true``/``1`` means this is the final request; if
+      ``bytes_received != expected_size_bytes`` after the body, the session
+      fails with HTTP 400. Omit or ``false`` to leave an incomplete session
+      resumable.
+
+    Terminal sessions (completed/failed/cancelled) and expired sessions reject
+    further chunks. Wrong offsets return HTTP 409.
+    """
     settings = get_settings()
     require_feature("enable_uploads", settings)
     session = upload_service.get_session(db, session_id)
-    session = await upload_service.stream_upload_to_session(db, settings=settings, session=session, file=file)
+    complete_flag = (upload_complete or "").strip().lower() in {"1", "true", "yes"}
+    session = await upload_service.stream_upload_to_session(
+        db,
+        settings=settings,
+        session=session,
+        file=file,
+        upload_offset=upload_offset,
+        upload_complete=complete_flag,
+    )
     return UploadSessionOut.model_validate(upload_service.session_out_dict(session))
 
 
@@ -130,4 +158,9 @@ def list_media_assets(
         .limit(page_size)
         .all()
     )
-    return paginated([MediaAssetOut.model_validate(item) for item in items], total=total, page=page, page_size=page_size)
+    return paginated(
+        [MediaAssetOut.model_validate(item) for item in items],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )

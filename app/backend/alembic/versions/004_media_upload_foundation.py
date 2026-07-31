@@ -58,6 +58,13 @@ def upgrade() -> None:
     op.create_index("ix_media_assets_series_id", "media_assets", ["series_id"])
     op.create_index("ix_media_assets_season_id", "media_assets", ["season_id"])
     op.create_index("ix_media_assets_episode_id", "media_assets", ["episode_id"])
+    op.execute(
+        """
+        CREATE UNIQUE INDEX uq_media_assets_completed_checksum
+        ON media_assets (checksum_sha256)
+        WHERE upload_status = 'completed' AND checksum_sha256 IS NOT NULL
+        """
+    )
 
     op.create_table(
         "upload_sessions",
@@ -83,5 +90,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.execute("DROP INDEX IF EXISTS uq_media_assets_completed_checksum")
     op.drop_table("upload_sessions")
     op.drop_table("media_assets")

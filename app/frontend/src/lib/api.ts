@@ -786,11 +786,22 @@ export const adminApi = {
     return data;
   },
 
-  async uploadMediaSessionFile(sessionId: string, file: File, onUploadProgress?: (pct: number) => void) {
+  async uploadMediaSessionFile(
+    sessionId: string,
+    file: File,
+    onUploadProgress?: (pct: number) => void,
+    options?: { offset?: number; complete?: boolean }
+  ) {
     const form = new FormData();
     form.append('file', file);
+    const offset = options?.offset ?? 0;
+    const complete = options?.complete ?? true;
     const { data } = await adminHttp.put<UploadSessionDto>(`/admin/media/sessions/${sessionId}`, form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        'Upload-Offset': String(offset),
+        'Upload-Complete': complete ? 'true' : 'false',
+      },
       timeout: 0,
       onUploadProgress: (event) => {
         if (!onUploadProgress || !event.total) return;
