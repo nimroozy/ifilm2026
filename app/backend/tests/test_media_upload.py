@@ -296,6 +296,39 @@ def test_upload_after_cancel_and_complete_rejected(client, admin_headers):
     )
 
 
+def test_upload_after_failed_and_expired_rejected(client, admin_headers, db_session):
+    from datetime import UTC, datetime, timedelta
+
+    from app.models.media_assets import UploadSession
+
+    payload = minimal_mp4(b"\x00" * 8)
+    # Fail via incomplete Upload-Complete, then reject further chunks.
+    created = _create_session(client, admin_headers, filename="fail.mp4", size=len(payload))
+    session_id = created.json()["session"]["id"]
+    assert (
+        _put(client, admin_headers, session_id, payload[:4], offset=0, complete=True).status_code
+        == 400
+    )
+    progress = client.get(f"/api/admin/media/sessions/{session_id}", headers=admin_headers).json()
+    assert progress["status"] == "failed"
+    assert (
+        _put(client, admin_headers, session_id, payload, offset=0, complete=True).status_code == 409
+    )
+
+    # Expire a pending session and reject upload with 410.
+    created = _create_session(client, admin_headers, filename="exp.mp4", size=len(payload))
+    session_id = created.json()["session"]["id"]
+    row = db_session.get(UploadSession, session_id)
+    assert row is not None
+    row.expires_at = datetime.now(UTC) - timedelta(minutes=5)
+    db_session.add(row)
+    db_session.commit()
+    expired = _put(client, admin_headers, session_id, payload, offset=0, complete=True)
+    assert expired.status_code == 410
+    progress = client.get(f"/api/admin/media/sessions/{session_id}", headers=admin_headers).json()
+    assert progress["status"] == "failed"
+
+
 def test_content_signature_validation(client, admin_headers):
     exe = pe_executable()
     created = _create_session(client, admin_headers, filename="evil.mp4", size=len(exe))
@@ -464,6 +497,41 @@ def test_duplicate_checksum_rejected(client, admin_headers, monkeypatch):
     )
     assert dup.status_code == 409
     assert "Duplicate" in dup.json()["detail"]
+    monkeypatch.delenv("UPLOAD_REJECT_DUPLICATE_CHECKSUM", raising=False)
+    get_settings.cache_clear()
+
+
+def test_concurrent_duplicate_checksum_finalization(client, admin_headers, monkeypatch):
+    """Two simultaneous completes with the same checksum must not both succeed."""
+    import concurrent.futures
+
+    monkeypatch.setenv("UPLOAD_REJECT_DUPLICATE_CHECKSUM", "true")
+    get_settings.cache_clear()
+    payload = minimal_mp4(b"concurrent-dup-payload!!")
+
+    sessions = []
+    for name in ("c1.mp4", "c2.mp4"):
+        created = _create_session(client, admin_headers, filename=name, size=len(payload))
+        assert created.status_code == 201
+        sessions.append(created.json()["session"]["id"])
+
+    def _finalize(session_id: str):
+        return _put(client, admin_headers, session_id, payload, offset=0, complete=True)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(_finalize, sessions))
+
+    statuses = sorted(r.status_code for r in results)
+    assert 200 in statuses
+    assert 409 in statuses
+    assert statuses.count(200) == 1
+
+    completed = [
+        client.get(f"/api/admin/media/sessions/{sid}", headers=admin_headers).json()["status"]
+        for sid in sessions
+    ]
+    assert completed.count("completed") == 1
+    assert completed.count("failed") == 1
     monkeypatch.delenv("UPLOAD_REJECT_DUPLICATE_CHECKSUM", raising=False)
     get_settings.cache_clear()
 
