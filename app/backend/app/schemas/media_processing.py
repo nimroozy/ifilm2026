@@ -74,7 +74,7 @@ class ProcessingJobCreateOut(BaseModel):
 
 class EncodeJobCreateOut(BaseModel):
     job: ProcessingJobOut
-    package: "MediaPackageOut"
+    package: MediaPackageOut
     created: bool
 
 

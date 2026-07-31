@@ -35,7 +35,9 @@ class Page(BaseModel, Generic[T]):
     page_size: int = 20
 
 
-def paginated[TItem](items: list[TItem], *, total: int, page: int, page_size: int) -> Envelope[TItem]:
+def paginated[TItem](
+    items: list[TItem], *, total: int, page: int, page_size: int
+) -> Envelope[TItem]:
     pages = ceil(total / page_size) if page_size else 0
     return Envelope(
         data=items,

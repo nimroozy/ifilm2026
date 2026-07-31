@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.db.session import SessionLocal
+from app.models.media_processing import JOB_TYPE_ENCODE_HLS, JOB_TYPE_PROBE
 from app.services.media_processing.ffmpeg import binary_available, resolve_binary
 from app.services.media_processing.jobs import (
     claim_next_job,
@@ -19,8 +20,6 @@ from app.services.media_processing.jobs import (
     heartbeat_job,
     recover_stale_jobs,
 )
-from app.models.media_processing import JOB_TYPE_ENCODE_HLS, JOB_TYPE_PROBE
-
 
 logger = logging.getLogger(__name__)
 

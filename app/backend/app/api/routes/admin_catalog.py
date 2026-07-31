@@ -20,10 +20,14 @@ def dashboard_stats(
 ) -> DashboardStats:
     return DashboardStats(
         total_movies=not_deleted(db.query(Movie), Movie).count(),
-        published_movies=not_deleted(db.query(Movie), Movie).filter(Movie.status == "published").count(),
+        published_movies=not_deleted(db.query(Movie), Movie)
+        .filter(Movie.status == "published")
+        .count(),
         draft_movies=not_deleted(db.query(Movie), Movie).filter(Movie.status == "draft").count(),
         total_series=not_deleted(db.query(Series), Series).count(),
-        published_series=not_deleted(db.query(Series), Series).filter(Series.status == "published").count(),
+        published_series=not_deleted(db.query(Series), Series)
+        .filter(Series.status == "published")
+        .count(),
         total_seasons=not_deleted(db.query(Season), Season).count(),
         total_episodes=not_deleted(db.query(Episode), Episode).count(),
         total_genres=db.query(Genre).count(),

@@ -7,23 +7,16 @@ import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
-import pytest
 from app.core.config import get_settings
 from app.core.security import create_access_token, hash_password
 from app.models.admin import AdminRole, AdminUser
 from app.models.media_assets import MediaAsset, new_uuid
-from app.models.media_encoding import MediaPackage
-from app.models.media_processing import JOB_TYPE_ENCODE_HLS, MediaProcessingJob
 from app.services.media_processing.encode_job import (
-    execute_encode_hls_job,
     queue_encode_hls_job,
 )
 from app.services.media_processing.hls_encode import build_hls_rendition_argv, gop_size
 from app.services.media_processing.jobs import (
     cancel_job,
-    claim_next_job,
-    execute_probe_job,
-    queue_probe_job,
 )
 from app.services.media_processing.package_paths import work_package_dir
 from app.services.media_processing.profiles import (
@@ -295,7 +288,7 @@ def test_worker_hls_encode_e2e_no_upscale_and_checksum(db_session):
 
     # API must not expose incomplete packages as completed — this one is completed.
     assert package.work_path is None
-    assert not work_package_dir(job.id).exists()
+    assert not work_package_dir(job.id, create=False).exists()
 
 
 def test_cancel_encode_cleans_work_dir(db_session):

@@ -73,7 +73,9 @@ def sanitize_upload_filename(filename: str | None) -> str:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid filename")
     ext = file_extension(pure.name)
     if ext in BLOCKED_EXTENSIONS:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Executable uploads are not allowed")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Executable uploads are not allowed"
+        )
     return pure.name
 
 
@@ -88,7 +90,9 @@ def validate_upload_content_type(content_type: str | None, allowed: list[str]) -
 
 def reject_zero_byte_size(size_bytes: int) -> None:
     if size_bytes <= 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Zero-byte files are not allowed")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Zero-byte files are not allowed"
+        )
 
 
 def reject_oversized(size_bytes: int, max_bytes: int) -> None:

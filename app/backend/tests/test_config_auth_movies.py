@@ -154,4 +154,6 @@ def test_hls_service_and_cdn_sync(client, admin_headers):
         json={"content_type": "movie", "content_id": 1, "hls_path": "movie/1"},
     )
     assert sync.status_code == 200
-    assert all(item["status"] in {"completed", "failed", "syncing", "pending"} for item in sync.json())
+    assert all(
+        item["status"] in {"completed", "failed", "syncing", "pending"} for item in sync.json()
+    )

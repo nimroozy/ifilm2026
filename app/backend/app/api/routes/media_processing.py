@@ -73,9 +73,7 @@ def _job_out(job, *, include_events: bool = False) -> ProcessingJobOut:
 def _package_out(package, *, include_renditions: bool = True) -> MediaPackageOut:
     renditions = []
     if include_renditions:
-        renditions = [
-            MediaRenditionOut.model_validate(item) for item in (package.renditions or [])
-        ]
+        renditions = [MediaRenditionOut.model_validate(item) for item in (package.renditions or [])]
     return MediaPackageOut.model_validate(
         {
             "id": package.id,

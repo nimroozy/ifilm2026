@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.config import Settings
 from app.models.media_assets import MediaAsset, new_uuid, utcnow
-from app.models.media_encoding import MediaPackage, MediaRendition, PACKAGE_TYPE_HLS_VOD
+from app.models.media_encoding import PACKAGE_TYPE_HLS_VOD, MediaPackage, MediaRendition
 from app.models.media_processing import (
     ACTIVE_JOB_STATUSES,
     JOB_TYPE_ENCODE_HLS,
@@ -127,9 +125,7 @@ def queue_encode_hls_job(
     existing = find_active_encode_job(db, asset.id)
     if existing is not None:
         package = (
-            db.query(MediaPackage)
-            .filter(MediaPackage.processing_job_id == existing.id)
-            .first()
+            db.query(MediaPackage).filter(MediaPackage.processing_job_id == existing.id).first()
         )
         if package is None:
             raise HTTPException(
@@ -138,9 +134,7 @@ def queue_encode_hls_job(
             )
         return existing, package, False
 
-    profiles = select_profiles_for_source(
-        db, settings=settings, source_height=int(asset.height)
-    )
+    profiles = select_profiles_for_source(db, settings=settings, source_height=int(asset.height))
     if not profiles:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -187,9 +181,7 @@ def queue_encode_hls_job(
         existing = find_active_encode_job(db, asset.id)
         if existing is not None:
             package = (
-                db.query(MediaPackage)
-                .filter(MediaPackage.processing_job_id == existing.id)
-                .first()
+                db.query(MediaPackage).filter(MediaPackage.processing_job_id == existing.id).first()
             )
             if package is not None:
                 return existing, package, False
@@ -317,8 +309,12 @@ def execute_encode_hls_job(
                 except ValueError:
                     frac = 0.0
             overall = (index + frac) / max(total, 1)
-            percent = PROGRESS_ENCODING + int(overall * (PROGRESS_WRITING_PLAYLISTS - PROGRESS_ENCODING))
-            job.progress_percent = min(PROGRESS_WRITING_PLAYLISTS - 1, max(PROGRESS_ENCODING, percent))
+            percent = PROGRESS_ENCODING + int(
+                overall * (PROGRESS_WRITING_PLAYLISTS - PROGRESS_ENCODING)
+            )
+            job.progress_percent = min(
+                PROGRESS_WRITING_PLAYLISTS - 1, max(PROGRESS_ENCODING, percent)
+            )
             job.current_step = f"encoding_{profiles[index].label}"
             job.heartbeat_at = utcnow()
             # Throttle commits via attempt counter on heartbeat seconds
@@ -413,7 +409,9 @@ def execute_encode_hls_job(
                 )
             package.status = "completed"
             package.storage_path = relative_media_path(promoted)
-            package.master_playlist_path = relative_media_path(master if master.parent == promoted else promoted / "master.m3u8")
+            package.master_playlist_path = relative_media_path(
+                master if master.parent == promoted else promoted / "master.m3u8"
+            )
             # After rename, master path is under final dir.
             package.master_playlist_path = relative_media_path(promoted / "master.m3u8")
             package.work_path = None
@@ -451,7 +449,7 @@ def execute_encode_hls_job(
     except (EncodeCancelledError, ProbeCancelledError) as exc:
         job.cancel_requested = True
         if package is not None:
-                remove_tree_if_exists(work_package_dir(job.id, create=False))
+            remove_tree_if_exists(work_package_dir(job.id, create=False))
             _mark_package_failed(
                 db,
                 package,

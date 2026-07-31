@@ -244,9 +244,7 @@ def retry_job(db: Session, *, settings: Settings, job: MediaProcessingJob) -> Me
     if job.job_type == JOB_TYPE_ENCODE_HLS:
         from app.models.media_encoding import MediaPackage
 
-        package = (
-            db.query(MediaPackage).filter(MediaPackage.processing_job_id == job.id).first()
-        )
+        package = db.query(MediaPackage).filter(MediaPackage.processing_job_id == job.id).first()
         if package is not None:
             package.status = "pending"
             package.error_code = None

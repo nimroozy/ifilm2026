@@ -13,7 +13,7 @@ class VariantRef:
     width: int
     height: int
     playlist_rel: str
-    codecs: str = 'avc1.4d401f,mp4a.40.2'
+    codecs: str = "avc1.4d401f,mp4a.40.2"
 
 
 def build_master_playlist(variants: list[VariantRef]) -> str:

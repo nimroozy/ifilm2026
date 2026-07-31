@@ -20,9 +20,7 @@ from app.db.base import Base
 from app.models.media_assets import new_uuid, utcnow
 
 PACKAGE_TYPE_HLS_VOD = "hls_vod"
-PACKAGE_ACTIVE_STATUSES = frozenset(
-    {"pending", "encoding", "validating", "promoting"}
-)
+PACKAGE_ACTIVE_STATUSES = frozenset({"pending", "encoding", "validating", "promoting"})
 PACKAGE_TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled"})
 
 

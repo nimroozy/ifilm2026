@@ -48,7 +48,9 @@ class Genre(Base):
     slug: Mapped[str] = mapped_column(String(120), nullable=False, unique=True, index=True)
     description: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
 
     movies = relationship("Movie", secondary=movie_genres, back_populates="genre_links")
     series = relationship("Series", secondary=series_genres, back_populates="genre_links")
@@ -80,8 +82,12 @@ class Movie(Base):
     is_trending: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
 
     # Compatibility / media plumbing (not exposed as binary upload in this milestone)
     director: Mapped[str] = mapped_column(String(255), default="")
@@ -94,7 +100,9 @@ class Movie(Base):
     hls_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     source_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
 
-    genre_links: Mapped[list[Genre]] = relationship("Genre", secondary=movie_genres, back_populates="movies")
+    genre_links: Mapped[list[Genre]] = relationship(
+        "Genre", secondary=movie_genres, back_populates="movies"
+    )
 
 
 class Series(Base):
@@ -123,8 +131,12 @@ class Series(Base):
     is_trending: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
 
     audio: Mapped[list] = mapped_column(JSON, default=list)
     subtitles: Mapped[list] = mapped_column(JSON, default=list)
@@ -132,15 +144,22 @@ class Series(Base):
     new_episode: Mapped[bool] = mapped_column(Boolean, default=False)
     views: Mapped[int] = mapped_column(Integer, default=0)
 
-    genre_links: Mapped[list[Genre]] = relationship("Genre", secondary=series_genres, back_populates="series")
+    genre_links: Mapped[list[Genre]] = relationship(
+        "Genre", secondary=series_genres, back_populates="series"
+    )
     seasons: Mapped[list[Season]] = relationship(
-        "Season", back_populates="series", cascade="all, delete-orphan", order_by="Season.season_number"
+        "Season",
+        back_populates="series",
+        cascade="all, delete-orphan",
+        order_by="Season.season_number",
     )
 
 
 class Season(Base):
     __tablename__ = "seasons"
-    __table_args__ = (UniqueConstraint("series_id", "season_number", name="uq_season_number_per_series"),)
+    __table_args__ = (
+        UniqueConstraint("series_id", "season_number", name="uq_season_number_per_series"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     series_id: Mapped[int] = mapped_column(ForeignKey("series.id", ondelete="CASCADE"), index=True)
@@ -151,18 +170,27 @@ class Season(Base):
     release_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(32), default="draft", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
 
     series: Mapped[Series] = relationship("Series", back_populates="seasons")
     episodes: Mapped[list[Episode]] = relationship(
-        "Episode", back_populates="season", cascade="all, delete-orphan", order_by="Episode.episode_number"
+        "Episode",
+        back_populates="season",
+        cascade="all, delete-orphan",
+        order_by="Episode.episode_number",
     )
 
 
 class Episode(Base):
     __tablename__ = "episodes"
-    __table_args__ = (UniqueConstraint("season_id", "episode_number", name="uq_episode_number_per_season"),)
+    __table_args__ = (
+        UniqueConstraint("season_id", "episode_number", name="uq_episode_number_per_season"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     season_id: Mapped[int] = mapped_column(ForeignKey("seasons.id", ondelete="CASCADE"), index=True)
@@ -176,8 +204,12 @@ class Episode(Base):
     status: Mapped[str] = mapped_column(String(32), default="draft", index=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
 
     hls_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     source_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)

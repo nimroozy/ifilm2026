@@ -48,7 +48,9 @@ def login(payload: LoginRequest, db: DbSession):
 
     db.commit()
     db.refresh(user)
-    token = create_access_token(str(user.id), claims={"typ": "subscriber", "username": user.username})
+    token = create_access_token(
+        str(user.id), claims={"typ": "subscriber", "username": user.username}
+    )
     return TokenResponse(access_token=token)
 
 

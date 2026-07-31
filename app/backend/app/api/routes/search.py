@@ -12,7 +12,9 @@ router = APIRouter(tags=["search"])
 
 
 @router.get("/search")
-def search(db: DbSession, q: str = Query("", min_length=0)) -> dict[str, list[MovieOut] | list[SeriesOut]]:
+def search(
+    db: DbSession, q: str = Query("", min_length=0)
+) -> dict[str, list[MovieOut] | list[SeriesOut]]:
     if not q.strip():
         return {"movies": [], "series": []}
     like = f"%{q.strip()}%"
@@ -35,9 +37,7 @@ def search(db: DbSession, q: str = Query("", min_length=0)) -> dict[str, list[Mo
         .options(joinedload(Series.genre_links), joinedload(Series.seasons))
         .filter(Series.status == "published")
         .filter(
-            Series.title.ilike(like)
-            | Series.original_title.ilike(like)
-            | Series.slug.ilike(like)
+            Series.title.ilike(like) | Series.original_title.ilike(like) | Series.slug.ilike(like)
         )
         .order_by(Series.created_at.desc())
         .limit(20)
