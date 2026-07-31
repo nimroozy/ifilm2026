@@ -132,6 +132,50 @@ describe('admin auth & catalog pages', () => {
     expect(login).toHaveBeenCalledWith('admin', 'secret');
   });
 
+  it('401 from admin me clears the admin session', async () => {
+    tokenStore.setAdmin('stale-token');
+    me.mockRejectedValue(new ApiError('Not authenticated', 401));
+
+    wrap(
+      <Routes>
+        <Route
+          path="/admin"
+          element={
+            <RequireAdmin>
+              <div>SECRET</div>
+            </RequireAdmin>
+          }
+        />
+        <Route path="/admin/login" element={<div>LOGIN PAGE</div>} />
+      </Routes>
+    );
+
+    await waitFor(() => expect(screen.getByText('LOGIN PAGE')).toBeInTheDocument());
+    expect(tokenStore.getAdmin()).toBeNull();
+  });
+
+  it('403 from admin me does not clear the admin session', async () => {
+    tokenStore.setAdmin('forbidden-token');
+    me.mockRejectedValue(new ApiError('Insufficient permissions', 403));
+
+    wrap(
+      <Routes>
+        <Route
+          path="/admin"
+          element={
+            <RequireAdmin>
+              <div>SECRET</div>
+            </RequireAdmin>
+          }
+        />
+        <Route path="/admin/login" element={<div>LOGIN PAGE</div>} />
+      </Routes>
+    );
+
+    await waitFor(() => expect(screen.getByText('LOGIN PAGE')).toBeInTheDocument());
+    expect(tokenStore.getAdmin()).toBe('forbidden-token');
+  });
+
   it('renders movie list from adminApi', async () => {
     tokenStore.setAdmin('tok');
     me.mockResolvedValue({

@@ -1,3 +1,20 @@
+"""Permission dependency helpers.
+
+Legacy coarse keys from the foundation seed remain supported with a narrow map:
+
+| Required permission | Satisfied by any of |
+| --- | --- |
+| `movies.read` | `movies.read`, `movies.manage`, `movies` |
+| `movies.manage` | `movies.manage`, `movies` |
+| `series.read` | `series.read`, `series.manage`, `series` |
+| `series.manage` | `series.manage`, `series` |
+| `genres.read` | `genres.read`, `genres.manage`, `genres` |
+| `genres.manage` | `genres.manage`, `genres` |
+
+Important: `movies` / `series` do **not** grant genre management or unrelated
+catalog mutations. `movies.read` alone cannot mutate movies.
+"""
+
 from collections.abc import Callable
 from typing import Annotated
 
@@ -12,6 +29,16 @@ from app.models.user import Subscriber
 
 bearer = HTTPBearer(auto_error=False)
 DbSession = Annotated[Session, Depends(get_db)]
+
+# Exact legacy alias map — do not broaden across resource domains.
+PERMISSION_ALIASES: dict[str, frozenset[str]] = {
+    "movies.read": frozenset({"movies.read", "movies.manage", "movies"}),
+    "movies.manage": frozenset({"movies.manage", "movies"}),
+    "series.read": frozenset({"series.read", "series.manage", "series"}),
+    "series.manage": frozenset({"series.manage", "series"}),
+    "genres.read": frozenset({"genres.read", "genres.manage", "genres"}),
+    "genres.manage": frozenset({"genres.manage", "genres"}),
+}
 
 
 def _token_payload(credentials: HTTPAuthorizationCredentials | None) -> dict:
@@ -44,21 +71,12 @@ def admin_permissions(admin: AdminUser) -> set[str]:
 
 
 def require_permissions(*required: str) -> Callable[..., AdminUser]:
-    """Require any matching permission, including legacy coarse keys from PR #2."""
-
-    aliases = {
-        "movies.read": {"movies", "movies.read", "movies.manage"},
-        "movies.manage": {"movies", "movies.manage"},
-        "series.read": {"series", "series.read", "series.manage"},
-        "series.manage": {"series", "series.manage"},
-        "genres.read": {"genres", "genres.read", "genres.manage", "movies", "series"},
-        "genres.manage": {"genres", "genres.manage"},
-    }
+    """Require each listed permission (legacy aliases via PERMISSION_ALIASES)."""
 
     def _dependency(admin: Annotated[AdminUser, Depends(get_current_admin)]) -> AdminUser:
         perms = admin_permissions(admin)
         for need in required:
-            allowed = aliases.get(need, {need})
+            allowed = PERMISSION_ALIASES.get(need, frozenset({need}))
             if perms.isdisjoint(allowed):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,

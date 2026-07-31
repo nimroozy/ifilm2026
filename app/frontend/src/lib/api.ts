@@ -406,6 +406,9 @@ function createHttp(getToken: () => string | null, options?: { onUnauthorized?: 
 }
 
 function unwrapList<T>(envelope: Envelope<T>): Page<T> {
+  if (!envelope || typeof envelope !== 'object' || !('data' in envelope)) {
+    throw new ApiError('Malformed API list response', 0);
+  }
   const items = Array.isArray(envelope.data) ? envelope.data : envelope.data != null ? [envelope.data] : [];
   const meta = envelope.meta;
   return {

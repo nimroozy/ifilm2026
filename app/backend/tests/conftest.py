@@ -104,3 +104,18 @@ def admin_headers(client):
     )
     assert login.status_code == 200
     return {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+
+@pytest.fixture()
+def db_session(client):
+    """ORM session bound to the same in-memory engine as the test client.
+
+    Prefer this over importing ``TestingSessionLocal`` from ``tests.conftest``:
+    pytest loads this file as plugin module ``conftest``, which is a different
+    module object than ``tests.conftest`` and would use a separate empty DB.
+    """
+    db = TestingSessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

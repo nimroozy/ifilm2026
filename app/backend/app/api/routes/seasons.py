@@ -30,6 +30,35 @@ from app.services.catalog import (
 router = APIRouter(tags=["seasons"])
 
 
+@router.get("/seasons/{season_id}/episodes", response_model=list[EpisodeOut])
+def list_public_season_episodes(season_id: int, db: DbSession) -> list[EpisodeOut]:
+    """Published episodes for a published, non-deleted season whose series is published."""
+    season = (
+        db.query(Season)
+        .options(joinedload(Season.episodes), joinedload(Season.series))
+        .filter(Season.id == season_id)
+        .first()
+    )
+    if (
+        not season
+        or season.deleted_at is not None
+        or season.status != "published"
+        or not season.series
+        or season.series.deleted_at is not None
+        or season.series.status != "published"
+    ):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Season not found")
+    episodes = sorted(
+        [
+            e
+            for e in (season.episodes or [])
+            if e.deleted_at is None and e.status == "published"
+        ],
+        key=lambda e: e.episode_number,
+    )
+    return [episode_out(e) for e in episodes]
+
+
 def _get_season(db: DbSession, season_id: int) -> Season:
     season = (
         db.query(Season)

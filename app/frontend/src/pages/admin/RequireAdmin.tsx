@@ -33,7 +33,8 @@ export default function RequireAdmin({ children }: RequireAdminProps) {
       } catch (err) {
         if (cancelled) return;
         const apiErr = err instanceof ApiError ? err : null;
-        if (apiErr?.status === 401 || apiErr?.status === 403) {
+        // Only 401 clears the session. 403 is authorization failure, not logout.
+        if (apiErr?.status === 401) {
           tokenStore.clearAdmin();
         }
         setState('deny');

@@ -46,5 +46,19 @@ Delete returns **409** while assigned to non-deleted movies/series.
 `GET /api/admin/dashboard/stats` — catalog counts only (no invented analytics)
 
 ## Permissions
-`movies.read`, `movies.manage`, `series.read`, `series.manage`, `genres.read`, `genres.manage`  
-Legacy keys `movies` / `series` from the foundation seed still grant access.
+
+Fine-grained keys: `movies.read`, `movies.manage`, `series.read`, `series.manage`,
+`genres.read`, `genres.manage`.
+
+Legacy coarse keys from the foundation seed (exact alias map):
+
+| Required | Satisfied by |
+| --- | --- |
+| `movies.read` | `movies.read`, `movies.manage`, `movies` |
+| `movies.manage` | `movies.manage`, `movies` |
+| `series.read` | `series.read`, `series.manage`, `series` |
+| `series.manage` | `series.manage`, `series` |
+| `genres.read` | `genres.read`, `genres.manage`, `genres` |
+| `genres.manage` | `genres.manage`, `genres` |
+
+`movies` / `series` do **not** grant genre management. `movies.read` cannot mutate movies.

@@ -3,9 +3,22 @@
 Revision ID: 003_catalog_admin
 Revises: 002_movies_title_idx
 Create Date: 2026-07-30
+
+Slug backfill notes (PostgreSQL):
+- Titles are normalized with lower() + regexp_replace to [a-z0-9] tokens.
+- Empty / Unicode-only titles (e.g. Dari/Persian with no Latin letters) become
+  base slug ``item``, then disambiguated with ``-<id>`` on collisions.
+- Collisions (duplicate titles, case-only / punctuation-only differences) keep
+  the lowest-id row on the bare slug; others append ``-<id>``.
+- Multiple NULL imdb_id values remain allowed.
+- Duplicate non-null imdb_id values abort the migration with an actionable error
+  (no silent deletion). Legacy 002 schema has no imdb_id column, so values are
+  NULL unless manually populated mid-upgrade; the guard still runs.
 """
 
 from __future__ import annotations
+
+import os
 
 import sqlalchemy as sa
 from alembic import op
@@ -14,6 +27,93 @@ revision = "003_catalog_admin"
 down_revision = "002_movies_title_idx"
 branch_labels = None
 depends_on = None
+
+
+def _backfill_unique_slugs(table: str) -> None:
+    """Assign non-empty unique slugs using pure PostgreSQL (no app Python)."""
+    op.execute(
+        sa.text(
+            f"""
+            WITH normalized AS (
+              SELECT
+                id,
+                NULLIF(
+                  trim(both '-' FROM regexp_replace(
+                    lower(COALESCE(NULLIF(btrim(title), ''), 'item')),
+                    '[^a-z0-9]+',
+                    '-',
+                    'g'
+                  )),
+                  ''
+                ) AS base_raw
+              FROM {table}
+            ),
+            prepared AS (
+              SELECT id, COALESCE(base_raw, 'item') AS base
+              FROM normalized
+            ),
+            ranked AS (
+              SELECT
+                id,
+                base,
+                COUNT(*) OVER (PARTITION BY base) AS cnt,
+                MIN(id) OVER (PARTITION BY base) AS min_id
+              FROM prepared
+            )
+            UPDATE {table} AS t
+            SET slug = CASE
+              WHEN r.cnt = 1 OR t.id = r.min_id THEN left(r.base, 280)
+              ELSE left(r.base || '-' || t.id::text, 280)
+            END
+            FROM ranked AS r
+            WHERE t.id = r.id
+            """
+        )
+    )
+    # Final safety: never leave empty/null slugs.
+    op.execute(
+        sa.text(
+            f"""
+            UPDATE {table}
+            SET slug = 'item-' || id::text
+            WHERE slug IS NULL OR btrim(slug) = ''
+            """
+        )
+    )
+
+
+def _assert_no_duplicate_imdb(table: str) -> None:
+    # table name is an internal constant (movies|series), not user input
+    op.execute(
+        sa.text(
+            f"""
+            DO $guard$
+            DECLARE
+              dup_id text;
+              dup_count integer;
+            BEGIN
+              SELECT imdb_id, COUNT(*)::integer
+                INTO dup_id, dup_count
+              FROM {table}
+              WHERE imdb_id IS NOT NULL AND btrim(imdb_id) <> ''
+              GROUP BY imdb_id
+              HAVING COUNT(*) > 1
+              ORDER BY COUNT(*) DESC
+              LIMIT 1;
+
+              IF dup_id IS NOT NULL THEN
+                RAISE EXCEPTION
+                  'Cannot migrate {table}: duplicate non-null imdb_id "%" already exists on % row(s). '
+                  'Deduplicate or null conflicting imdb_id values, then re-run alembic upgrade.',
+                  dup_id,
+                  dup_count
+                  USING ERRCODE = 'unique_violation';
+              END IF;
+            END
+            $guard$
+            """
+        )
+    )
 
 
 def upgrade() -> None:
@@ -61,7 +161,6 @@ def upgrade() -> None:
     op.execute(
         """
         UPDATE movies SET
-          slug = lower(replace(replace(title, ' ', '-'), '''', '')),
           release_year = year,
           duration_minutes = duration,
           imdb_rating = rating,
@@ -75,6 +174,14 @@ def upgrade() -> None:
           published_at = CASE WHEN published THEN created_at ELSE NULL END
         """
     )
+
+    # Test-only injection to exercise duplicate-imdb abort (never set in production).
+    inject = os.environ.get("IFILM_MIGRATE_INJECT_DUP_IMDB")
+    if inject:
+        op.execute(sa.text("UPDATE movies SET imdb_id = :v").bindparams(v=inject))
+
+    _backfill_unique_slugs("movies")
+    _assert_no_duplicate_imdb("movies")
 
     with op.batch_alter_table("movies") as batch:
         batch.alter_column("slug", existing_type=sa.String(length=280), nullable=False)
@@ -118,7 +225,6 @@ def upgrade() -> None:
     op.execute(
         """
         UPDATE series SET
-          slug = lower(replace(replace(title, ' ', '-'), '''', '')),
           release_year = year,
           imdb_rating = rating,
           poster_url = poster,
@@ -132,6 +238,12 @@ def upgrade() -> None:
           published_at = CASE WHEN published THEN created_at ELSE NULL END
         """
     )
+
+    if inject:
+        op.execute(sa.text("UPDATE series SET imdb_id = :v").bindparams(v=inject))
+
+    _backfill_unique_slugs("series")
+    _assert_no_duplicate_imdb("series")
 
     with op.batch_alter_table("series") as batch:
         batch.drop_column("status")
@@ -174,7 +286,6 @@ def upgrade() -> None:
     op.create_index("ix_seasons_status", "seasons", ["status"], unique=False)
     op.create_index("ix_seasons_deleted_at", "seasons", ["deleted_at"], unique=False)
 
-    # Migrate episodes: create seasons from distinct (series_id, season), then re-point
     op.execute(
         """
         INSERT INTO seasons (series_id, season_number, title, status, created_at, updated_at)
