@@ -62,6 +62,25 @@ def run_once(db: Session, *, settings: Settings, worker_id: str) -> bool:
         execute_probe_job(db, settings=settings, job=job)
     elif job.job_type == JOB_TYPE_ENCODE_HLS:
         if not settings.enable_hls_encoding:
+            from app.models.media_encoding import MediaPackage
+            from app.services.media_processing.package_paths import (
+                remove_tree_if_exists,
+                work_package_dir,
+            )
+            from app.services.storage import media_root
+
+            package = (
+                db.query(MediaPackage).filter(MediaPackage.processing_job_id == job.id).first()
+            )
+            if package is not None:
+                package.status = "failed"
+                package.error_code = "hls_encoding_disabled"
+                package.error_message = "HLS encoding is disabled"
+                if package.work_path:
+                    remove_tree_if_exists(media_root() / package.work_path)
+                remove_tree_if_exists(work_package_dir(job.id, create=False))
+                package.work_path = None
+                db.add(package)
             fail_or_retry(
                 db,
                 settings=settings,
