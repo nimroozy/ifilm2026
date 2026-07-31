@@ -64,6 +64,7 @@ class Settings(BaseSettings):
     enable_cdn_sync: bool = False
     enable_radius_login: bool = False
     enable_media_processing: bool = False
+    enable_hls_encoding: bool = False
 
     ffmpeg_binary: str = "ffmpeg"
     ffprobe_binary: str = "ffprobe"

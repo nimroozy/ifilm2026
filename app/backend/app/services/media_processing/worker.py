@@ -17,6 +17,7 @@ from app.services.media_processing.jobs import (
     claim_next_job,
     default_worker_id,
     execute_probe_job,
+    fail_or_retry,
     heartbeat_job,
     recover_stale_jobs,
 )
@@ -33,9 +34,14 @@ def _handle_signal(signum: int, _frame: FrameType | None) -> None:
 
 
 def validate_binaries(settings: Settings) -> None:
-    """Validate FFmpeg/ffprobe when processing is enabled. Raises on failure."""
-    resolve_binary(settings.ffmpeg_binary, label="ffmpeg")
+    """Validate required binaries for the enabled feature set.
+
+    Probe always needs ffprobe when media processing is enabled.
+    FFmpeg is required only when HLS encoding is also enabled.
+    """
     resolve_binary(settings.ffprobe_binary, label="ffprobe")
+    if settings.enable_hls_encoding:
+        resolve_binary(settings.ffmpeg_binary, label="ffmpeg")
 
 
 def processing_binaries_ok(settings: Settings) -> dict[str, bool]:
@@ -55,13 +61,22 @@ def run_once(db: Session, *, settings: Settings, worker_id: str) -> bool:
     if job.job_type == JOB_TYPE_PROBE:
         execute_probe_job(db, settings=settings, job=job)
     elif job.job_type == JOB_TYPE_ENCODE_HLS:
+        if not settings.enable_hls_encoding:
+            fail_or_retry(
+                db,
+                settings=settings,
+                job=job,
+                error_code="hls_encoding_disabled",
+                message="HLS encoding is disabled",
+                transient=False,
+            )
+            db.commit()
+            return True
         from app.services.media_processing.encode_job import execute_encode_hls_job
 
         execute_encode_hls_job(db, settings=settings, job=job)
     else:
         logger.error("Unsupported job type %s for job %s", job.job_type, job.id)
-        from app.services.media_processing.jobs import fail_or_retry
-
         fail_or_retry(
             db,
             settings=settings,
@@ -85,11 +100,15 @@ def run_forever(*, settings: Settings | None = None) -> None:
     try:
         validate_binaries(settings)
     except Exception as exc:  # noqa: BLE001
-        logger.error("FFmpeg/ffprobe validation failed: %s", exc)
+        logger.error("Binary validation failed: %s", exc)
         raise SystemExit(2) from exc
 
     worker_id = default_worker_id(settings)
-    logger.info("Media processing worker starting id=%s", worker_id)
+    logger.info(
+        "Media processing worker starting id=%s hls_encoding=%s",
+        worker_id,
+        bool(settings.enable_hls_encoding),
+    )
     signal.signal(signal.SIGTERM, _handle_signal)
     signal.signal(signal.SIGINT, _handle_signal)
 

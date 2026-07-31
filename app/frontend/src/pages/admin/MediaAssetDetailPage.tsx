@@ -148,7 +148,10 @@ export default function MediaAssetDetailPage() {
   if (!asset) return <ErrorState message="Media asset not found" />;
 
   const featureDisabled = status != null && !status.enabled;
-  const missingBinary = status != null && (!status.ffmpeg_available || !status.ffprobe_available);
+  const hlsDisabled = status != null && status.enabled && !status.hls_encoding_enabled;
+  const missingBinary =
+    status != null &&
+    (!status.ffprobe_available || (status.hls_encoding_enabled && !status.ffmpeg_available));
 
   return (
     <div className="space-y-6 max-w-3xl" data-testid="media-asset-detail">
@@ -234,7 +237,7 @@ export default function MediaAssetDetailPage() {
             <Button
               size="sm"
               variant="outline"
-              disabled={busy || featureDisabled || !canEncode}
+              disabled={busy || featureDisabled || hlsDisabled || !canEncode}
               onClick={() => void queueEncode()}
               data-testid="encode-hls"
             >
@@ -248,9 +251,16 @@ export default function MediaAssetDetailPage() {
             Media processing is disabled (ENABLE_MEDIA_PROCESSING).
           </p>
         )}
+        {hlsDisabled && (
+          <p className="text-sm text-muted-foreground" data-testid="hls-encoding-disabled">
+            HLS encoding is disabled (ENABLE_HLS_ENCODING). Probe remains available.
+          </p>
+        )}
         {missingBinary && !featureDisabled && (
           <p className="text-sm text-destructive" data-testid="processing-missing-binary">
-            FFmpeg/ffprobe is not available on this host.
+            {status?.hls_encoding_enabled
+              ? 'FFmpeg/ffprobe is not available on this host.'
+              : 'ffprobe is not available on this host.'}
           </p>
         )}
         {!canEncode && !featureDisabled && asset.upload_status === 'completed' && (

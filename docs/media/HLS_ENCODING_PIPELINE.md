@@ -11,7 +11,14 @@ Phase 6 extends the **existing media processing worker** with local **HLS VOD en
 5. The package is **atomically promoted** to `MEDIA_ROOT/packages/<asset_id>/<package_id>/`
 6. Package/rendition rows are marked `completed` only after promotion
 
-Feature flag: `ENABLE_MEDIA_PROCESSING` (default `false`).
+Feature flags (both default `false`):
+
+| Flag | Controls |
+| --- | --- |
+| `ENABLE_MEDIA_PROCESSING` | Probe jobs, processing APIs, worker process |
+| `ENABLE_HLS_ENCODING` | HLS encode queue/APIs (also requires media processing) |
+
+HLS encode requires **both** flags. Probe requires only `ENABLE_MEDIA_PROCESSING`.
 
 Permissions: same as probe — `processing.read` / `processing.manage`.
 
@@ -77,15 +84,19 @@ Partial unique index `uq_media_processing_active_encode_hls` ensures at most one
 
 See `app/backend/.env.example`:
 
+- `ENABLE_MEDIA_PROCESSING` / `ENABLE_HLS_ENCODING`
 - `MEDIA_PROCESSING_ENCODE_TIMEOUT_SECONDS`
 - `HLS_SEGMENT_DURATION_SECONDS`
 - `HLS_MAX_HEIGHT`
 - `HLS_X264_PRESET`
 
+When HLS encoding is disabled, the API starts normally even if FFmpeg is missing.
+The worker requires **ffprobe** whenever media processing is enabled, and **ffmpeg** only when HLS encoding is also enabled.
+
 ## Docker
 
-- `media-processing-worker` mounts `ifilm_media` **read-write** (packages + workspaces)
-- Healthcheck requires both ffmpeg and ffprobe
+- `media-processing-worker` mounts `ifilm_media` **read-write** by design: the same worker probes originals and writes HLS package trees under `MEDIA_ROOT/packages/` (plus temporary workspaces). This is an intentional deployment change from the probe-only read-only mount.
+- Healthcheck requires ffprobe always; ffmpeg only when `ENABLE_HLS_ENCODING=true`
 
 ## Admin UI
 
@@ -96,6 +107,7 @@ See `app/backend/.env.example`:
 
 | Symptom | Check |
 | --- | --- |
+| 503 encode | `ENABLE_HLS_ENCODING` or `ENABLE_MEDIA_PROCESSING` |
 | 409 encode | missing probe / no fitting profiles / active encode job |
 | empty ladder | source height below 240p |
 | packages stuck encoding | worker running, stale recovery, disk space under `MEDIA_ROOT` |

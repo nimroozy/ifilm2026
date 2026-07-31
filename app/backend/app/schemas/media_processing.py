@@ -80,6 +80,7 @@ class EncodeJobCreateOut(BaseModel):
 
 class ProcessingStatusOut(BaseModel):
     enabled: bool
+    hls_encoding_enabled: bool
     ffmpeg_available: bool
     ffprobe_available: bool
 

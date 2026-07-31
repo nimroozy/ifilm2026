@@ -84,6 +84,7 @@ describe('media processing admin UI', () => {
     listAssetPackages.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 1 });
     getProcessingStatus.mockResolvedValue({
       enabled: true,
+      hls_encoding_enabled: true,
       ffmpeg_available: true,
       ffprobe_available: true,
     });
@@ -171,6 +172,7 @@ describe('media processing admin UI', () => {
   it('shows feature-disabled state', async () => {
     getProcessingStatus.mockResolvedValue({
       enabled: false,
+      hls_encoding_enabled: false,
       ffmpeg_available: false,
       ffprobe_available: false,
     });
@@ -318,5 +320,30 @@ describe('media processing admin UI', () => {
     fireEvent.click(screen.getByTestId('encode-hls'));
     await waitFor(() => expect(queueMediaEncodeHls).toHaveBeenCalledWith('asset-1'));
     expect(screen.getByTestId('packages-panel')).toBeInTheDocument();
+  });
+
+  it('shows HLS encoding disabled while probe remains available', async () => {
+    getProcessingStatus.mockResolvedValue({
+      enabled: true,
+      hls_encoding_enabled: false,
+      ffmpeg_available: false,
+      ffprobe_available: true,
+    });
+    getMediaAsset.mockResolvedValue({
+      ...asset,
+      width: 640,
+      height: 360,
+      probed_at: '2026-07-31T00:00:00Z',
+      processing_status: 'completed',
+    });
+    wrap(
+      <Routes>
+        <Route path="/admin/media/:assetId" element={<MediaAssetDetailPage />} />
+      </Routes>,
+      '/admin/media/asset-1'
+    );
+    await waitFor(() => expect(screen.getByTestId('hls-encoding-disabled')).toBeInTheDocument());
+    expect(screen.getByTestId('encode-hls')).toBeDisabled();
+    expect(screen.getByTestId('probe-media')).not.toBeDisabled();
   });
 });

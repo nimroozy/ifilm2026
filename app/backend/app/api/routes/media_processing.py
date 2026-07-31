@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.core.config import get_settings
 from app.core.deps import DbSession, require_permissions
-from app.core.features import require_feature
+from app.core.features import require_feature, require_hls_encoding
 from app.models.admin import AdminUser
 from app.schemas.common import Envelope, paginated
 from app.schemas.media_processing import (
@@ -109,6 +109,9 @@ def processing_feature_status(
     bins = processing_binaries_ok(settings)
     return ProcessingStatusOut(
         enabled=bool(settings.enable_media_processing),
+        hls_encoding_enabled=bool(
+            settings.enable_media_processing and settings.enable_hls_encoding
+        ),
         ffmpeg_available=bins["ffmpeg"],
         ffprobe_available=bins["ffprobe"],
     )
@@ -123,7 +126,7 @@ def list_profiles(
     _: Annotated[AdminUser, Depends(require_permissions("processing.read"))],
 ):
     settings = get_settings()
-    require_feature("enable_media_processing", settings)
+    require_hls_encoding(settings)
     items = list_encoding_profiles(db)
     return paginated(
         [EncodingProfileOut.model_validate(item) for item in items],
@@ -165,7 +168,7 @@ def queue_encode_hls(
     admin: Annotated[AdminUser, Depends(require_permissions("processing.manage"))],
 ):
     settings = get_settings()
-    require_feature("enable_media_processing", settings)
+    require_hls_encoding(settings)
     asset = upload_service.get_asset(db, asset_id)
     job, package, created = queue_encode_hls_job(
         db, settings=settings, asset=asset, admin_id=admin.id

@@ -106,6 +106,15 @@ def queue_encode_hls_job(
     admin_id: int | None,
 ) -> tuple[MediaProcessingJob, MediaPackage, bool]:
     """Create a queued encode_hls job + pending package. Returns (job, package, created)."""
+    if not settings.enable_media_processing or not settings.enable_hls_encoding:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "HLS encoding is disabled"
+                if settings.enable_media_processing
+                else "Feature disabled"
+            ),
+        )
     if asset.upload_status != "completed":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

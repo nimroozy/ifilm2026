@@ -508,6 +508,7 @@ export interface ProcessingJobCreateResult {
 
 export interface ProcessingStatusDto {
   enabled: boolean;
+  hls_encoding_enabled: boolean;
   ffmpeg_available: boolean;
   ffprobe_available: boolean;
 }
