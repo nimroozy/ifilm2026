@@ -19,3 +19,8 @@ app/backend/.env
 # Playwright / local verification artifacts
 app/frontend/test-results/
 app/frontend/playwright-report/
+
+# Staging secrets / local backups
+deploy/staging/.env.staging
+deploy/staging/backups/
+deploy/staging/certs/

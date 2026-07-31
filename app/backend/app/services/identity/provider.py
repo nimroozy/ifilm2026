@@ -17,7 +17,7 @@ from datetime import UTC, date, datetime
 from typing import Protocol
 
 from app.core.config import Settings, get_settings
-from app.core.runtime import RuntimeConfigurationError, is_dev_like
+from app.core.runtime import RuntimeConfigurationError, fixture_auth_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -279,12 +279,12 @@ def _entitlement_from_radius_attrs(
 
 
 class FixtureIdentityProvider:
-    """Development/test fixture provider. Rejected outside APP_ENV development/test."""
+    """Development/test (and staging opt-in) fixture provider. Never allowed in production."""
 
     def __init__(self, settings: Settings) -> None:
-        if not is_dev_like(settings.app_env):
+        if not fixture_auth_allowed(settings):
             raise RuntimeConfigurationError(
-                "Fixture subscriber identity is not allowed outside development/test"
+                "Fixture subscriber identity is not allowed in this environment"
             )
         self.settings = settings
 

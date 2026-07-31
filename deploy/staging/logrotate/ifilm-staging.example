@@ -1,0 +1,15 @@
+# Example logrotate for host-mounted or journald-backed staging logs.
+# Install on the staging host only (not inside containers). Containers log to stdout;
+# prefer `docker compose logs` + journald/Docker log driver.
+
+# /etc/logrotate.d/ifilm-staging
+#
+# /var/log/ifilm-staging/*.log {
+#   weekly
+#   rotate 8
+#   compress
+#   delaycompress
+#   missingok
+#   notifempty
+#   copytruncate
+# }
