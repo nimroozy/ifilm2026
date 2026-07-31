@@ -146,26 +146,47 @@ def seed_development_data(db: Session, *, include_demo_catalog: bool = True) -> 
         db.add(admin)
 
     # Optional subscriber mirror of the first mock Radius fixture (if configured).
+    # Never store provider passwords locally.
     fixtures = settings.radius_mock_users or []
     if fixtures:
         fixture = fixtures[0]
         username = fixture.get("username")
-        password = fixture.get("password")
-        if username and password:
+        if username:
             subscriber = db.query(Subscriber).filter(Subscriber.username == username).one_or_none()
             if subscriber is None:
+                from datetime import UTC, date, datetime
+
+                exp = fixture.get("expiration") or ""
+                valid_until = None
+                if exp:
+                    try:
+                        d = date.fromisoformat(str(exp))
+                        valid_until = datetime(d.year, d.month, d.day, tzinfo=UTC)
+                    except ValueError:
+                        valid_until = None
                 db.add(
                     Subscriber(
                         username=username,
-                        hashed_password=hash_password(password),
+                        hashed_password=None,
                         name=fixture.get("name") or username,
                         branch=fixture.get("branch") or "Kabul",
-                        status="active",
+                        status=str(fixture.get("account_status") or fixture.get("status") or "active"),
                         package=fixture.get("package") or "Standard",
-                        expiration=fixture.get("expiration") or "",
-                        radius_synced=True,
+                        expiration=str(exp),
+                        radius_synced=False,
+                        identity_provider="fixture",
+                        external_subject=str(fixture.get("external_subject") or username),
+                        max_devices=int(fixture.get("max_devices") or settings.subscriber_max_devices_default),
+                        service_status=str(fixture.get("service_status") or "active"),
+                        valid_until=valid_until,
                     )
                 )
+            else:
+                subscriber.hashed_password = None
+                subscriber.identity_provider = subscriber.identity_provider or "fixture"
+                if not subscriber.external_subject:
+                    subscriber.external_subject = str(fixture.get("external_subject") or username)
+                db.add(subscriber)
 
     if include_demo_catalog and db.query(CDNNode).count() == 0:
         db.add_all(

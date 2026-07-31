@@ -161,7 +161,7 @@ def test_postgresql_migration_succeeds(postgres_url):
     assert "seasons" in tables
     assert "media_assets" in tables
     assert "upload_sessions" in tables
-    assert version == "009_watch_history"
+    assert version == "010_subscriber_entitlements"
 
 
 def test_postgresql_migration_from_previous_revision(postgres_url):
@@ -194,7 +194,7 @@ def test_postgresql_migration_from_previous_revision(postgres_url):
     assert movie_slug == "ordinary-film"
     assert series_slug == "ordinary-show"
     assert null_imdb >= 1
-    assert version == "009_watch_history"
+    assert version == "010_subscriber_entitlements"
 
 
 def test_002_to_head_duplicate_and_messy_titles(postgres_url):
@@ -900,10 +900,66 @@ def test_watch_history_migration_roundtrip(postgres_url):
     assert version == "009_watch_history"
 
 
+def test_subscriber_entitlements_migration_roundtrip(postgres_url):
+    """009 → 010 → 009 → 010 round-trip for subscriber entitlement schema."""
+    _reset_schema(postgres_url)
+    assert _run_alembic(postgres_url, "upgrade", "009_watch_history").returncode == 0
+    assert _run_alembic(postgres_url, "upgrade", "010_subscriber_entitlements").returncode == 0
+
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        tables = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT tablename FROM pg_tables WHERE schemaname='public'")
+            )
+        }
+        cols = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='subscribers'"
+                )
+            )
+        }
+    engine.dispose()
+    assert version == "010_subscriber_entitlements"
+    assert "subscriber_entitlement_snapshots" in tables
+    assert "subscriber_device_sessions" in tables
+    assert "subscriber_refresh_tokens" in tables
+    assert "identity_provider" in cols
+    assert "external_subject" in cols
+
+    assert _run_alembic(postgres_url, "downgrade", "009_watch_history").returncode == 0
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        tables = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT tablename FROM pg_tables WHERE schemaname='public'")
+            )
+        }
+    engine.dispose()
+    assert version == "009_watch_history"
+    assert "subscriber_entitlement_snapshots" not in tables
+    assert "subscriber_device_sessions" not in tables
+    assert "subscriber_refresh_tokens" not in tables
+
+    assert _run_alembic(postgres_url, "upgrade", "010_subscriber_entitlements").returncode == 0
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+    engine.dispose()
+    assert version == "010_subscriber_entitlements"
+
+
 def test_alembic_heads_single(postgres_url):
     result = _run_alembic(postgres_url, "heads")
     assert result.returncode == 0, result.stdout + result.stderr
     lines = [ln for ln in (result.stdout + result.stderr).splitlines() if ln.strip()]
-    head_lines = [ln for ln in lines if "009_watch_history" in ln]
+    head_lines = [ln for ln in lines if "010_subscriber_entitlements" in ln]
     assert head_lines, result.stdout + result.stderr
-    assert sum(1 for ln in lines if ln.strip().startswith("009_watch_history")) >= 1
+    assert sum(1 for ln in lines if ln.strip().startswith("010_subscriber_entitlements")) >= 1

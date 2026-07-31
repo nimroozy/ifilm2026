@@ -1,25 +1,127 @@
-"""Authenticated subscriber watch progress and history APIs."""
+"""Authenticated subscriber profile, entitlement, devices, and watch history."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query, status
+from datetime import UTC, datetime
+
+from fastapi import APIRouter, Header, HTTPException, Query, Request, status
 
 from app.core.config import get_settings
 from app.core.deps import CurrentSubscriber, DbSession
-from app.schemas.common import Envelope, paginated
+from app.core.security import TokenError, safe_decode_token
+from app.schemas.auth import DeviceOut, EntitlementOut, SubscriberOut
+from app.schemas.common import Envelope, Message, paginated
 from app.schemas.watch_history import (
     WatchProgressActionOut,
     WatchProgressOut,
     WatchProgressUpdate,
 )
 from app.services import watch_history as wh
+from app.services.devices import get_owned_device, list_active_devices, revoke_device
+from app.services.entitlements import check_entitlement
 
-router = APIRouter(prefix="/me", tags=["watch-history"])
+router = APIRouter(prefix="/me", tags=["me"])
 
 
-def _require_enabled() -> None:
+def _require_watch_history() -> None:
     if not get_settings().enable_watch_history:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Watch history disabled")
+
+
+def _iso(dt: datetime | None) -> str | None:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt.isoformat()
+
+
+def _subscriber_out(user) -> SubscriberOut:
+    return SubscriberOut(
+        id=user.id,
+        username=user.username,
+        name=user.name,
+        branch=user.branch,
+        status=user.status,
+        package=user.package,
+        expiration=user.expiration,
+        service_status=getattr(user, "service_status", "unknown") or "unknown",
+        max_devices=int(getattr(user, "max_devices", 3) or 3),
+        identity_provider=getattr(user, "identity_provider", "local") or "local",
+        external_subject=getattr(user, "external_subject", None),
+        valid_from=_iso(getattr(user, "valid_from", None)),
+        valid_until=_iso(getattr(user, "valid_until", None)),
+    )
+
+
+@router.get("", response_model=SubscriberOut)
+def get_me(user: CurrentSubscriber) -> SubscriberOut:
+    return _subscriber_out(user)
+
+
+@router.get("/entitlement", response_model=EntitlementOut)
+def get_entitlement(db: DbSession, user: CurrentSubscriber) -> EntitlementOut:
+    result = check_entitlement(db, user, refresh=True)
+    db.commit()
+    return EntitlementOut(
+        allowed=result.allowed,
+        account_status=result.account_status,
+        service_status=result.service_status,
+        package_name=result.package_name,
+        branch_code=result.branch_code,
+        valid_from=_iso(result.valid_from),
+        valid_until=_iso(result.valid_until),
+        denial_code=result.denial_code,
+        safe_reason=result.safe_reason,
+        max_devices=result.max_devices,
+        source=result.source,
+        checked_at=_iso(result.checked_at),
+        from_cache=result.from_cache,
+    )
+
+
+@router.get("/devices", response_model=list[DeviceOut])
+def get_devices(
+    db: DbSession,
+    user: CurrentSubscriber,
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> list[DeviceOut]:
+    current_device_session_id: int | None = None
+    if authorization and authorization.lower().startswith("bearer "):
+        try:
+            payload = safe_decode_token(authorization.split(" ", 1)[1])
+            raw = payload.get("device_session_id")
+            if raw is not None:
+                current_device_session_id = int(raw)
+        except (TokenError, TypeError, ValueError):
+            current_device_session_id = None
+    _ = request
+    devices = list_active_devices(db, user)
+    return [
+        DeviceOut(
+            id=d.id,
+            client_device_id=d.client_device_id,
+            name=d.name,
+            device_type=d.device_type,
+            browser=d.browser,
+            ip=d.ip,
+            first_seen_at=_iso(d.first_seen_at),
+            last_seen_at=_iso(d.last_seen_at),
+            current=current_device_session_id is not None and d.id == current_device_session_id,
+        )
+        for d in devices
+    ]
+
+
+@router.delete("/devices/{device_id}", response_model=Message)
+def delete_device(device_id: int, db: DbSession, user: CurrentSubscriber) -> Message:
+    device = get_owned_device(db, user, device_id)
+    if device is None:
+        raise HTTPException(status_code=404, detail="Device not found")
+    revoke_device(db, user, device, reason="user_revoke")
+    db.commit()
+    return Message(detail="Device revoked")
 
 
 @router.put("/watch-progress/{asset_id}", response_model=WatchProgressOut)
@@ -29,7 +131,7 @@ def put_watch_progress(
     db: DbSession,
     user: CurrentSubscriber,
 ) -> WatchProgressOut:
-    _require_enabled()
+    _require_watch_history()
     out = wh.upsert_progress(db, user, asset_id, payload)
     db.commit()
     return out
@@ -42,7 +144,7 @@ def complete_watch_progress(
     db: DbSession,
     user: CurrentSubscriber,
 ) -> WatchProgressOut:
-    _require_enabled()
+    _require_watch_history()
     out = wh.mark_complete(db, user, asset_id, payload)
     db.commit()
     return out
@@ -50,7 +152,7 @@ def complete_watch_progress(
 
 @router.get("/watch-progress/{asset_id}", response_model=WatchProgressOut)
 def get_watch_progress(asset_id: str, db: DbSession, user: CurrentSubscriber) -> WatchProgressOut:
-    _require_enabled()
+    _require_watch_history()
     out = wh.get_progress(db, user, asset_id)
     if out is None:
         raise HTTPException(status_code=404, detail="Watch progress not found")
@@ -59,7 +161,7 @@ def get_watch_progress(asset_id: str, db: DbSession, user: CurrentSubscriber) ->
 
 @router.get("/continue-watching", response_model=list[WatchProgressOut])
 def continue_watching(db: DbSession, user: CurrentSubscriber) -> list[WatchProgressOut]:
-    _require_enabled()
+    _require_watch_history()
     return wh.list_continue_watching(db, user)
 
 
@@ -70,14 +172,14 @@ def watch_history(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ) -> Envelope[WatchProgressOut]:
-    _require_enabled()
+    _require_watch_history()
     items, total = wh.list_history(db, user, page=page, page_size=page_size)
     return paginated(items, total=total, page=page, page_size=page_size)
 
 
 @router.delete("/watch-history/{asset_id}", response_model=WatchProgressActionOut)
 def delete_watch_history_item(asset_id: str, db: DbSession, user: CurrentSubscriber) -> WatchProgressActionOut:
-    _require_enabled()
+    _require_watch_history()
     deleted = wh.delete_one(db, user, asset_id)
     db.commit()
     if deleted < 1:
@@ -87,7 +189,7 @@ def delete_watch_history_item(asset_id: str, db: DbSession, user: CurrentSubscri
 
 @router.delete("/watch-history", response_model=WatchProgressActionOut)
 def clear_watch_history(db: DbSession, user: CurrentSubscriber) -> WatchProgressActionOut:
-    _require_enabled()
+    _require_watch_history()
     deleted = wh.delete_all(db, user)
     db.commit()
     return WatchProgressActionOut(detail="ok", deleted=deleted)

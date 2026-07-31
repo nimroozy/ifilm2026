@@ -1,11 +1,10 @@
-"""Narrow playback eligibility abstraction (Phase 7).
+"""Narrow playback eligibility abstraction.
 
 Supported principals:
 - admin: operational verification (always eligible when authenticated + streaming enabled)
-- subscriber: only assets whose linked catalog entity is published and not deleted
+- subscriber: requires active account + active entitlement + published catalog visibility
 
-Subscriber subscription/payment/Radius entitlement rules are deferred.
-Assets without determinable published ownership are denied.
+Admin operational access is intentionally separate from subscriber entitlement.
 """
 
 from __future__ import annotations
@@ -18,6 +17,7 @@ from app.models.admin import AdminUser
 from app.models.content import Episode, Movie, Season, Series
 from app.models.media_assets import MediaAsset
 from app.models.user import Subscriber
+from app.services.entitlements import check_entitlement
 
 DENY_UNAUTHENTICATED = "unauthenticated"
 DENY_UNSUPPORTED_PRINCIPAL = "unsupported_principal"
@@ -26,6 +26,7 @@ DENY_DELETED = "deleted"
 DENY_NO_OWNER = "ownership_undetermined"
 DENY_OWNER_MISSING = "owner_missing"
 DENY_ASSET_MISSING = "asset_missing"
+DENY_ENTITLEMENT = "entitlement_denied"
 
 
 @dataclass(frozen=True)
@@ -65,12 +66,15 @@ class PlaybackEligibilityService:
                 return EligibilityResult.deny(
                     DENY_UNAUTHENTICATED, "Admin account is inactive"
                 )
+            # Operational admin playback bypass — not subscriber entitlement.
             return EligibilityResult.allow()
 
         if isinstance(principal, Subscriber):
-            if principal.status != "active":
+            entitlement = check_entitlement(db, principal)
+            if not entitlement.allowed:
                 return EligibilityResult.deny(
-                    DENY_UNAUTHENTICATED, "Subscriber account is inactive"
+                    entitlement.denial_code or DENY_ENTITLEMENT,
+                    entitlement.safe_reason or "Playback not allowed by entitlement",
                 )
             return self._subscriber_catalog_visibility(db, media_asset)
 

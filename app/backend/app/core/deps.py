@@ -120,8 +120,21 @@ def get_current_subscriber(
             status_code=status.HTTP_403_FORBIDDEN, detail="Subscriber token required"
         )
     user = db.get(Subscriber, int(payload["sub"]))
-    if not user or user.status != "active":
+    if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Subscriber not found")
+    # Disabled accounts cannot use any subscriber API.
+    if (user.status or "").lower() == "disabled":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Subscriber not found")
+    return user
+
+
+def get_active_subscriber(
+    db: DbSession,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)] = None,
+) -> Subscriber:
+    user = get_current_subscriber(db, credentials)
+    if (user.status or "").lower() != "active":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Subscriber account inactive")
     return user
 
 
@@ -139,4 +152,5 @@ def get_optional_subscriber(
 
 CurrentAdmin = Annotated[AdminUser, Depends(get_current_admin)]
 CurrentSubscriber = Annotated[Subscriber, Depends(get_current_subscriber)]
+ActiveSubscriber = Annotated[Subscriber, Depends(get_active_subscriber)]
 OptionalSubscriber = Annotated[Subscriber | None, Depends(get_optional_subscriber)]

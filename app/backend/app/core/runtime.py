@@ -70,6 +70,47 @@ def collect_runtime_errors(settings: Settings) -> list[str]:
     if settings.radius_mode == "mock" and not is_dev_like(settings.app_env):
         errors.append("RADIUS_MODE=mock is only allowed when APP_ENV is development or test")
 
+    if settings.subscriber_identity_mode == "fixture" and not is_dev_like(settings.app_env):
+        errors.append(
+            "SUBSCRIBER_IDENTITY_MODE=fixture is only allowed when APP_ENV is development or test"
+        )
+
+    if settings.subscriber_identity_mode == "fixture" and not settings.radius_mock_users:
+        errors.append("SUBSCRIBER_IDENTITY_MODE=fixture requires RADIUS_MOCK_USERS")
+
+    radius_identity_active = settings.subscriber_identity_mode == "radius" or (
+        settings.enable_radius_login and settings.radius_mode == "live"
+    )
+
+    # Live Radius entitlement mapping is disabled by default. Production/staging
+    # must not enable Radius identity without staging-verified attribute mapping.
+    if radius_identity_active and not settings.radius_entitlement_mapping_enabled:
+        if is_prod_like(settings.app_env):
+            errors.append(
+                "Live Radius identity is enabled but RADIUS_ENTITLEMENT_MAPPING_ENABLED is false; "
+                "Access-Accept alone must never grant entitlement — keep SUBSCRIBER_IDENTITY_MODE="
+                "disabled until staging verifies Radius attribute-to-entitlement mapping"
+            )
+
+    if settings.radius_entitlement_mapping_enabled:
+        missing_attrs = [
+            name
+            for name, value in (
+                ("RADIUS_ATTR_PACKAGE", settings.radius_attr_package),
+                ("RADIUS_ATTR_EXPIRATION", settings.radius_attr_expiration),
+            )
+            if not (value or "").strip()
+        ]
+        if missing_attrs:
+            errors.append(
+                "RADIUS_ENTITLEMENT_MAPPING_ENABLED requires configured attributes: "
+                + ", ".join(missing_attrs)
+            )
+        if is_prod_like(settings.app_env) and not settings.radius_enabled:
+            errors.append(
+                "RADIUS_ENTITLEMENT_MAPPING_ENABLED in staging/production requires RADIUS_ENABLED=true"
+            )
+
     if is_prod_like(settings.app_env):
         if settings.jwt_secret in UNSAFE_JWT_SECRETS or len(settings.jwt_secret) < 32:
             errors.append("JWT_SECRET is missing, too short, or uses an unsafe default")
@@ -78,7 +119,9 @@ def collect_runtime_errors(settings: Settings) -> list[str]:
         elif any(marker in settings.database_url for marker in DEFAULT_DATABASE_MARKERS):
             errors.append("DATABASE_URL uses default/example credentials")
         if settings.radius_secret in UNSAFE_RADIUS_SECRETS:
-            errors.append("RADIUS_SECRET is missing or uses an unsafe default")
+            # Only require a strong secret when Radius transport or mapping is actually used.
+            if settings.radius_enabled or radius_identity_active or settings.radius_entitlement_mapping_enabled:
+                errors.append("RADIUS_SECRET is missing or uses an unsafe default")
         if (
             settings.admin_bootstrap_password is not None
             and settings.admin_bootstrap_password in UNSAFE_ADMIN_PASSWORDS

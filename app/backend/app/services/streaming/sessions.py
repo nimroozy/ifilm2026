@@ -53,6 +53,7 @@ def create_playback_session(
     client_ip: str | None = None,
     user_agent: str | None = None,
     created_by_admin: AdminUser | None = None,
+    device_session_id: int | None = None,
 ) -> tuple[MediaPlaybackSession, str]:
     """Create a session. Returns (session, raw_token). Raw token only returned once."""
     cfg = settings or get_settings()
@@ -89,6 +90,7 @@ def create_playback_session(
         ),
         client_ip=client_ip,
         user_agent=(user_agent[:512] if user_agent else None),
+        device_session_id=device_session_id if isinstance(principal, Subscriber) else None,
     )
     db.add(session)
     db.commit()
