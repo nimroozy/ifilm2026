@@ -18,9 +18,17 @@ DENY_ACCOUNT_DISABLED = "account_disabled"
 DENY_SERVICE_EXPIRED = "service_expired"
 DENY_SERVICE_INACTIVE = "service_inactive"
 DENY_ENTITLEMENT_MISSING = "entitlement_missing"
+DENY_ENTITLEMENT_UNVERIFIED = "entitlement_unverified"
 DENY_PROVIDER_UNAVAILABLE = "provider_unavailable"
 DENY_CACHE_EXPIRED = "entitlement_cache_expired"
 DENY_DEVICE_LIMIT = "device_limit_exceeded"
+DENY_MALFORMED_EXPIRY = "malformed_expiry"
+DENY_UNKNOWN_PACKAGE = "unknown_package"
+
+
+def _package_denied(package_name: str | None) -> bool:
+    name = (package_name or "").strip().lower()
+    return name in {"", "unknown", "none", "n/a"}
 
 
 @dataclass(frozen=True)
@@ -74,9 +82,9 @@ def _evaluate_local(subscriber: Subscriber, *, source: str, checked_at: datetime
     elif service not in {"active"}:
         denial = DENY_SERVICE_INACTIVE
         reason = "Service entitlement is not active"
-    elif not subscriber.package:
-        denial = DENY_ENTITLEMENT_MISSING
-        reason = "Package entitlement is missing"
+    elif _package_denied(subscriber.package):
+        denial = DENY_UNKNOWN_PACKAGE
+        reason = "Package entitlement is missing or unknown"
 
     return EntitlementResult(
         allowed=denial is None,
@@ -329,9 +337,9 @@ def entitlement_from_auth_result(
         elif service_status != "active":
             denial = DENY_SERVICE_INACTIVE
             reason = "Service entitlement is not active"
-        elif not package_name:
-            denial = DENY_ENTITLEMENT_MISSING
-            reason = "Package entitlement is missing"
+        elif _package_denied(package_name):
+            denial = DENY_UNKNOWN_PACKAGE
+            reason = "Package entitlement is missing or unknown"
     return EntitlementResult(
         allowed=denial is None,
         account_status=account_status,

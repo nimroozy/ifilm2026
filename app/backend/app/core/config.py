@@ -29,12 +29,24 @@ class Settings(BaseSettings):
 
     # Subscriber identity: fixture | radius | disabled
     # fixture is rejected outside development/test.
+    # Default disabled — live Radius must not be enabled in production without
+    # staging-verified entitlement attribute mapping.
     subscriber_identity_mode: str = "disabled"
     subscriber_max_devices_default: int = 3
     entitlement_cache_ttl_seconds: int = 300
     entitlement_cache_grace_seconds: int = 0  # expired cache never authorizes
     subscriber_login_rate_limit: int = 10
     subscriber_login_rate_window_seconds: int = 60
+
+    # Live Radius entitlement attribute mapping (DISABLED by default).
+    # Access-Accept alone never grants playback. Mapping must be staging-verified.
+    radius_entitlement_mapping_enabled: bool = False
+    radius_attr_package: str = ""
+    radius_attr_branch: str = ""
+    radius_attr_expiration: str = ""
+    radius_attr_account_status: str = ""
+    radius_attr_service_status: str = ""
+    radius_attr_max_devices: str = ""
 
     admin_bootstrap_username: str = "admin"
     # Required only for the explicit seed command; never defaults to a known password.

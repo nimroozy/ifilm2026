@@ -3,6 +3,16 @@
 Narrow entitlement layer for subscriber playback (Phase 11).  
 **Does not** include online payments, billing collection, or plan purchase.
 
+> **PRODUCTION SAFETY — READ FIRST**
+>
+> - **Live SAS Radius authentication is unverified.**
+> - **Radius attribute-to-entitlement mapping requires staging validation.**
+> - **Production rollout is blocked until staging verification is complete.**
+> - Live Radius entitlement mapping defaults to **disabled**.
+> - **Access-Accept alone must never grant playback.**
+> - Playback requires a separately validated entitlement result.
+> - Unknown, missing, malformed, or unverified Radius entitlement attributes **fail closed**.
+
 ## Result shape
 
 ```json
@@ -33,11 +43,14 @@ Narrow entitlement layer for subscriber playback (Phase 11).
 
 | Condition | Playback |
 | --- | --- |
+| Access-Accept without validated entitlement attrs | Deny |
+| Entitlement mapping disabled | Deny |
 | Provider unavailable, no valid allowed cache | Deny |
 | Cache expired | Deny (`entitlement_cache_expired`) |
 | Account suspended / disabled | Deny |
 | Service expired / inactive | Deny |
-| Package missing | Deny |
+| Package missing / `unknown` | Deny |
+| Malformed expiry | Deny |
 | `ENTITLEMENT_CACHE_GRACE_SECONDS` | Default `0` — no offline grace |
 
 Existing playback sessions: opaque HLS tokens remain until expiry/revoke; **new** sessions fail closed when entitlement cannot be confirmed.
@@ -47,7 +60,7 @@ Existing playback sessions: opaque HLS tokens remain until expiry/revoke; **new*
 Must all pass:
 
 1. Authenticated subscriber JWT
-2. Active account + active service entitlement
+2. Active account + active service entitlement (separately validated — not Access-Accept alone)
 3. Entitlement not expired
 4. Content published and visible (Phase 9)
 5. Active completed HLS package
@@ -81,6 +94,7 @@ Branch/package strings are **display + entitlement snapshot fields**, not client
 - No entitlement spoofing via request body
 - No stale expired cache authorization
 - No raw provider errors to clients
+- Fixture provider forbidden in production
 
 ## Deferred
 
