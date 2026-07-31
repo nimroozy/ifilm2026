@@ -96,10 +96,9 @@ services:
       RADIUS_ENABLED: ${RADIUS_ENABLED:-false}
       RADIUS_MODE: ${RADIUS_MODE:-mock}
       RADIUS_SECRET: ${RADIUS_SECRET:-}
-      RADIUS_MOCK_USERS: ${RADIUS_MOCK_USERS:-[]}
+      # RADIUS_MOCK_USERS / CORS_ORIGINS come from env_file (JSON) — do not interpolate here.
       REDIS_REQUIRED: ${REDIS_REQUIRED:-true}
       CSP_MODE: ${CSP_MODE:-production}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
       ADMIN_BOOTSTRAP_USERNAME: ${ADMIN_BOOTSTRAP_USERNAME:-staging_admin}
       ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:-}
       ADMIN_BOOTSTRAP_EMAIL: ${ADMIN_BOOTSTRAP_EMAIL:-staging-admin@example.invalid}
@@ -124,7 +123,11 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/health/live"]
+      test:
+        [
+          "CMD-SHELL",
+          "set -a; . /run/ifilm/runtime.env; set +a; curl -fsS http://127.0.0.1:8000/api/health/live",
+        ]
       interval: 20s
       timeout: 5s
       retries: 5
@@ -156,7 +159,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "python -c \"from app.services.media_processing.ffmpeg import binary_available; from app.core.config import get_settings; s=get_settings(); ok=binary_available(s.ffprobe_binary) and (binary_available(s.ffmpeg_binary) if s.enable_hls_encoding else True); raise SystemExit(0 if ok else 1)\"",
+          "set -a; . /run/ifilm/runtime.env; set +a; python -c \"from app.services.media_processing.ffmpeg import binary_available; from app.core.config import get_settings; get_settings.cache_clear(); s=get_settings(); ok=binary_available(s.ffprobe_binary) and (binary_available(s.ffmpeg_binary) if s.enable_hls_encoding else True); raise SystemExit(0 if ok else 1)\"",
         ]
       interval: 30s
       timeout: 10s
@@ -187,7 +190,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "python -c \"import sqlalchemy as sa; from app.core.config import get_settings; e=sa.create_engine(get_settings().database_url); e.connect().close()\"",
+          "set -a; . /run/ifilm/runtime.env; set +a; python -c \"import sqlalchemy as sa; from app.core.config import get_settings; get_settings.cache_clear(); e=sa.create_engine(get_settings().database_url); e.connect().close()\"",
         ]
       interval: 30s
       timeout: 10s

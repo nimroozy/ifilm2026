@@ -23,8 +23,8 @@ raise SystemExit("backend-api not healthy")
 PY
 
 echo "==> alembic upgrade head"
-"${COMPOSE[@]}" exec -T backend-api alembic upgrade head
+"${COMPOSE[@]}" exec -T backend-api sh -c 'set -a; . /run/ifilm/runtime.env; set +a; alembic upgrade head'
 echo "==> alembic current / heads"
-"${COMPOSE[@]}" exec -T backend-api alembic current
-"${COMPOSE[@]}" exec -T backend-api alembic heads
+"${COMPOSE[@]}" exec -T backend-api sh -c 'set -a; . /run/ifilm/runtime.env; set +a; alembic current'
+"${COMPOSE[@]}" exec -T backend-api sh -c 'set -a; . /run/ifilm/runtime.env; set +a; alembic heads'
 echo "Migration complete. Demo seed was NOT run."

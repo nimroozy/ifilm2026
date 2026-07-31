@@ -18,7 +18,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 COPY docker/entrypoint.staging.sh /entrypoint.staging.sh
 RUN chmod 755 /entrypoint.staging.sh \
-    && mkdir -p /data/media /data/artwork \
+    && rm -f /app/.env \
+    && mkdir -p /data/media /data/artwork /run/ifilm \
     && chown -R ifilm:ifilm /app /data
 
 ENV PYTHONPATH=/app \

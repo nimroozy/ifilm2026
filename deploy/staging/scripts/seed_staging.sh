@@ -10,5 +10,5 @@ if [[ ! -f "$ROOT/deploy/staging/.env.staging" ]]; then
 fi
 
 echo "==> Explicit seed_dev (requires ADMIN_BOOTSTRAP_PASSWORD in env file)"
-"${COMPOSE[@]}" exec -T backend-api python -m scripts.seed_dev
+"${COMPOSE[@]}" exec -T backend-api sh -c 'set -a; . /run/ifilm/runtime.env; set +a; python -m scripts.seed_dev'
 echo "Seed complete."

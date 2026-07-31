@@ -45,7 +45,7 @@ if [[ -f "$ENV_FILE" ]]; then
   done
 
   echo "==> Alembic head"
-  head=$("${COMPOSE[@]}" exec -T backend-api alembic heads 2>/dev/null | tr -d '\r' || true)
+  head=$("${COMPOSE[@]}" exec -T backend-api sh -c 'set -a; . /run/ifilm/runtime.env; set +a; alembic heads' 2>/dev/null | tr -d '\r' || true)
   echo "$head"
   echo "$head" | grep -Eq '010_subscriber_entitlements' && ok "alembic head" || bad "unexpected alembic head"
 
@@ -54,7 +54,7 @@ if [[ -f "$ENV_FILE" ]]; then
     && ok "postgres pg_isready" || bad "postgres pg_isready"
 
   echo "==> DATABASE_URL special-char encoding + connect"
-  "${COMPOSE[@]}" exec -T backend-api python - <<'PY' && ok "database url encode+connect" || bad "database url encode+connect"
+  "${COMPOSE[@]}" exec -T backend-api sh -c 'set -a; . /run/ifilm/runtime.env; set +a; python -' <<'PY' && ok "database url encode+connect" || bad "database url encode+connect"
 import os
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
@@ -86,7 +86,7 @@ PY
   echo "==> Redis connectivity"
   "${COMPOSE[@]}" exec -T redis sh -c 'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli ping' | grep -q PONG \
     && ok "redis ping" || bad "redis ping"
-  "${COMPOSE[@]}" exec -T backend-api python -c "import redis,os; redis.from_url(os.environ['REDIS_URL']).ping()" \
+  "${COMPOSE[@]}" exec -T backend-api sh -c 'set -a; . /run/ifilm/runtime.env; set +a; python -c "import redis,os; redis.from_url(os.environ[\"REDIS_URL\"]).ping()"' \
     && ok "api redis url ping" || bad "api redis url ping"
 
   echo "==> FFmpeg / ffprobe on media worker"
