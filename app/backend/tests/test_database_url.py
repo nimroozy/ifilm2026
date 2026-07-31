@@ -5,15 +5,14 @@ from __future__ import annotations
 import os
 
 import pytest
-from sqlalchemy import create_engine, text
-from sqlalchemy.engine import make_url
-
 from app.core.db_url import (
     build_postgres_sqlalchemy_url,
     build_redis_url,
     redact_database_url,
     validate_database_url,
 )
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
 
 SPECIAL_PASSWORD = "p@ss:/#w0rd%X"
 
