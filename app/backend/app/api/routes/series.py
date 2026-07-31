@@ -95,7 +95,11 @@ def _ensure_unique_season_number(
 
 
 def _public_seasons(series: Series) -> list[Season]:
-    return [s for s in (series.seasons or []) if s.deleted_at is None and s.status == "published"]
+    return [
+        s
+        for s in (series.seasons or [])
+        if s.deleted_at is None and s.status == "published"
+    ]
 
 
 def _public_episodes(series: Series, season_number: int | None = None) -> list[Episode]:

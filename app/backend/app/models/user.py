@@ -31,9 +31,7 @@ class Device(Base):
     __tablename__ = "devices"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    subscriber_id: Mapped[int] = mapped_column(
-        ForeignKey("subscribers.id", ondelete="CASCADE"), index=True
-    )
+    subscriber_id: Mapped[int] = mapped_column(ForeignKey("subscribers.id", ondelete="CASCADE"), index=True)
     name: Mapped[str] = mapped_column(String(255), default="")
     type: Mapped[str] = mapped_column(String(32), default="desktop")
     browser: Mapped[str] = mapped_column(String(100), default="")
@@ -44,14 +42,10 @@ class Device(Base):
 
 class WatchlistItem(Base):
     __tablename__ = "watchlist_items"
-    __table_args__ = (
-        UniqueConstraint("subscriber_id", "content_type", "content_id", name="uq_watchlist"),
-    )
+    __table_args__ = (UniqueConstraint("subscriber_id", "content_type", "content_id", name="uq_watchlist"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    subscriber_id: Mapped[int] = mapped_column(
-        ForeignKey("subscribers.id", ondelete="CASCADE"), index=True
-    )
+    subscriber_id: Mapped[int] = mapped_column(ForeignKey("subscribers.id", ondelete="CASCADE"), index=True)
     content_type: Mapped[str] = mapped_column(String(32), nullable=False)
     content_id: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -61,9 +55,7 @@ class WatchHistory(Base):
     __tablename__ = "watch_history"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    subscriber_id: Mapped[int] = mapped_column(
-        ForeignKey("subscribers.id", ondelete="CASCADE"), index=True
-    )
+    subscriber_id: Mapped[int] = mapped_column(ForeignKey("subscribers.id", ondelete="CASCADE"), index=True)
     content_type: Mapped[str] = mapped_column(String(32), nullable=False)
     content_id: Mapped[int] = mapped_column(Integer, nullable=False)
     episode_id: Mapped[int | None] = mapped_column(Integer, nullable=True)

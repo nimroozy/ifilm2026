@@ -63,9 +63,7 @@ async def upload_file(upload_id: int, db: DbSession, _: CurrentAdmin, file: Uplo
                     break
                 size += len(chunk)
                 if size > settings.upload_max_bytes:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST, detail="File too large"
-                    )
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File too large")
                 await out.write(chunk)
     except HTTPException:
         if dest.exists():

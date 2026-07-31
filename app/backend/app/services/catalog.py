@@ -28,17 +28,13 @@ def not_deleted(query, model):
     return query.filter(model.deleted_at.is_(None))
 
 
-def genre_out(
-    genre: Genre, *, movie_count: int | None = None, series_count: int | None = None
-) -> GenreOut:
+def genre_out(genre: Genre, *, movie_count: int | None = None, series_count: int | None = None) -> GenreOut:
     return GenreOut(
         id=genre.id,
         name=genre.name,
         slug=genre.slug,
         description=genre.description or "",
-        movie_count=movie_count
-        if movie_count is not None
-        else len([m for m in (genre.movies or []) if m.deleted_at is None]),
+        movie_count=movie_count if movie_count is not None else len([m for m in (genre.movies or []) if m.deleted_at is None]),
         series_count=series_count
         if series_count is not None
         else len([s for s in (genre.series or []) if s.deleted_at is None]),
@@ -95,9 +91,7 @@ def movie_out(movie: Movie) -> MovieOut:
 def series_out(series: Series) -> SeriesOut:
     genres = [genre_out(g, movie_count=0, series_count=0) for g in (series.genre_links or [])]
     seasons = [s for s in (series.seasons or []) if s.deleted_at is None]
-    episode_count = sum(
-        len([e for e in (s.episodes or []) if e.deleted_at is None]) for s in seasons
-    )
+    episode_count = sum(len([e for e in (s.episodes or []) if e.deleted_at is None]) for s in seasons)
     return SeriesOut(
         id=series.id,
         title=series.title,
@@ -186,9 +180,7 @@ def load_genres(db: Session, genre_ids: list[int]) -> list[Genre]:
         return []
     genres = db.query(Genre).filter(Genre.id.in_(genre_ids)).all()
     if len(genres) != len(set(genre_ids)):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="One or more genres not found"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="One or more genres not found")
     return genres
 
 
@@ -197,9 +189,7 @@ def ensure_unique_movie_slug(db: Session, slug: str, *, exclude_id: int | None =
     if exclude_id is not None:
         q = q.filter(Movie.id != exclude_id)
     if q.first():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Movie slug already exists"
-        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Movie slug already exists")
 
 
 def ensure_unique_series_slug(db: Session, slug: str, *, exclude_id: int | None = None) -> None:
@@ -207,9 +197,7 @@ def ensure_unique_series_slug(db: Session, slug: str, *, exclude_id: int | None 
     if exclude_id is not None:
         q = q.filter(Series.id != exclude_id)
     if q.first():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Series slug already exists"
-        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Series slug already exists")
 
 
 def ensure_unique_genre_slug(db: Session, slug: str, *, exclude_id: int | None = None) -> None:
@@ -217,23 +205,17 @@ def ensure_unique_genre_slug(db: Session, slug: str, *, exclude_id: int | None =
     if exclude_id is not None:
         q = q.filter(Genre.id != exclude_id)
     if q.first():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Genre slug already exists"
-        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Genre slug already exists")
 
 
-def ensure_unique_imdb(
-    db: Session, model, imdb_id: str | None, *, exclude_id: int | None = None
-) -> None:
+def ensure_unique_imdb(db: Session, model, imdb_id: str | None, *, exclude_id: int | None = None) -> None:
     if not imdb_id:
         return
     q = not_deleted(db.query(model), model).filter(model.imdb_id == imdb_id)
     if exclude_id is not None:
         q = q.filter(model.id != exclude_id)
     if q.first():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="IMDb identifier already exists"
-        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="IMDb identifier already exists")
 
 
 def apply_sort(query, model, sort: str):
@@ -273,9 +255,7 @@ def filter_catalog_query(
         query = query.filter(model.status == status)
     if q:
         like = f"%{q}%"
-        query = query.filter(
-            or_(model.title.ilike(like), model.original_title.ilike(like), model.slug.ilike(like))
-        )
+        query = query.filter(or_(model.title.ilike(like), model.original_title.ilike(like), model.slug.ilike(like)))
     if year is not None:
         query = query.filter(model.release_year == year)
     if language:
@@ -286,20 +266,19 @@ def filter_catalog_query(
         query = query.filter(model.is_trending.is_(trending))
     if genre:
         if model is Movie:
-            query = query.join(Movie.genre_links).filter(
-                or_(Genre.slug == genre, Genre.name.ilike(genre))
-            )
+            query = query.join(Movie.genre_links).filter(or_(Genre.slug == genre, Genre.name.ilike(genre)))
         elif model is Series:
-            query = query.join(Series.genre_links).filter(
-                or_(Genre.slug == genre, Genre.name.ilike(genre))
-            )
+            query = query.join(Series.genre_links).filter(or_(Genre.slug == genre, Genre.name.ilike(genre)))
         query = query.distinct()
     return query
 
 
 def get_movie(db: Session, movie_id: int, *, include_deleted: bool = False) -> Movie:
     movie = (
-        db.query(Movie).options(joinedload(Movie.genre_links)).filter(Movie.id == movie_id).first()
+        db.query(Movie)
+        .options(joinedload(Movie.genre_links))
+        .filter(Movie.id == movie_id)
+        .first()
     )
     if not movie or (movie.deleted_at is not None and not include_deleted):
         raise HTTPException(status_code=404, detail="Movie not found")
@@ -309,9 +288,7 @@ def get_movie(db: Session, movie_id: int, *, include_deleted: bool = False) -> M
 def get_series(db: Session, series_id: int, *, include_deleted: bool = False) -> Series:
     series = (
         db.query(Series)
-        .options(
-            joinedload(Series.genre_links), joinedload(Series.seasons).joinedload(Season.episodes)
-        )
+        .options(joinedload(Series.genre_links), joinedload(Series.seasons).joinedload(Season.episodes))
         .filter(Series.id == series_id)
         .first()
     )
@@ -336,8 +313,9 @@ def resolve_movie(db: Session, id_or_slug: str, *, published_only: bool = False)
 
 
 def resolve_series(db: Session, id_or_slug: str, *, published_only: bool = False) -> Series:
-    query = db.query(Series).options(
-        joinedload(Series.genre_links), joinedload(Series.seasons).joinedload(Season.episodes)
+    query = (
+        db.query(Series)
+        .options(joinedload(Series.genre_links), joinedload(Series.seasons).joinedload(Season.episodes))
     )
     query = not_deleted(query, Series)
     if id_or_slug.isdigit():
@@ -374,20 +352,14 @@ def publish_episode(db: Session, episode: Episode) -> Episode:
     if not series or series.deleted_at is not None:
         raise HTTPException(status_code=400, detail="Cannot publish episode without a series")
     if season.status != "published":
-        raise HTTPException(
-            status_code=400, detail="Parent season must be published before publishing an episode"
-        )
+        raise HTTPException(status_code=400, detail="Parent season must be published before publishing an episode")
     if series.status != "published":
-        raise HTTPException(
-            status_code=400, detail="Parent series must be published before publishing an episode"
-        )
+        raise HTTPException(status_code=400, detail="Parent series must be published before publishing an episode")
     publish_entity(episode)
     return episode
 
 
-def make_slug_for_movie(
-    db: Session, title: str, slug: str | None, *, exclude_id: int | None = None
-) -> str:
+def make_slug_for_movie(db: Session, title: str, slug: str | None, *, exclude_id: int | None = None) -> str:
     try:
         candidate = slug_or_from_title(slug, title)
     except ValueError as exc:
@@ -396,9 +368,7 @@ def make_slug_for_movie(
     return candidate
 
 
-def make_slug_for_series(
-    db: Session, title: str, slug: str | None, *, exclude_id: int | None = None
-) -> str:
+def make_slug_for_series(db: Session, title: str, slug: str | None, *, exclude_id: int | None = None) -> str:
     try:
         candidate = slug_or_from_title(slug, title)
     except ValueError as exc:

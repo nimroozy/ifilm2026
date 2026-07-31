@@ -30,23 +30,13 @@ def _seed_visibility_matrix(admin_headers, client, db_session):
     draft = client.post(
         "/api/admin/movies",
         headers=admin_headers,
-        json={
-            "title": "Draft Movie",
-            "slug": "draft-movie",
-            "status": "draft",
-            "is_featured": True,
-        },
+        json={"title": "Draft Movie", "slug": "draft-movie", "status": "draft", "is_featured": True},
     ).json()
 
     archived = client.post(
         "/api/admin/movies",
         headers=admin_headers,
-        json={
-            "title": "Archived Movie",
-            "slug": "archived-movie",
-            "status": "published",
-            "is_trending": True,
-        },
+        json={"title": "Archived Movie", "slug": "archived-movie", "status": "published", "is_trending": True},
     ).json()
     client.delete(f"/api/admin/movies/{archived['id']}", headers=admin_headers)
 
@@ -66,12 +56,7 @@ def _seed_visibility_matrix(admin_headers, client, db_session):
     draft_series = client.post(
         "/api/admin/series",
         headers=admin_headers,
-        json={
-            "title": "Draft Series",
-            "slug": "draft-series",
-            "status": "draft",
-            "is_featured": True,
-        },
+        json={"title": "Draft Series", "slug": "draft-series", "status": "draft", "is_featured": True},
     ).json()
 
     archived_series = client.post(

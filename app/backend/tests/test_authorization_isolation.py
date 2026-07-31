@@ -51,14 +51,11 @@ def test_subscriber_token_forbidden_on_admin(client):
     assert login.status_code == 200
     token = login.json()["access_token"]
     assert client.get("/api/admin/movies", headers=_headers(token)).status_code == 403
-    assert (
-        client.post(
-            "/api/admin/movies",
-            headers=_headers(token),
-            json={"title": "Nope"},
-        ).status_code
-        == 403
-    )
+    assert client.post(
+        "/api/admin/movies",
+        headers=_headers(token),
+        json={"title": "Nope"},
+    ).status_code == 403
 
 
 def test_movies_read_cannot_mutate(client, db_session):
@@ -148,9 +145,7 @@ def test_legacy_movies_alias_grants_movie_manage_not_genres(client, db_session):
 
 
 def test_disabled_admin_rejected(client, db_session):
-    token = _make_admin(
-        db_session, username="disabled-admin", permissions=["movies.manage"], active=False
-    )
+    token = _make_admin(db_session, username="disabled-admin", permissions=["movies.manage"], active=False)
     assert client.get("/api/admin/movies", headers=_headers(token)).status_code == 401
 
 

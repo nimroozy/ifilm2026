@@ -1,3 +1,4 @@
+
 from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import FileResponse
 
@@ -64,9 +65,7 @@ def get_stream_manifest(
         title = episode.title
         hls_path = episode.hls_path
         if not hls_path:
-            hls_path = write_placeholder_package(
-                "series", content_id, qualities, episode_id=episode.id
-            )
+            hls_path = write_placeholder_package("series", content_id, qualities, episode_id=episode.id)
             episode.hls_path = hls_path
             db.add(episode)
             db.commit()

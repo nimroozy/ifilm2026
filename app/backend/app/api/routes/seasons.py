@@ -49,7 +49,11 @@ def list_public_season_episodes(season_id: int, db: DbSession) -> list[EpisodeOu
     ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Season not found")
     episodes = sorted(
-        [e for e in (season.episodes or []) if e.deleted_at is None and e.status == "published"],
+        [
+            e
+            for e in (season.episodes or [])
+            if e.deleted_at is None and e.status == "published"
+        ],
         key=lambda e: e.episode_number,
     )
     return [episode_out(e) for e in episodes]

@@ -52,11 +52,7 @@ class CDNSyncJob(Base):
     content_type: Mapped[str] = mapped_column(String(32), default="movie")
     content_id: Mapped[int] = mapped_column(Integer, nullable=False)
     hls_path: Mapped[str] = mapped_column(String(1024), nullable=False)
-    status: Mapped[str] = mapped_column(
-        String(32), default="pending"
-    )  # pending|syncing|completed|failed
+    status: Mapped[str] = mapped_column(String(32), default="pending")  # pending|syncing|completed|failed
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, onupdate=utcnow
-    )
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

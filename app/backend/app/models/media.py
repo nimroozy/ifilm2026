@@ -19,18 +19,12 @@ class UploadJob(Base):
     content_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     size_bytes: Mapped[int] = mapped_column(Integer, default=0)
     stored_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
-    status: Mapped[str] = mapped_column(
-        String(32), default="pending"
-    )  # pending|uploading|completed|failed
+    status: Mapped[str] = mapped_column(String(32), default="pending")  # pending|uploading|completed|failed
     progress: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_by_admin_id: Mapped[int | None] = mapped_column(
-        ForeignKey("admin_users.id"), nullable=True
-    )
+    created_by_admin_id: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, onupdate=utcnow
-    )
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
 class EncodingJob(Base):
@@ -46,13 +40,9 @@ class EncodingJob(Base):
     stage: Mapped[str] = mapped_column(String(64), default="queued")
     worker: Mapped[str] = mapped_column(String(100), default="")
     qualities: Mapped[list] = mapped_column(JSON, default=list)
-    status: Mapped[str] = mapped_column(
-        String(32), default="waiting"
-    )  # waiting|processing|completed|failed
+    status: Mapped[str] = mapped_column(String(32), default="waiting")  # waiting|processing|completed|failed
     output_hls_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     eta_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, onupdate=utcnow
-    )
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
