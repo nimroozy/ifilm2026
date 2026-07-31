@@ -10,6 +10,11 @@ export function StatusBadge({ status }: { status: string }) {
     published: 'bg-green-500/20 text-green-500',
     draft: 'bg-yellow-500/20 text-yellow-500',
     archived: 'bg-muted text-muted-foreground',
+    completed: 'bg-green-500/20 text-green-500',
+    pending: 'bg-yellow-500/20 text-yellow-500',
+    uploading: 'bg-blue-500/20 text-blue-500',
+    failed: 'bg-red-500/20 text-red-500',
+    cancelled: 'bg-muted text-muted-foreground',
   };
   return (
     <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium capitalize ${styles[status] || 'bg-muted text-muted-foreground'}`}>

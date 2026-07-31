@@ -27,6 +27,8 @@ SUPER_PERMISSIONS = [
     "genres.read",
     "genres.manage",
     "upload",
+    "upload.read",
+    "upload.manage",
     "encoding",
     "cdn",
     "users",

@@ -43,6 +43,9 @@ class Settings(BaseSettings):
             "application/octet-stream",
         ]
     )
+    # When true, completing an upload whose SHA256 matches another completed
+    # media asset is rejected (409). Failed/cancelled assets are ignored.
+    upload_reject_duplicate_checksum: bool = True
 
     redis_url: str = "redis://localhost:6379/0"
     worker_queue_name: str = "ifilm"

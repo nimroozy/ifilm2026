@@ -368,6 +368,63 @@ export type GenreCreatePayload = {
 
 export type GenreUpdatePayload = Partial<GenreCreatePayload>;
 
+export type MediaCategory = 'originals' | 'posters' | 'backdrops' | 'trailers' | 'subtitles';
+
+export interface MediaAssetDto {
+  id: string;
+  movie_id: number | null;
+  series_id: number | null;
+  season_id: number | null;
+  episode_id: number | null;
+  original_filename: string;
+  stored_filename: string;
+  mime_type: string;
+  extension: string;
+  size_bytes: number;
+  checksum_sha256: string | null;
+  width: number | null;
+  height: number | null;
+  duration_seconds: number | null;
+  storage_backend: string;
+  storage_path: string | null;
+  category: MediaCategory | string;
+  upload_status: string;
+  processing_status: string;
+  created_by_admin_id: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface UploadSessionDto {
+  id: string;
+  media_asset_id: string;
+  expected_size_bytes: number;
+  bytes_received: number;
+  status: string;
+  progress_percent: number;
+  error: string | null;
+  expires_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  media_asset?: MediaAssetDto | null;
+}
+
+export interface UploadSessionCreatePayload {
+  filename: string;
+  mime_type: string;
+  size_bytes: number;
+  category?: MediaCategory;
+  movie_id?: number | null;
+  series_id?: number | null;
+  season_id?: number | null;
+  episode_id?: number | null;
+}
+
+export interface UploadSessionCreateResult {
+  session: UploadSessionDto;
+  media_asset: MediaAssetDto;
+}
+
 function resolveBaseURL(): string {
   const configured = getAPIBaseURL();
   if (!configured || configured === '/') {
@@ -721,6 +778,45 @@ export const adminApi = {
 
   async listUploads() {
     const { data } = await adminHttp.get('/admin/uploads');
+    return data;
+  },
+
+  async createMediaUploadSession(payload: UploadSessionCreatePayload) {
+    const { data } = await adminHttp.post<UploadSessionCreateResult>('/admin/media/sessions', payload);
+    return data;
+  },
+
+  async uploadMediaSessionFile(sessionId: string, file: File, onUploadProgress?: (pct: number) => void) {
+    const form = new FormData();
+    form.append('file', file);
+    const { data } = await adminHttp.put<UploadSessionDto>(`/admin/media/sessions/${sessionId}`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 0,
+      onUploadProgress: (event) => {
+        if (!onUploadProgress || !event.total) return;
+        onUploadProgress(Math.min(100, Math.round((event.loaded * 100) / event.total)));
+      },
+    });
+    return data;
+  },
+
+  async getMediaUploadSession(sessionId: string) {
+    const { data } = await adminHttp.get<UploadSessionDto>(`/admin/media/sessions/${sessionId}`);
+    return data;
+  },
+
+  async cancelMediaUploadSession(sessionId: string) {
+    const { data } = await adminHttp.delete<UploadSessionDto>(`/admin/media/sessions/${sessionId}`);
+    return data;
+  },
+
+  async listMediaAssets(params?: { page?: number; page_size?: number; status?: string }) {
+    const { data } = await adminHttp.get<Envelope<MediaAssetDto>>('/admin/media/assets', { params });
+    return unwrapList(data);
+  },
+
+  async getMediaAsset(assetId: string) {
+    const { data } = await adminHttp.get<MediaAssetDto>(`/admin/media/assets/${assetId}`);
     return data;
   },
 
