@@ -12,6 +12,11 @@ const listMediaAssets = vi.fn();
 const createMediaUploadSession = vi.fn();
 const uploadMediaSessionFile = vi.fn();
 const getMediaAsset = vi.fn();
+const listAssetProcessingJobs = vi.fn();
+const getProcessingStatus = vi.fn();
+const queueMediaProbe = vi.fn();
+const retryProcessingJob = vi.fn();
+const cancelProcessingJob = vi.fn();
 
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
@@ -24,6 +29,11 @@ vi.mock('@/lib/api', async () => {
       createMediaUploadSession: (...args: unknown[]) => createMediaUploadSession(...args),
       uploadMediaSessionFile: (...args: unknown[]) => uploadMediaSessionFile(...args),
       getMediaAsset: (...args: unknown[]) => getMediaAsset(...args),
+      listAssetProcessingJobs: (...args: unknown[]) => listAssetProcessingJobs(...args),
+      getProcessingStatus: (...args: unknown[]) => getProcessingStatus(...args),
+      queueMediaProbe: (...args: unknown[]) => queueMediaProbe(...args),
+      retryProcessingJob: (...args: unknown[]) => retryProcessingJob(...args),
+      cancelProcessingJob: (...args: unknown[]) => cancelProcessingJob(...args),
     },
   };
 });
@@ -55,6 +65,15 @@ describe('media upload admin pages', () => {
     createMediaUploadSession.mockReset();
     uploadMediaSessionFile.mockReset();
     getMediaAsset.mockReset();
+    listAssetProcessingJobs.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 1 });
+    getProcessingStatus.mockResolvedValue({
+      enabled: true,
+      ffmpeg_available: true,
+      ffprobe_available: true,
+    });
+    queueMediaProbe.mockReset();
+    retryProcessingJob.mockReset();
+    cancelProcessingJob.mockReset();
   });
 
   afterEach(() => {

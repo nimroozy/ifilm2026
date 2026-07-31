@@ -29,6 +29,9 @@ SUPER_PERMISSIONS = [
     "upload",
     "upload.read",
     "upload.manage",
+    "processing",
+    "processing.read",
+    "processing.manage",
     "encoding",
     "cdn",
     "users",
@@ -67,7 +70,11 @@ def seed_development_data(db: Session, *, include_demo_catalog: bool = True) -> 
         db.add(role)
         db.flush()
 
-    admin = db.query(AdminUser).filter(AdminUser.username == settings.admin_bootstrap_username).one_or_none()
+    admin = (
+        db.query(AdminUser)
+        .filter(AdminUser.username == settings.admin_bootstrap_username)
+        .one_or_none()
+    )
     if admin is None:
         admin = AdminUser(
             username=settings.admin_bootstrap_username,

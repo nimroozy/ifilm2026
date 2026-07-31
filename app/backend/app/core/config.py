@@ -63,6 +63,18 @@ class Settings(BaseSettings):
     enable_encoding: bool = False
     enable_cdn_sync: bool = False
     enable_radius_login: bool = False
+    enable_media_processing: bool = False
+
+    ffmpeg_binary: str = "ffmpeg"
+    ffprobe_binary: str = "ffprobe"
+    media_processing_worker_id: str = ""
+    media_processing_poll_seconds: float = 2.0
+    media_processing_heartbeat_seconds: float = 10.0
+    media_processing_stale_after_seconds: int = 120
+    media_processing_max_attempts: int = 3
+    media_processing_retry_base_seconds: int = 30
+    media_processing_probe_timeout_seconds: int = 120
+    media_processing_log_max_bytes: int = 65536
 
     cdn_http_timeout_seconds: int = 10
 

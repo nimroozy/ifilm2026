@@ -12,6 +12,8 @@ Legacy coarse keys from the foundation seed remain supported with a narrow map:
 | `genres.manage` | `genres.manage`, `genres` |
 | `upload.read` | `upload.read`, `upload.manage`, `upload` |
 | `upload.manage` | `upload.manage`, `upload` |
+| `processing.read` | `processing.read`, `processing.manage`, `processing` |
+| `processing.manage` | `processing.manage`, `processing` |
 
 Important: `movies` / `series` do **not** grant genre management or unrelated
 catalog mutations. `movies.read` alone cannot mutate movies. Coarse `upload`
@@ -43,6 +45,8 @@ PERMISSION_ALIASES: dict[str, frozenset[str]] = {
     "genres.manage": frozenset({"genres.manage", "genres"}),
     "upload.read": frozenset({"upload.read", "upload.manage", "upload"}),
     "upload.manage": frozenset({"upload.manage", "upload"}),
+    "processing.read": frozenset({"processing.read", "processing.manage", "processing"}),
+    "processing.manage": frozenset({"processing.manage", "processing"}),
 }
 
 
@@ -52,7 +56,9 @@ def _token_payload(credentials: HTTPAuthorizationCredentials | None) -> dict:
     try:
         return safe_decode_token(credentials.credentials)
     except TokenError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        ) from exc
 
 
 def get_current_admin(
@@ -98,7 +104,9 @@ def get_current_subscriber(
 ) -> Subscriber:
     payload = _token_payload(credentials)
     if payload.get("typ") != "subscriber":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Subscriber token required")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Subscriber token required"
+        )
     user = db.get(Subscriber, int(payload["sub"]))
     if not user or user.status != "active":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Subscriber not found")

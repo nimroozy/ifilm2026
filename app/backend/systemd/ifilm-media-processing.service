@@ -1,0 +1,21 @@
+[Unit]
+Description=iFilm media processing worker (ffprobe)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=ifilm
+Group=ifilm
+WorkingDirectory=/opt/ifilm/app/backend
+EnvironmentFile=-/etc/ifilm/media-processing.env
+Environment=PYTHONPATH=/opt/ifilm/app/backend
+ExecStart=/opt/ifilm/venv/bin/python -m app.workers.media_processing
+Restart=on-failure
+RestartSec=5
+# Read completed uploads; probing does not modify originals.
+ReadWritePaths=/var/lib/ifilm/media
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

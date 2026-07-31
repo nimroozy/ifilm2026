@@ -57,6 +57,24 @@ class MediaAssetOut(ORMModel):
     category: str
     upload_status: str
     processing_status: str
+    container_format: str | None = None
+    overall_bitrate: int | None = None
+    video_codec: str | None = None
+    video_profile: str | None = None
+    display_aspect_ratio: str | None = None
+    video_frame_rate: float | None = None
+    video_bitrate: int | None = None
+    pixel_format: str | None = None
+    audio_codec: str | None = None
+    audio_channels: int | None = None
+    audio_channel_layout: str | None = None
+    audio_sample_rate: int | None = None
+    audio_bitrate: int | None = None
+    audio_stream_count: int | None = None
+    subtitle_stream_count: int | None = None
+    probe_json: dict | None = None
+    probe_version: str | None = None
+    probed_at: datetime | None = None
     created_by_admin_id: int | None
     created_at: datetime | None = None
     updated_at: datetime | None = None
