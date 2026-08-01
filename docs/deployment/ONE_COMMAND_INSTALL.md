@@ -91,24 +91,34 @@ Generated at install time (never stored in git):
 ### Reinstall / existing data
 
 PostgreSQL only applies `POSTGRES_PASSWORD` on **first** data directory init.
-If `/var/lib/ifilm/postgres` already exists, the installer **reuses**
-`POSTGRES_PASSWORD` (and Redis/app secrets) from the existing `/etc/ifilm/ifilm.env`
-instead of generating new ones.
+From `v1.0.1` onward, if `/var/lib/ifilm/postgres` already exists the installer
+**reuses** `POSTGRES_PASSWORD` (and Redis/app secrets) from the existing
+`/etc/ifilm/ifilm.env` instead of generating new ones.
 
-If you see `password authentication failed for user "ifilm"` after a reinstall:
+If you see `password authentication failed for user "ifilm"`:
 
-1. Prefer restoring the previous `/etc/ifilm/ifilm.env` that matches the database, or
-2. Intentionally wipe data and reinstall:
+**Immediate recovery (works with `v1.0.0` too):** wipe the old DB/Redis data
+directories, then reinstall so Postgres can initialize with the new password:
 
 ```bash
-sudo env IFILM_WIPE_DATA=1 IFILM_DELETE_CONFIRM=DELETE-IFILM-DATA \
-  IFILM_CHANNEL=stable IFILM_VERSION=v1.0.0 \
-  bash -c 'curl -fsSL https://raw.githubusercontent.com/nimroozy/ifilm2026/main/install.sh | sudo bash'
+sudo docker compose --env-file /etc/ifilm/ifilm.env \
+  -f /opt/ifilm/current/packaging/compose/docker-compose.production.yml down || true
+sudo rm -rf /var/lib/ifilm/postgres /var/lib/ifilm/redis
+curl -fsSL https://raw.githubusercontent.com/nimroozy/ifilm2026/main/install.sh | sudo \
+  IFILM_CHANNEL=stable IFILM_VERSION=v1.0.0 bash
 ```
 
-After this hotfix ships as a newer stable tag, prefer that `IFILM_VERSION`. Do not wipe if you need to keep catalog/media data without a backup.
+Prefer restoring a backup of the previous matching `/etc/ifilm/ifilm.env` if you
+must keep the existing database. Do not wipe if you need catalog/media data
+without a backup.
 
-**Note:** A failed reinstall that already overwrote `/etc/ifilm/ifilm.env` with a *new* password while keeping old PostgreSQL data cannot self-heal by reusing env credentials — the matching password is gone unless you have a backup of the previous `ifilm.env`. Use the wipe path above for a clean reinstall.
+From `v1.0.1` you can also use the installer wipe opt-in:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nimroozy/ifilm2026/main/install.sh | sudo \
+  IFILM_WIPE_DATA=1 IFILM_DELETE_CONFIRM=DELETE-IFILM-DATA \
+  IFILM_CHANNEL=stable IFILM_VERSION=v1.0.1 bash
+```
 
 ## Production defaults
 
