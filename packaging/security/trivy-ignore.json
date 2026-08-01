@@ -1,0 +1,10 @@
+{
+  "$schema_note": "Versioned vulnerability ignore list for production release gates. Expired entries fail the release.",
+  "version": 1,
+  "policy": {
+    "fail_on_severityities": ["CRITICAL", "HIGH"],
+    "sbom_required": true,
+    "sbom_failure_fails_release": true
+  },
+  "ignores": []
+}

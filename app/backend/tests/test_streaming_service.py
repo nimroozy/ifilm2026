@@ -152,7 +152,15 @@ def test_legacy_media_root_not_exposed(client, db_session):
     assert client.get("/media/originals/secret.bin").status_code == 404
     assert client.get("/media/packages/a/b/master.m3u8").status_code == 404
     assert client.get("/media/packages/a/b/240p/segment_000.ts").status_code == 404
-    assert client.get("/media/../etc/passwd").status_code == 404
+    # Encoded traversal still hits the /media rejector.
+    assert client.get("/media/..%2f..%2fetc/passwd").status_code == 404
+    # httpx/TestClient may normalize /media/../etc/passwd → /etc/passwd before ASGI.
+    # Middleware + SPA hardening must still return 404 and never leak media bytes.
+    traversal = client.get("/media/../etc/passwd")
+    assert traversal.status_code == 404
+    assert b"secret-source" not in traversal.content
+    assert b"#EXTM3U" not in traversal.content
+    assert b"tsdata" not in traversal.content
     # Legacy placeholder HLS route removed.
     assert client.get("/api/media/hls/movie/1/master.m3u8").status_code == 404
     assert client.get("/api/stream/movie/1").status_code == 404

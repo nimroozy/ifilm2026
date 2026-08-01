@@ -14,6 +14,7 @@ import os
 import socket
 import socketserver
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -34,6 +35,29 @@ PUBLIC_KEY = IFILM_HOME / "current" / "packaging" / "keys" / "release-signing.pu
 STATE_DIR = IFILM_VAR / "update-agent"
 LOCK_FILE = STATE_DIR / "update.lock"
 JOBS_DIR = STATE_DIR / "jobs"
+
+
+def _load_image_refs():
+    """Import image_refs from the active release tree (not the copied agent path)."""
+    candidates = [
+        IFILM_HOME / "current" / "packaging" / "release",
+        Path(__file__).resolve().parents[1] / "release",
+    ]
+    for path in candidates:
+        if (path / "image_refs.py").is_file():
+            if str(path) not in sys.path:
+                sys.path.insert(0, str(path))
+            break
+    from image_refs import (  # noqa: WPS433
+        ImageRefError,
+        env_vars_from_digests,
+        validate_image_digests,
+    )
+
+    return ImageRefError, env_vars_from_digests, validate_image_digests
+
+
+ImageRefError, env_vars_from_digests, validate_image_digests = _load_image_refs()
 
 ALLOWED_COMMANDS = frozenset(
     {
@@ -339,6 +363,114 @@ def _read_job(job_id: str) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _upsert_env(key: str, value: str) -> None:
+    if not ENV_FILE.is_file():
+        raise AgentError("missing_env", f"env file missing: {ENV_FILE}")
+    lines = ENV_FILE.read_text(encoding="utf-8").splitlines()
+    found = False
+    out: list[str] = []
+    for line in lines:
+        if line.startswith(f"{key}="):
+            out.append(f"{key}={value}")
+            found = True
+        else:
+            out.append(line)
+    if not found:
+        out.append(f"{key}={value}")
+    ENV_FILE.write_text("\n".join(out) + "\n", encoding="utf-8")
+    os.chmod(ENV_FILE, 0o600)
+
+
+def _apply_image_digests(manifest: dict[str, Any]) -> dict[str, str]:
+    try:
+        digests = validate_image_digests(manifest.get("image_digests"), require_all=True)
+        env_vars = env_vars_from_digests(digests)
+    except ImageRefError as exc:
+        raise AgentError("invalid_image_digest", str(exc)) from exc
+    for key, value in env_vars.items():
+        _upsert_env(key, value)
+    return env_vars
+
+
+def _verify_pulled_image(ref: str) -> None:
+    """Refuse to continue if the local image does not match the manifest digest."""
+    want_digest = ref.split("@", 1)[1] if "@" in ref else ""
+    if not want_digest.startswith("sha256:") or len(want_digest) != len("sha256:") + 64:
+        raise AgentError("invalid_image_digest", f"malformed digest ref: {ref}")
+    inspect = _run(
+        ["docker", "image", "inspect", "--format", "{{json .RepoDigests}}", ref],
+        timeout=60,
+    )
+    if inspect.returncode != 0:
+        # Fallback inspect by pulling-ref may leave only repository digests.
+        inspect = _run(
+            ["docker", "image", "inspect", "--format", "{{json .RepoDigests}}", ref.split("@", 1)[0]],
+            timeout=60,
+        )
+    if inspect.returncode != 0:
+        raise AgentError("image_pull_failed", f"could not inspect pulled image {ref}")
+    digests = json.loads(inspect.stdout or "[]")
+    if not any(want_digest in str(item) for item in digests):
+        raise AgentError(
+            "image_digest_mismatch",
+            f"downloaded image digest differs from manifest for {ref}",
+        )
+
+
+def _compose_pull_and_up() -> None:
+    pull = _run(
+        ["docker", "compose", "--env-file", str(ENV_FILE), "-f", str(COMPOSE_FILE), "pull"],
+        timeout=1800,
+    )
+    if pull.returncode != 0:
+        raise AgentError("image_pull_failed", "docker compose pull failed")
+    # Verify both application images against env (written from signed manifest).
+    env_text = ENV_FILE.read_text(encoding="utf-8")
+    refs: dict[str, str] = {}
+    for line in env_text.splitlines():
+        if line.startswith("IFILM_IMAGE_BACKEND_API="):
+            refs["backend-api"] = line.split("=", 1)[1]
+        elif line.startswith("IFILM_IMAGE_FRONTEND="):
+            refs["frontend"] = line.split("=", 1)[1]
+    if "backend-api" not in refs or "frontend" not in refs:
+        raise AgentError("invalid_image_digest", "image digest env vars missing after apply")
+    _verify_pulled_image(refs["backend-api"])
+    _verify_pulled_image(refs["frontend"])
+    up = _run(
+        [
+            "docker",
+            "compose",
+            "--env-file",
+            str(ENV_FILE),
+            "-f",
+            str(COMPOSE_FILE),
+            "up",
+            "-d",
+            "--no-build",
+        ],
+        timeout=1800,
+    )
+    if up.returncode != 0:
+        raise AgentError("compose_up_failed", "docker compose up failed")
+
+
+def _flatten_release_tree(dest: Path) -> None:
+    """Support both flat archives and nested ifilm/ archives."""
+    nested = dest / "ifilm"
+    if nested.is_dir() and not (dest / "packaging").is_dir():
+        for child in nested.iterdir():
+            target = dest / child.name
+            if target.exists():
+                if target.is_dir():
+                    import shutil
+
+                    shutil.rmtree(target)
+                else:
+                    target.unlink()
+            child.rename(target)
+        nested.rmdir()
+
+
 def install_verified_release(payload: dict[str, Any]) -> dict[str, Any]:
     job_id = hashlib.sha256(f"{time.time()}:{os.getpid()}".encode()).hexdigest()[:16]
     job: dict[str, Any] = {
@@ -401,6 +533,12 @@ def install_verified_release(payload: dict[str, Any]) -> dict[str, Any]:
             if actual != expected:
                 raise AgentError("checksum_mismatch", "archive sha256 mismatch")
 
+            # Fail closed before mutating the install if digests are missing/mutable.
+            try:
+                validate_image_digests(manifest.get("image_digests"), require_all=True)
+            except ImageRefError as exc:
+                raise AgentError("invalid_image_digest", str(exc)) from exc
+
             job["state"] = "installing"
             _write_job(job_id, job)
             version = str(manifest.get("version") or payload.get("target_version") or "unknown")
@@ -416,12 +554,19 @@ def install_verified_release(payload: dict[str, Any]) -> dict[str, Any]:
                 shutil.rmtree(dest)
             dest.mkdir(parents=True)
             _run(["tar", "-xzf", str(apath), "-C", str(dest)], timeout=600)
+            _flatten_release_tree(dest)
             (dest / "release-manifest.json").write_text(mpath.read_text(encoding="utf-8"), encoding="utf-8")
             # Save previous pointer for rollback
             (STATE_DIR / "previous_release").write_text(str(previous_target or ""), encoding="utf-8")
             if previous.exists() or previous.is_symlink():
                 previous.unlink()
             previous.symlink_to(dest)
+
+            # Pin compose to the newly signed immutable digests, then pull/verify.
+            _apply_image_digests(manifest)
+            job["state"] = "restarting"
+            _write_job(job_id, job)
+            _compose_pull_and_up()
 
             job["state"] = "migrating"
             _write_job(job_id, job)
@@ -449,22 +594,6 @@ def install_verified_release(payload: dict[str, Any]) -> dict[str, Any]:
                 rollback_last_update({"job_id": job_id, "reason": "migration_failed"})
                 return _read_job(job_id)
 
-            job["state"] = "restarting"
-            _write_job(job_id, job)
-            _run(
-                [
-                    "docker",
-                    "compose",
-                    "--env-file",
-                    str(ENV_FILE),
-                    "-f",
-                    str(COMPOSE_FILE),
-                    "up",
-                    "-d",
-                ],
-                timeout=1800,
-            )
-
             job["state"] = "health_checking"
             _write_job(job_id, job)
             healthy = False
@@ -489,7 +618,12 @@ def install_verified_release(payload: dict[str, Any]) -> dict[str, Any]:
         _write_job(job_id, job)
         return job
     except AgentError as exc:
-        job["state"] = "verification_failed" if "sign" in exc.code or "checksum" in exc.code else "failed"
+        verification_codes = ("sign", "checksum", "image_digest", "invalid_image", "digest_mismatch")
+        job["state"] = (
+            "verification_failed"
+            if any(token in exc.code for token in verification_codes)
+            else "failed"
+        )
         job["error"] = {"code": exc.code, "message": exc.message}
         job["finished_at"] = _utc_now()
         _write_job(job_id, job)
@@ -526,25 +660,24 @@ def rollback_last_update(payload: dict[str, Any]) -> dict[str, Any]:
     if current.exists() or current.is_symlink():
         current.unlink()
     current.symlink_to(previous)
-    up = _run(
-        [
-            "docker",
-            "compose",
-            "--env-file",
-            str(ENV_FILE),
-            "-f",
-            str(COMPOSE_FILE),
-            "up",
-            "-d",
-        ],
-        timeout=1800,
-    )
-    if up.returncode != 0:
-        job["state"] = "rollback_failed"
-        job["error"] = {"code": "rollback_failed", "message": "failed to restart previous release"}
+    # Restore previous immutable digest references before compose up.
+    prev_manifest_path = Path(previous) / "release-manifest.json"
+    if prev_manifest_path.is_file():
+        prev_manifest = json.loads(prev_manifest_path.read_text(encoding="utf-8"))
+        try:
+            _apply_image_digests(prev_manifest)
+            _compose_pull_and_up()
+            job["state"] = "rolled_back"
+            job["result"] = get_current_version({})
+        except AgentError as exc:
+            job["state"] = "rollback_failed"
+            job["error"] = {"code": "rollback_failed", "message": exc.message}
     else:
-        job["state"] = "rolled_back"
-        job["result"] = get_current_version({})
+        job["state"] = "rollback_failed"
+        job["error"] = {
+            "code": "rollback_failed",
+            "message": "previous release missing release-manifest.json",
+        }
     job["finished_at"] = _utc_now()
     _write_job(job_id, job)
     return job

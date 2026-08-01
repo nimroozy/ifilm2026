@@ -40,6 +40,14 @@ class DisposableUpdateSimulation(unittest.TestCase):
         archive = self.tmp / f"ifilm-{version}.tar.gz"
         subprocess.check_call(["tar", "-czf", str(archive), "-C", str(stage), "payload.txt"])
         manifest = self.tmp / f"manifest-{version}.json"
+        backend = (
+            "ghcr.io/nimroozy/ifilm2026/backend-api@"
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        )
+        frontend = (
+            "ghcr.io/nimroozy/ifilm2026/frontend@"
+            "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        )
         subprocess.check_call(
             [
                 sys.executable,
@@ -50,6 +58,11 @@ class DisposableUpdateSimulation(unittest.TestCase):
                 str(archive),
                 "--migration-head",
                 "011_system_updates",
+                "--require-registry-digests",
+                "--image-digest",
+                f"backend-api={backend}",
+                "--image-digest",
+                f"frontend={frontend}",
                 "--out",
                 str(manifest),
             ]

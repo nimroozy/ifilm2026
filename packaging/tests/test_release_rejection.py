@@ -13,6 +13,14 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+GOOD_BACKEND = (
+    "ghcr.io/nimroozy/ifilm2026/backend-api@"
+    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+)
+GOOD_FRONTEND = (
+    "ghcr.io/nimroozy/ifilm2026/frontend@"
+    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+)
 
 
 class ReleaseRejectionTests(unittest.TestCase):
@@ -34,22 +42,25 @@ class ReleaseRejectionTests(unittest.TestCase):
         subprocess.check_call(["tar", "-czf", str(archive), "-C", str(stage), "payload.bin"])
         return archive
 
-    def _manifest(self, archive: Path, **overrides) -> Path:
+    def _manifest(self, archive: Path, *, require: bool = False, **overrides) -> Path:
         out = self.tmp / "release-manifest.json"
-        subprocess.check_call(
-            [
-                sys.executable,
-                str(ROOT / "packaging/release/build_manifest.py"),
-                "--version",
-                "1.0.0",
-                "--archive",
-                str(archive),
-                "--out",
-                str(out),
-                "--image-digest",
-                "backend-api=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            ]
-        )
+        cmd = [
+            sys.executable,
+            str(ROOT / "packaging/release/build_manifest.py"),
+            "--version",
+            "1.0.0",
+            "--archive",
+            str(archive),
+            "--out",
+            str(out),
+            "--image-digest",
+            f"backend-api={GOOD_BACKEND}",
+            "--image-digest",
+            f"frontend={GOOD_FRONTEND}",
+        ]
+        if require:
+            cmd.append("--require-registry-digests")
+        subprocess.check_call(cmd)
         data = json.loads(out.read_text(encoding="utf-8"))
         data.update(overrides)
         out.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -123,12 +134,62 @@ class ReleaseRejectionTests(unittest.TestCase):
         actual = hashlib.sha256(archive.read_bytes()).hexdigest()
         self.assertNotEqual(expected, actual)
 
+    def test_build_manifest_rejects_missing_digests_when_required(self) -> None:
+        archive = self._archive()
+        out = self.tmp / "bad-manifest.json"
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "packaging/release/build_manifest.py"),
+                "--version",
+                "1.0.0",
+                "--archive",
+                str(archive),
+                "--out",
+                str(out),
+                "--require-registry-digests",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("missing required image digest", proc.stderr)
+
+    def test_build_manifest_rejects_malformed_digest(self) -> None:
+        archive = self._archive()
+        out = self.tmp / "bad-manifest.json"
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "packaging/release/build_manifest.py"),
+                "--version",
+                "1.0.0",
+                "--archive",
+                str(archive),
+                "--out",
+                str(out),
+                "--require-registry-digests",
+                "--image-digest",
+                "backend-api=sha256:not-a-registry-ref",
+                "--image-digest",
+                f"frontend={GOOD_FRONTEND}",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(proc.returncode, 0)
+
     def test_mismatched_image_digest_detected(self) -> None:
         archive = self._archive()
-        manifest = self._manifest(archive)
+        manifest = self._manifest(archive, require=True)
         data = json.loads(manifest.read_text(encoding="utf-8"))
         claimed = data["image_digests"]["backend-api"]
-        actual = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        actual = (
+            "ghcr.io/nimroozy/ifilm2026/backend-api@"
+            "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        )
         self.assertNotEqual(claimed, actual)
 
     def test_stale_minimum_version_policy(self) -> None:
@@ -136,10 +197,8 @@ class ReleaseRejectionTests(unittest.TestCase):
         manifest = self._manifest(archive, minimum_version="9.0.0", version="1.0.0")
         data = json.loads(manifest.read_text(encoding="utf-8"))
         current = "1.0.0"
-        # Upgrade path unsupported when current < minimum_version of target is OK;
-        # reject downgrade / stale when target.version < current or current < minimum.
         self.assertEqual(data["minimum_version"], "9.0.0")
-        self.assertLess(current, data["minimum_version"])  # unsupported upgrade path
+        self.assertLess(current, data["minimum_version"])
 
 
 if __name__ == "__main__":

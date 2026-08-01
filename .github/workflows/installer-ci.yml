@@ -27,11 +27,24 @@ jobs:
           sudo apt-get install -y shellcheck
           shellcheck -x install.sh packaging/installer/install_release.sh packaging/scripts/uninstall.sh
 
-      - name: Compose config
+      - name: Compose config (immutable digest placeholders)
         run: |
           export POSTGRES_DB=ifilm POSTGRES_USER=ifilm POSTGRES_PASSWORD=x
           export REDIS_PASSWORD=x JWT_SECRET=x PLAYBACK_TOKEN_SECRET=x
+          export IFILM_IMAGE_BACKEND_API="ghcr.io/nimroozy/ifilm2026/backend-api@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          export IFILM_IMAGE_FRONTEND="ghcr.io/nimroozy/ifilm2026/frontend@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          export IFILM_ENV_FILE=/tmp/ifilm-compose-ci.env
+          : > "$IFILM_ENV_FILE"
           docker compose -f packaging/compose/docker-compose.production.yml config >/dev/null
+
+      - name: Public key fingerprint matches install.sh trust anchor
+        run: |
+          FP="$(openssl pkey -pubin -in packaging/keys/release-signing.pub -outform DER | sha256sum | awk '{print $1}')"
+          grep -q "$FP" install.sh
+          test "$FP" = "8c04b9141a9fe72346edf9e1f6bc27b0fbef3dc728d6e61124fb897e74ac1e26"
+
+      - name: Trivy ignore policy validation
+        run: python3 packaging/security/validate_trivy_ignores.py
 
       - name: Update agent unit tests
         run: python3 packaging/tests/test_update_agent_unit.py -v
@@ -42,6 +55,9 @@ jobs:
       - name: Release rejection matrix
         run: python3 packaging/tests/test_release_rejection.py -v
 
+      - name: Image digest policy tests
+        run: python3 packaging/tests/test_image_digests.py -v
+
       - name: Manifest build/sign roundtrip
         run: |
           KEY="$(mktemp)"
@@ -50,9 +66,14 @@ jobs:
           mkdir -p /tmp/ifilm-rel
           echo hello > /tmp/ifilm-rel/payload.bin
           tar -C /tmp/ifilm-rel -czf /tmp/ifilm-rel/ifilm-0.0.0-test.tar.gz payload.bin
+          BACKEND="ghcr.io/nimroozy/ifilm2026/backend-api@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          FRONTEND="ghcr.io/nimroozy/ifilm2026/frontend@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
           python3 packaging/release/build_manifest.py \
             --version 0.0.0-test \
             --archive /tmp/ifilm-rel/ifilm-0.0.0-test.tar.gz \
+            --require-registry-digests \
+            --image-digest "backend-api=${BACKEND}" \
+            --image-digest "frontend=${FRONTEND}" \
             --out /tmp/ifilm-rel/release-manifest.json
           python3 packaging/release/sign_manifest.py \
             --manifest /tmp/ifilm-rel/release-manifest.json \

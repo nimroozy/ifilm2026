@@ -15,7 +15,9 @@
 | CSRF / recent-auth | Password re-auth on install/backup/rollback |
 | Secret leakage | Redaction helpers; API omits env/credentials/keys |
 | Malicious release notes HTML | Escaped before API response |
-| Mutable image tags | Digest pinning in manifest |
+| Mutable image tags | Full GHCR `@sha256` refs required; local IDs rejected |
+| Compromised signing key | Fingerprint trust anchor in `install.sh`; rotation/revocation in `packaging/keys/README.md` |
+| Unverified OS claims | Only Ubuntu 24.04 verified; 22.04/Debian 12 need explicit opt-in |
 | Socket abuse | Root-owned socket, shared secret, mode 660 |
 | Path traversal | Agent ignores client-supplied filesystem paths |
 

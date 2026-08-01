@@ -1,5 +1,7 @@
 name: Release
 
+# Production release publishing is restricted to version-tag pushes only.
+# Signing uses the protected GitHub Environment `production-release`.
 on:
   push:
     tags:
@@ -9,9 +11,16 @@ permissions:
   contents: write
   packages: write
   id-token: write
+  actions: read
+
+env:
+  TRIVY_VERSION: "0.72.0"
+  TRIVY_SHA256: "bbb64b9695866ce4a7a8f5c9592002c5961cab378577fa3f8a040df362b9b2ea"
+  SYFT_VERSION: "1.50.0"
+  SYFT_SHA256: "bf7b29ff57f06da30918266a0e1c2885a8f99784798d1bdb1628886aa015d788"
 
 jobs:
-  release:
+  quality:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -38,6 +47,7 @@ jobs:
       ADMIN_BOOTSTRAP_PASSWORD: ci-admin-password-ok
       MEDIA_ROOT: /tmp/ifilm-ci-media
       ARTWORK_ROOT: /tmp/ifilm-ci-artwork
+      FRONTEND_DIST: ""
 
     services:
       postgres:
@@ -80,13 +90,18 @@ jobs:
           cache: pip
           cache-dependency-path: app/backend/requirements-dev.txt
 
-      - name: Backend quality
+      - name: Backend quality (full suite)
         working-directory: app/backend
+        env:
+          DATABASE_URL: sqlite://
+          REDIS_REQUIRED: "false"
+          FRONTEND_DIST: ""
         run: |
           python -m pip install -U pip
           pip install -r requirements-dev.txt
           ruff check .
           mypy app
+          # Exact local parity: full pytest suite, zero failures required.
           pytest -q
           alembic heads | tee /tmp/alembic-heads.txt
           grep -q '012_system_update_notes' /tmp/alembic-heads.txt
@@ -113,15 +128,62 @@ jobs:
           sudo apt-get install -y shellcheck
           shellcheck -x install.sh packaging/installer/install_release.sh packaging/scripts/uninstall.sh
 
+      - name: Packaging / security unit checks
+        run: |
+          python3 packaging/security/validate_trivy_ignores.py
+          python3 packaging/tests/test_release_rejection.py -v
+          python3 packaging/tests/test_image_digests.py -v
+
       - name: Compose validation
         run: |
           export POSTGRES_DB=ifilm POSTGRES_USER=ifilm POSTGRES_PASSWORD=x
           export REDIS_PASSWORD=x JWT_SECRET=x PLAYBACK_TOKEN_SECRET=x
+          export IFILM_IMAGE_BACKEND_API="ghcr.io/nimroozy/ifilm2026/backend-api@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          export IFILM_IMAGE_FRONTEND="ghcr.io/nimroozy/ifilm2026/frontend@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          export IFILM_ENV_FILE=/tmp/ifilm-compose-ci.env
+          : > "$IFILM_ENV_FILE"
           docker compose -f packaging/compose/docker-compose.production.yml config >/dev/null
 
-      - name: Build release archive
+  publish:
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    # Protected environment: require manual approval when configured.
+    # Secret IFILM_RELEASE_SIGNING_KEY must live only in this environment.
+    environment: production-release
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      backend_ref: ${{ steps.digests.outputs.backend_ref }}
+      frontend_ref: ${{ steps.digests.outputs.frontend_ref }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Release metadata
+        id: meta
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          REPO_LC="$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
+          echo "BACKEND_IMAGE=ghcr.io/${REPO_LC}/backend-api" >> "$GITHUB_ENV"
+          echo "FRONTEND_IMAGE=ghcr.io/${REPO_LC}/frontend" >> "$GITHUB_ENV"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build release archive (flat root)
+        run: |
           STAGE="$(mktemp -d)"
           mkdir -p "$STAGE/ifilm"
           rsync -a \
@@ -130,72 +192,182 @@ jobs:
             --exclude '**/__pycache__' \
             --exclude '**/.venv' \
             --exclude 'app/frontend/dist' \
+            --exclude 'deploy/staging/.env.staging' \
+            --exclude 'deploy/staging/.env.staging.credentials' \
             ./ "$STAGE/ifilm/"
+          printf '%s\n' "$VERSION" > "$STAGE/ifilm/packaging/VERSION"
+          printf '%s\n' "${GITHUB_SHA}" > "$STAGE/ifilm/packaging/COMMIT_SHA"
           mkdir -p dist
-          tar -C "$STAGE" -czf "dist/ifilm-${VERSION}.tar.gz" ifilm
-          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          # Flat archive so /opt/ifilm/current/packaging resolves correctly.
+          tar -C "$STAGE/ifilm" -czf "dist/ifilm-${VERSION}.tar.gz" .
           echo "ARCHIVE=dist/ifilm-${VERSION}.tar.gz" >> "$GITHUB_ENV"
 
       - name: Build production images
         run: |
-          docker build -f app/backend/Dockerfile.staging -t "ghcr.io/${GITHUB_REPOSITORY}/backend-api:${VERSION}" app/backend
-          docker build -f app/frontend/Dockerfile.staging -t "ghcr.io/${GITHUB_REPOSITORY}/frontend:${VERSION}" app/frontend
+          docker build -f app/backend/Dockerfile.staging \
+            -t "${BACKEND_IMAGE}:${VERSION}" \
+            -t "${BACKEND_IMAGE}:sha-${GITHUB_SHA}" \
+            app/backend
+          docker build -f app/frontend/Dockerfile.staging \
+            -t "${FRONTEND_IMAGE}:${VERSION}" \
+            -t "${FRONTEND_IMAGE}:sha-${GITHUB_SHA}" \
+            app/frontend
 
-      - name: Image digests
+      - name: Push images and resolve registry digests
         id: digests
         run: |
-          BACKEND_DIGEST="$(docker inspect --format='{{index .RepoDigests 0}}' "ghcr.io/${GITHUB_REPOSITORY}/backend-api:${VERSION}" 2>/dev/null || echo "")"
-          if [[ -z "$BACKEND_DIGEST" ]]; then
-            BACKEND_DIGEST="sha256:$(docker image inspect --format='{{.Id}}' "ghcr.io/${GITHUB_REPOSITORY}/backend-api:${VERSION}" | sed 's/^sha256://')"
-          fi
-          echo "backend=${BACKEND_DIGEST}" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          docker push "${BACKEND_IMAGE}:${VERSION}"
+          docker push "${FRONTEND_IMAGE}:${VERSION}"
 
-      - name: Generate SBOM (best effort)
-        continue-on-error: true
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
-          syft "ghcr.io/${GITHUB_REPOSITORY}/backend-api:${VERSION}" -o spdx-json > "dist/ifilm-${VERSION}.sbom.spdx.json"
+          resolve_digest() {
+            local image="$1"
+            local tag="$2"
+            local digest=""
+            # Prefer registry inspection after push (authoritative RepoDigest).
+            digest="$(docker buildx imagetools inspect "${image}:${tag}" --format '{{.Manifest.Digest}}' 2>/dev/null || true)"
+            if [[ -z "$digest" || "$digest" == "<nil>" ]]; then
+              digest="$(docker inspect --format='{{index .RepoDigests 0}}' "${image}:${tag}" 2>/dev/null | awk -F@ '{print $2}')"
+            fi
+            if [[ -z "$digest" || ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+              echo "ERROR: failed to resolve registry digest for ${image}:${tag}" >&2
+              exit 1
+            fi
+            # Reject using local image ID as a substitute.
+            local local_id
+            local_id="$(docker image inspect --format='{{.Id}}' "${image}:${tag}")"
+            if [[ "$digest" == "$local_id" ]]; then
+              echo "ERROR: resolved digest equals local image ID; refusing fallback" >&2
+              exit 1
+            fi
+            printf '%s' "$digest"
+          }
 
-      - name: Scan images (critical gate best effort)
-        continue-on-error: true
+          BACKEND_DIGEST="$(resolve_digest "${BACKEND_IMAGE}" "${VERSION}")"
+          FRONTEND_DIGEST="$(resolve_digest "${FRONTEND_IMAGE}" "${VERSION}")"
+          BACKEND_REF="${BACKEND_IMAGE}@${BACKEND_DIGEST}"
+          FRONTEND_REF="${FRONTEND_IMAGE}@${FRONTEND_DIGEST}"
+
+          # Verify digests are pullable from GHCR by reference.
+          docker pull "${BACKEND_REF}"
+          docker pull "${FRONTEND_REF}"
+
+          echo "backend_ref=${BACKEND_REF}" >> "$GITHUB_OUTPUT"
+          echo "frontend_ref=${FRONTEND_REF}" >> "$GITHUB_OUTPUT"
+          echo "BACKEND_REF=${BACKEND_REF}" >> "$GITHUB_ENV"
+          echo "FRONTEND_REF=${FRONTEND_REF}" >> "$GITHUB_ENV"
+          printf '%s\n' "${BACKEND_REF}" > "dist/backend-image-ref.txt"
+          printf '%s\n' "${FRONTEND_REF}" > "dist/frontend-image-ref.txt"
+
+      - name: Install pinned Syft
         run: |
-          curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
-          trivy image --exit-code 1 --severity CRITICAL "ghcr.io/${GITHUB_REPOSITORY}/backend-api:${VERSION}"
+          set -euo pipefail
+          curl -fsSL -o /tmp/syft.tgz \
+            "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION}_linux_amd64.tar.gz"
+          echo "${SYFT_SHA256}  /tmp/syft.tgz" | sha256sum -c -
+          sudo tar -xzf /tmp/syft.tgz -C /usr/local/bin syft
+          syft version
+
+      - name: Install pinned Trivy
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/trivy.tgz \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          echo "${TRIVY_SHA256}  /tmp/trivy.tgz" | sha256sum -c -
+          sudo tar -xzf /tmp/trivy.tgz -C /usr/local/bin trivy
+          trivy --version
+
+      - name: Generate SBOMs (required)
+        run: |
+          set -euo pipefail
+          syft "${BACKEND_REF}" -o spdx-json > "dist/ifilm-${VERSION}-backend.sbom.spdx.json"
+          syft "${FRONTEND_REF}" -o spdx-json > "dist/ifilm-${VERSION}-frontend.sbom.spdx.json"
+          test -s "dist/ifilm-${VERSION}-backend.sbom.spdx.json"
+          test -s "dist/ifilm-${VERSION}-frontend.sbom.spdx.json"
+
+      - name: Validate ignore policy
+        run: python3 packaging/security/validate_trivy_ignores.py
+
+      - name: Vulnerability scan (hard gate)
+        run: |
+          set -euo pipefail
+          mkdir -p dist/scans
+          trivy image --format json --output "dist/scans/backend-trivy.json" "${BACKEND_REF}"
+          trivy image --format json --output "dist/scans/frontend-trivy.json" "${FRONTEND_REF}"
+          # Also emit human-readable summary for artifacts (does not gate).
+          trivy image --severity CRITICAL,HIGH --format table \
+            --output "dist/scans/backend-trivy.txt" "${BACKEND_REF}" || true
+          trivy image --severity CRITICAL,HIGH --format table \
+            --output "dist/scans/frontend-trivy.txt" "${FRONTEND_REF}" || true
+          python3 packaging/security/gate_trivy_report.py \
+            --report dist/scans/backend-trivy.json \
+            --fail-severities CRITICAL,HIGH
+          python3 packaging/security/gate_trivy_report.py \
+            --report dist/scans/frontend-trivy.json \
+            --fail-severities CRITICAL,HIGH
+
+      - name: Upload scan and SBOM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-security-${{ env.VERSION }}
+          path: |
+            dist/scans/
+            dist/ifilm-${{ env.VERSION }}-backend.sbom.spdx.json
+            dist/ifilm-${{ env.VERSION }}-frontend.sbom.spdx.json
+            dist/backend-image-ref.txt
+            dist/frontend-image-ref.txt
+          if-no-files-found: error
 
       - name: Build and sign manifest
         env:
           IFILM_RELEASE_SIGNING_KEY: ${{ secrets.IFILM_RELEASE_SIGNING_KEY }}
         run: |
+          set -euo pipefail
+          if [[ -z "${IFILM_RELEASE_SIGNING_KEY}" ]]; then
+            echo "IFILM_RELEASE_SIGNING_KEY is not configured in the production-release environment." >&2
+            echo "A repository administrator must add the Ed25519 private key PEM as that environment secret." >&2
+            exit 1
+          fi
+          # Never print key contents. Write to a mode-600 temp file only.
+          KEY="$(mktemp)"
+          chmod 600 "$KEY"
+          # Support secrets that may or may not include a trailing newline.
+          printf '%s\n' "$IFILM_RELEASE_SIGNING_KEY" >"$KEY"
+          # Sanity: looks like a PEM without echoing material.
+          grep -q 'BEGIN.*PRIVATE KEY' "$KEY" || {
+            echo "IFILM_RELEASE_SIGNING_KEY does not look like a PEM private key" >&2
+            shred -u "$KEY" 2>/dev/null || rm -f "$KEY"
+            exit 1
+          }
+          CHANNEL=stable
+          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
+            CHANNEL=staging
+          fi
           python3 packaging/release/build_manifest.py \
             --version "$VERSION" \
-            --channel stable \
+            --channel "$CHANNEL" \
             --archive "$ARCHIVE" \
             --migration-head 012_system_update_notes \
             --minimum-version 0.1.0 \
             --database-backup-required \
             --rollback-supported \
-            --image-digest "backend-api=${{ steps.digests.outputs.backend }}" \
+            --require-registry-digests \
+            --image-digest "backend-api=${BACKEND_REF}" \
+            --image-digest "frontend=${FRONTEND_REF}" \
+            --image-digest "media-processing-worker=${BACKEND_REF}" \
+            --image-digest "publishing-worker=${BACKEND_REF}" \
             --out dist/release-manifest.json
-          if [[ -z "${IFILM_RELEASE_SIGNING_KEY}" ]]; then
-            echo "IFILM_RELEASE_SIGNING_KEY secret is required to publish a signed release" >&2
-            exit 1
-          fi
-          # Never echo the key. Write to a temp file with mode 600.
-          KEY="$(mktemp)"
-          printf '%s\n' "$IFILM_RELEASE_SIGNING_KEY" >"$KEY"
-          chmod 600 "$KEY"
           python3 packaging/release/sign_manifest.py \
             --manifest dist/release-manifest.json \
             --key-file "$KEY" \
             --signature-out dist/release-manifest.json.sig
           shred -u "$KEY" 2>/dev/null || rm -f "$KEY"
           sha256sum "$ARCHIVE" dist/release-manifest.json > dist/SHA256SUMS
-
-      - name: Push images
-        if: ${{ success() }}
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-          docker push "ghcr.io/${GITHUB_REPOSITORY}/backend-api:${VERSION}" || true
+          # Ensure logs/artifacts never contain private key material.
+          if grep -R --exclude='*.sig' -E 'BEGIN .*PRIVATE KEY' dist/ >/dev/null 2>&1; then
+            echo "refusing to publish: private key material detected under dist/" >&2
+            exit 1
+          fi
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -209,4 +381,9 @@ jobs:
             dist/release-manifest.json
             dist/release-manifest.json.sig
             dist/SHA256SUMS
-            dist/ifilm-${{ env.VERSION }}.sbom.spdx.json
+            dist/ifilm-${{ env.VERSION }}-backend.sbom.spdx.json
+            dist/ifilm-${{ env.VERSION }}-frontend.sbom.spdx.json
+            dist/scans/backend-trivy.json
+            dist/scans/frontend-trivy.json
+            dist/backend-image-ref.txt
+            dist/frontend-image-ref.txt

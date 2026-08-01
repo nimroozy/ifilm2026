@@ -93,6 +93,36 @@ wizard() {
   [[ "${#ADMIN_PASSWORD}" -ge 12 ]] || die "admin password must be at least 12 characters"
 }
 
+upsert_env() {
+  local key="$1" value="$2"
+  if grep -q "^${key}=" "$ENV_FILE" 2>/dev/null; then
+    sed -i "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
+  else
+    printf '%s=%s\n' "$key" "$value" >>"$ENV_FILE"
+  fi
+}
+
+apply_image_digests_from_manifest() {
+  local manifest="${IFILM_HOME}/current/release-manifest.json"
+  [[ -f "$manifest" ]] || die "missing release manifest ${manifest}"
+  local backend frontend
+  backend="$(jq -r '.image_digests["backend-api"] // empty' "$manifest")"
+  frontend="$(jq -r '.image_digests.frontend // empty' "$manifest")"
+  [[ -n "$backend" && "$backend" == ghcr.io/*/backend-api@sha256:* ]] \
+    || die "manifest missing immutable backend-api GHCR digest"
+  [[ -n "$frontend" && "$frontend" == ghcr.io/*/frontend@sha256:* ]] \
+    || die "manifest missing immutable frontend GHCR digest"
+  case "$backend" in
+    *:latest|*:main|*:master|*:staging) die "mutable backend image tag rejected" ;;
+  esac
+  case "$frontend" in
+    *:latest|*:main|*:master|*:staging) die "mutable frontend image tag rejected" ;;
+  esac
+  upsert_env IFILM_IMAGE_BACKEND_API "$backend"
+  upsert_env IFILM_IMAGE_FRONTEND "$frontend"
+  log "pinned images from signed manifest"
+}
+
 write_env() {
   local pg_pass redis_pass jwt playback agent
   pg_pass="$(rand_password)"
@@ -157,6 +187,8 @@ MAINTENANCE_MODE=false
 IFILM_HTTP_PORT=${IFILM_HTTP_PORT:-8080}
 APP_VERSION=${IFILM_APP_VERSION:-}
 APP_COMMIT_SHA=${IFILM_APP_COMMIT_SHA:-}
+IFILM_IMAGE_BACKEND_API=
+IFILM_IMAGE_FRONTEND=
 EOF
 
   if [[ "$INSTALL_MODE" == "staging" ]]; then
@@ -167,6 +199,8 @@ EOF
       sed -i 's/^UPDATE_CHANNEL=.*/UPDATE_CHANNEL=staging/' "$ENV_FILE"
     fi
   fi
+
+  apply_image_digests_from_manifest
 
   chown root:root "$ENV_FILE"
   chmod 600 "$ENV_FILE"
@@ -210,7 +244,9 @@ UNIT
     # shellcheck disable=SC1090
     . "$ENV_FILE"
     set +a
-    nohup /usr/bin/python3 "$IFILM_HOME/agent/agent.py" \
+    # Always execute the agent from the verified current release tree so
+    # packaging/release helpers (image digest validation) resolve correctly.
+    nohup /usr/bin/python3 "$IFILM_HOME/current/packaging/update-agent/agent.py" \
       >>"$IFILM_LOG/update-agent.log" 2>&1 &
     echo $! >"$IFILM_HOME/agent/agent.pid"
     sleep 1
@@ -219,10 +255,33 @@ UNIT
   fi
 }
 
+verify_pulled_digest() {
+  local want="$1"
+  local repo digest got
+  repo="${want%@*}"
+  digest="${want#*@}"
+  [[ "$digest" == sha256:* ]] || die "invalid digest ref ${want}"
+  got="$(docker image inspect --format='{{index .RepoDigests 0}}' "$want" 2>/dev/null || true)"
+  if [[ -z "$got" ]]; then
+    got="$(docker image inspect --format='{{index .RepoDigests 0}}' "$repo" 2>/dev/null || true)"
+  fi
+  [[ "$got" == *"@${digest}" || "$got" == "$want" ]] \
+    || die "pulled image digest mismatch for ${want} (got ${got:-none})"
+}
+
 start_stack() {
   [[ -f "$COMPOSE_FILE" ]] || die "missing compose file ${COMPOSE_FILE}"
-  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" pull || true
-  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --build
+  apply_image_digests_from_manifest
+  # Production installs pull immutable digest refs only — never --build.
+  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" pull
+  # shellcheck disable=SC1090,SC1091
+  set -a
+  # shellcheck disable=SC1090,SC1091
+  . "$ENV_FILE"
+  set +a
+  verify_pulled_digest "${IFILM_IMAGE_BACKEND_API}"
+  verify_pulled_digest "${IFILM_IMAGE_FRONTEND}"
+  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --no-build
   HTTP_PORT="${IFILM_HTTP_PORT:-8080}"
   log "waiting for backend health on :${HTTP_PORT}"
   for _ in $(seq 1 60); do

@@ -121,10 +121,11 @@ sudo env \
 
 | Platform | Claim | Evidence |
 | --- | --- | --- |
-| Ubuntu 24.04 x86_64 | **Verified** | Disposable clean install + update + rollback |
-| Ubuntu 22.04 | Installer accepts | Not disposable-verified in this run |
-| Debian 12 | Installer accepts | Not disposable-verified in this run |
-| Other OS/arch | Rejected | Unit/rejection coverage |
+| Ubuntu 24.04 x86_64 | **Verified / supported** | Disposable clean install + update + rollback |
+| Ubuntu 22.04 | **Experimental / unverified** | Requires `IFILM_ALLOW_UNVERIFIED_OS=1`; not proven |
+| Debian 12 | **Experimental / unverified** | Requires `IFILM_ALLOW_UNVERIFIED_OS=1`; not proven |
+| Other OS/arch | Rejected | Installer hard-fail |
+| Overlay FS / no-systemd | Explicit opt-in only | Not normal production deployment |
 
 ## Limitations / deviations
 

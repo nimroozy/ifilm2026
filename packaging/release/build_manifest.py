@@ -7,8 +7,15 @@ import argparse
 import hashlib
 import json
 import subprocess
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
+
+_HERE = Path(__file__).resolve().parent
+if str(_HERE) not in sys.path:
+    sys.path.insert(0, str(_HERE))
+
+from image_refs import ImageRefError, validate_image_digests  # noqa: E402
 
 
 def sha256_file(path: Path) -> str:
@@ -38,16 +45,40 @@ def main() -> int:
     parser.add_argument("--rollback-supported", action="store_true", default=True)
     parser.add_argument("--database-backup-required", action="store_true", default=True)
     parser.add_argument("--out", required=True, type=Path)
-    parser.add_argument("--image-digest", action="append", default=[], help="name=digest")
+    parser.add_argument(
+        "--image-digest",
+        action="append",
+        default=[],
+        help="name=ghcr.io/nimroozy/ifilm2026/<name>@sha256:...",
+    )
+    parser.add_argument(
+        "--require-registry-digests",
+        action="store_true",
+        help="Require immutable GHCR digests for backend-api and frontend",
+    )
     args = parser.parse_args()
 
-    digests = {}
+    digests: dict[str, str] = {}
     for item in args.image_digest:
-        if "=" in item:
-            k, v = item.split("=", 1)
-            digests[k] = v
+        if "=" not in item:
+            print(f"invalid --image-digest (expected name=ref): {item}", file=sys.stderr)
+            return 2
+        key, value = item.split("=", 1)
+        digests[key.strip()] = value.strip()
+
+    try:
+        digests = validate_image_digests(
+            digests, require_all=bool(args.require_registry_digests)
+        )
+    except ImageRefError as exc:
+        print(f"image digest validation failed: {exc}", file=sys.stderr)
+        return 2
 
     archive = args.archive
+    if not archive.is_file():
+        print(f"archive not found: {archive}", file=sys.stderr)
+        return 2
+
     manifest = {
         "version": args.version.lstrip("v"),
         "channel": args.channel,
@@ -68,6 +99,7 @@ def main() -> int:
         "image_digests": digests,
         "checksum": sha256_file(archive),
     }
+    args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(args.out)
     return 0

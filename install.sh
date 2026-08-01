@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
 # iFilm bootstrap installer (small, auditable).
-# Usage:
+# Usage (after merge to main):
 #   curl -fsSL https://raw.githubusercontent.com/nimroozy/ifilm2026/main/install.sh | sudo bash
 #
-# This script only prepares the host and downloads a *signed* GitHub Release.
-# It never executes unverified release artifacts.
+# This script only prepares the host and downloads a *signed* GitHub Release
+# from the approved repository. It never executes code from feature branches
+# or unverified release artifacts.
 set -euo pipefail
 
 IFILM_REPO="${IFILM_REPO:-nimroozy/ifilm2026}"
 IFILM_CHANNEL="${IFILM_CHANNEL:-stable}"
 IFILM_VERSION="${IFILM_VERSION:-}"          # empty = latest matching channel
 IFILM_INSTALL_ROOT="${IFILM_INSTALL_ROOT:-/opt/ifilm}"
+# Trust anchor: fingerprint of packaging/keys/release-signing.pub (DER SHA-256).
+# The downloaded public key MUST match this fingerprint before signature verify.
+IFILM_RELEASE_PUBLIC_KEY_SHA256="${IFILM_RELEASE_PUBLIC_KEY_SHA256:-8c04b9141a9fe72346edf9e1f6bc27b0fbef3dc728d6e61124fb897e74ac1e26}"
 IFILM_RELEASE_PUBLIC_KEY_URL="${IFILM_RELEASE_PUBLIC_KEY_URL:-https://raw.githubusercontent.com/${IFILM_REPO}/main/packaging/keys/release-signing.pub}"
 MIN_RAM_MB="${IFILM_MIN_RAM_MB:-2048}"
 MIN_DISK_GB="${IFILM_MIN_DISK_GB:-20}"
@@ -33,9 +37,18 @@ detect_platform() {
   OS_ID="${ID:-}"
   OS_VERSION="${VERSION_ID:-}"
   case "${OS_ID}-${OS_VERSION}" in
-    ubuntu-24.04|ubuntu-22.04|debian-12) ;;
+    ubuntu-24.04)
+      log "verified platform: Ubuntu 24.04 ${ARCH}"
+      ;;
+    ubuntu-22.04|debian-12)
+      # Experimental / unverified until disposable proof exists.
+      if [[ "${IFILM_ALLOW_UNVERIFIED_OS:-0}" != "1" ]]; then
+        die "OS ${OS_ID} ${OS_VERSION} is experimental/unverified. Set IFILM_ALLOW_UNVERIFIED_OS=1 to opt in (not recommended for production). Verified: Ubuntu 24.04 x86_64."
+      fi
+      log "WARNING: unverified platform ${OS_ID} ${OS_VERSION} (explicit opt-in)"
+      ;;
     *)
-      die "unsupported OS ${OS_ID} ${OS_VERSION} (supported: Ubuntu 22.04/24.04, Debian 12)"
+      die "unsupported OS ${OS_ID} ${OS_VERSION} (verified: Ubuntu 24.04 x86_64; experimental with IFILM_ALLOW_UNVERIFIED_OS=1: Ubuntu 22.04, Debian 12)"
       ;;
   esac
   case "$ARCH" in
@@ -61,7 +74,7 @@ check_resources() {
     overlay)
       # Cloud/CI disposable hosts often use overlay; allow only with explicit opt-in.
       [[ "${IFILM_ALLOW_OVERLAY_FS:-0}" == "1" ]] \
-        || die "unsupported root filesystem overlay (set IFILM_ALLOW_OVERLAY_FS=1 for disposable cloud hosts)"
+        || die "unsupported root filesystem overlay (set IFILM_ALLOW_OVERLAY_FS=1 for disposable cloud hosts; not a normal production deployment)"
       ;;
     *) die "unsupported root filesystem ${fstype}" ;;
   esac
@@ -111,19 +124,25 @@ install_host_packages() {
     systemctl enable --now docker
   else
     # Disposable cloud hosts may run Docker without systemd as PID 1.
-    docker info >/dev/null 2>&1 || die "docker daemon not reachable and systemd is unavailable"
+    # This is an explicit non-production path (supervised agent, not systemd units).
+    docker info >/dev/null 2>&1 || die "docker daemon not reachable and systemd is unavailable (production installs require systemd)"
+    log "WARNING: systemd unavailable — continuing in disposable/non-production mode"
   fi
   docker compose version >/dev/null || die "docker compose plugin missing"
   log "host packages ok"
 }
 
 fetch_release_metadata() {
+  # Releases only — never clone or execute from git branches/commits.
+  [[ "$IFILM_REPO" == "nimroozy/ifilm2026" ]] \
+    || die "refusing non-approved repository ${IFILM_REPO}"
   local api="https://api.github.com/repos/${IFILM_REPO}/releases"
   local json
   if [[ -n "$IFILM_VERSION" ]]; then
     json="$(curl -fsSL "${api}/tags/${IFILM_VERSION}")"
   else
     json="$(curl -fsSL "${api}?per_page=30")"
+    # Stable channel excludes prereleases.
     json="$(printf '%s' "$json" | jq -c --arg ch "$IFILM_CHANNEL" '
       [.[] | select(.draft==false)
         | select(($ch=="stable" and .prerelease==false) or ($ch!="stable"))
@@ -132,6 +151,11 @@ fetch_release_metadata() {
   fi
   RELEASE_TAG="$(printf '%s' "$json" | jq -r '.tag_name')"
   [[ "$RELEASE_TAG" != "null" && -n "$RELEASE_TAG" ]] || die "failed to resolve release tag"
+  if [[ "$IFILM_CHANNEL" == "stable" ]]; then
+    local is_pre
+    is_pre="$(printf '%s' "$json" | jq -r '.prerelease')"
+    [[ "$is_pre" == "false" ]] || die "stable channel refused prerelease ${RELEASE_TAG}"
+  fi
   log "selected release ${RELEASE_TAG}"
   MANIFEST_URL="$(printf '%s' "$json" | jq -r '.assets[] | select(.name=="release-manifest.json") | .browser_download_url' | head -1)"
   ARCHIVE_URL="$(printf '%s' "$json" | jq -r '.assets[] | select(.name|test("^ifilm-.*\\.tar\\.gz$")) | .browser_download_url' | head -1)"
@@ -139,15 +163,22 @@ fetch_release_metadata() {
   [[ -n "$MANIFEST_URL" && "$MANIFEST_URL" != "null" ]] || die "release missing release-manifest.json"
   [[ -n "$ARCHIVE_URL" && "$ARCHIVE_URL" != "null" ]] || die "release missing ifilm-*.tar.gz"
   [[ -n "$SIG_URL" && "$SIG_URL" != "null" ]] || die "release missing release-manifest.json.sig"
+  case "$MANIFEST_URL" in
+    https://github.com/nimroozy/ifilm2026/*|https://objects.githubusercontent.com/*) ;;
+    *) die "manifest URL host not allowlisted" ;;
+  esac
 }
 
 download_and_verify() {
-  local work
   local work
   work="$(mktemp -d /tmp/ifilm-bootstrap.XXXXXX)"
   IFILM_BOOTSTRAP_WORK="$work"
   trap 'rm -rf "${IFILM_BOOTSTRAP_WORK:-}"' EXIT
   curl -fsSL "$IFILM_RELEASE_PUBLIC_KEY_URL" -o "$work/release-signing.pub"
+  local fp
+  fp="$(openssl pkey -pubin -in "$work/release-signing.pub" -outform DER 2>/dev/null | sha256sum | awk '{print $1}')"
+  [[ "$fp" == "$IFILM_RELEASE_PUBLIC_KEY_SHA256" ]] \
+    || die "public key fingerprint mismatch (got ${fp}, expected ${IFILM_RELEASE_PUBLIC_KEY_SHA256}) — aborting"
   curl -fsSL "$MANIFEST_URL" -o "$work/release-manifest.json"
   curl -fsSL "$SIG_URL" -o "$work/release-manifest.json.sig"
   curl -fsSL "$ARCHIVE_URL" -o "$work/ifilm-release.tar.gz"
@@ -166,14 +197,32 @@ download_and_verify() {
   actual="$(sha256sum "$work/ifilm-release.tar.gz" | awk '{print $1}')"
   [[ "$expected" == "$actual" ]] || die "archive checksum mismatch (expected ${expected}, got ${actual})"
 
-  log "release signature and checksum verified"
+  # Require immutable image digests in the signed manifest before executing installer.
+  local backend frontend
+  backend="$(jq -r '.image_digests["backend-api"] // empty' "$work/release-manifest.json")"
+  frontend="$(jq -r '.image_digests.frontend // empty' "$work/release-manifest.json")"
+  [[ "$backend" == ghcr.io/nimroozy/ifilm2026/backend-api@sha256:* ]] \
+    || die "signed manifest missing immutable backend-api digest"
+  [[ "$frontend" == ghcr.io/nimroozy/ifilm2026/frontend@sha256:* ]] \
+    || die "signed manifest missing immutable frontend digest"
+
+  log "release signature, checksum, public-key fingerprint, and image digests verified"
   mkdir -p "${IFILM_INSTALL_ROOT}/releases"
   local dest="${IFILM_INSTALL_ROOT}/releases/${RELEASE_TAG}"
   rm -rf "$dest"
   mkdir -p "$dest"
   tar -xzf "$work/ifilm-release.tar.gz" -C "$dest"
+  # Support nested archive roots from older publishers.
+  if [[ -d "$dest/ifilm/packaging" && ! -d "$dest/packaging" ]]; then
+    shopt -s dotglob
+    mv "$dest/ifilm/"* "$dest/"
+    rmdir "$dest/ifilm"
+    shopt -u dotglob
+  fi
   ln -sfn "$dest" "${IFILM_INSTALL_ROOT}/current"
   cp "$work/release-manifest.json" "${IFILM_INSTALL_ROOT}/current/release-manifest.json"
+  # Prefer the key that passed fingerprint check (do not trust package-embedded key alone).
+  install -m 0644 "$work/release-signing.pub" "${IFILM_INSTALL_ROOT}/current/packaging/keys/release-signing.pub"
   chmod -R a+rX "${IFILM_INSTALL_ROOT}/current"
   VERIFIED_INSTALLER="${IFILM_INSTALL_ROOT}/current/packaging/installer/install_release.sh"
   [[ -x "$VERIFIED_INSTALLER" || -f "$VERIFIED_INSTALLER" ]] \

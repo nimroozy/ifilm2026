@@ -1,5 +1,9 @@
-# Production-like compose used by the verified installer / update agent.
-# Images should be pinned by digest in release manifests; local builds are a fallback.
+# Production compose used by the verified installer / update agent.
+# Application images MUST be pinned by immutable GHCR digest via:
+#   IFILM_IMAGE_BACKEND_API=ghcr.io/nimroozy/ifilm2026/backend-api@sha256:...
+#   IFILM_IMAGE_FRONTEND=ghcr.io/nimroozy/ifilm2026/frontend@sha256:...
+# Workers share the backend-api image digest (no distinct worker image).
+# Never use latest / mutable branch tags for application services.
 name: ifilm
 
 services:
@@ -42,12 +46,12 @@ services:
     networks: [ifilm_net]
 
   backend-api:
-    build:
-      context: ../../app/backend
-      dockerfile: Dockerfile.staging
+    image: ${IFILM_IMAGE_BACKEND_API:?immutable GHCR digest required}
+    pull_policy: always
     restart: unless-stopped
     env_file:
-      - path: /etc/ifilm/ifilm.env
+      # Override with IFILM_ENV_FILE for CI compose validation on non-root hosts.
+      - path: ${IFILM_ENV_FILE:-/etc/ifilm/ifilm.env}
         required: false
     environment: &api_env
       POSTGRES_HOST: postgres
@@ -118,9 +122,8 @@ services:
     networks: [ifilm_net]
 
   media-processing-worker:
-    build:
-      context: ../../app/backend
-      dockerfile: Dockerfile.staging
+    image: ${IFILM_IMAGE_BACKEND_API:?immutable GHCR digest required}
+    pull_policy: always
     restart: unless-stopped
     command: ["python", "-m", "app.workers.media_processing"]
     environment:
@@ -135,9 +138,8 @@ services:
     networks: [ifilm_net]
 
   publishing-worker:
-    build:
-      context: ../../app/backend
-      dockerfile: Dockerfile.staging
+    image: ${IFILM_IMAGE_BACKEND_API:?immutable GHCR digest required}
+    pull_policy: always
     restart: unless-stopped
     command: ["python", "-m", "app.workers.publishing"]
     environment:
@@ -151,9 +153,8 @@ services:
     networks: [ifilm_net]
 
   frontend:
-    build:
-      context: ../../app/frontend
-      dockerfile: Dockerfile.staging
+    image: ${IFILM_IMAGE_FRONTEND:?immutable GHCR digest required}
+    pull_policy: always
     restart: unless-stopped
     expose: ["80"]
     healthcheck:

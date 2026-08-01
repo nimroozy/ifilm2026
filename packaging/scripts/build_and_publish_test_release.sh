@@ -32,11 +32,28 @@ ARCHIVE="$DIST/ifilm-${VERSION}.tar.gz"
 # Flat archive root (packaging/, app/, install.sh, ...) so /opt/ifilm/current/packaging works.
 tar -C "$STAGE" -czf "$ARCHIVE" .
 
-# Optional local image build for digest pinning (best effort)
-BACKEND_DIGEST=""
-if docker build -f "$ROOT/app/backend/Dockerfile.staging" -t "ghcr.io/nimroozy/ifilm2026/backend-api:${VERSION}" "$ROOT/app/backend" >/tmp/ifilm-docker-build.log 2>&1; then
-  BACKEND_DIGEST="$(docker image inspect --format='{{.Id}}' "ghcr.io/nimroozy/ifilm2026/backend-api:${VERSION}" | sed 's/^sha256:/sha256:/')"
+# Local image IDs are NOT acceptable for production proof.
+# This helper may only publish disposable test releases when the caller supplies
+# already-pushed immutable GHCR digest refs via:
+#   IFILM_IMAGE_BACKEND_API=ghcr.io/nimroozy/ifilm2026/backend-api@sha256:...
+#   IFILM_IMAGE_FRONTEND=ghcr.io/nimroozy/ifilm2026/frontend@sha256:...
+# Production / candidate releases must be created by .github/workflows/release.yml
+# using Environment production-release + IFILM_RELEASE_SIGNING_KEY.
+BACKEND_REF="${IFILM_IMAGE_BACKEND_API:-}"
+FRONTEND_REF="${IFILM_IMAGE_FRONTEND:-}"
+if [[ -z "$BACKEND_REF" || -z "$FRONTEND_REF" ]]; then
+  echo "ERROR: set IFILM_IMAGE_BACKEND_API and IFILM_IMAGE_FRONTEND to full GHCR @sha256 refs." >&2
+  echo "Do not use local docker image IDs. Prefer the Actions release workflow." >&2
+  exit 1
 fi
+case "$BACKEND_REF" in
+  ghcr.io/nimroozy/ifilm2026/backend-api@sha256:*) ;;
+  *) echo "ERROR: invalid IFILM_IMAGE_BACKEND_API" >&2; exit 1 ;;
+esac
+case "$FRONTEND_REF" in
+  ghcr.io/nimroozy/ifilm2026/frontend@sha256:*) ;;
+  *) echo "ERROR: invalid IFILM_IMAGE_FRONTEND" >&2; exit 1 ;;
+esac
 
 ARGS=(
   --version "$VERSION"
@@ -46,11 +63,13 @@ ARGS=(
   --minimum-version "0.1.0"
   --database-backup-required
   --rollback-supported
+  --require-registry-digests
+  --image-digest "backend-api=${BACKEND_REF}"
+  --image-digest "frontend=${FRONTEND_REF}"
+  --image-digest "media-processing-worker=${BACKEND_REF}"
+  --image-digest "publishing-worker=${BACKEND_REF}"
   --out "$DIST/release-manifest.json"
 )
-if [[ -n "$BACKEND_DIGEST" ]]; then
-  ARGS+=(--image-digest "backend-api=${BACKEND_DIGEST}")
-fi
 python3 "$ROOT/packaging/release/build_manifest.py" "${ARGS[@]}"
 # Annotate rollback classification for test releases
 python3 - <<PY
