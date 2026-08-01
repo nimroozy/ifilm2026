@@ -90,6 +90,13 @@ jobs:
           cache: pip
           cache-dependency-path: app/backend/requirements-dev.txt
 
+      - name: Install ffmpeg/ffprobe (required by media processing tests)
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          ffmpeg -version
+          ffprobe -version
+
       - name: Backend quality (full suite)
         working-directory: app/backend
         env:
