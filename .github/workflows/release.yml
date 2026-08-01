@@ -99,8 +99,9 @@ jobs:
         run: |
           python -m pip install -U pip
           pip install -r requirements-dev.txt
-          ruff check .
-          mypy app
+          # Match Backend CI exactly — do not lint generated Alembic revision boilerplate.
+          ruff check app scripts tests
+          mypy app scripts
           # Exact local parity: full pytest suite, zero failures required.
           pytest -q
           alembic heads | tee /tmp/alembic-heads.txt
