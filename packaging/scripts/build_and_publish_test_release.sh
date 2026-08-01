@@ -13,16 +13,16 @@ trap 'rm -rf "$DIST"' EXIT
 
 STAGE="$DIST/stage/ifilm"
 mkdir -p "$STAGE"
-rsync -a \
+tar -C "$ROOT" \
   --exclude .git \
   --exclude node_modules \
-  --exclude '**/__pycache__' \
-  --exclude '**/.venv' \
+  --exclude '__pycache__' \
+  --exclude '.venv' \
   --exclude 'app/frontend/dist' \
   --exclude 'deploy/staging/.env.staging' \
   --exclude 'deploy/staging/.env.staging.credentials' \
   --exclude 'deploy/staging/backups' \
-  "$ROOT/" "$STAGE/"
+  -cf - . | tar -C "$STAGE" -xf -
 
 # Embed release identity into package
 printf '%s\n' "$VERSION" >"$STAGE/packaging/VERSION"
