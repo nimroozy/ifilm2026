@@ -31,3 +31,7 @@ If rollback requires database restore, operators must confirm explicitly unless 
 ## Manual rollback
 
 Use Admin → System updates → Roll Back (password + confirmation), or the update-agent `rollback_last_update` command via the admin API. Do not run ad-hoc `docker compose down -v`.
+
+## Disposable proof
+
+`v0.1.3-failhealth` intentionally failed readiness after install; the agent automatically rolled back to `v0.1.1-test` (`rollback_compatibility=application_only`). Media and catalog rows remained intact. See `DISPOSABLE_VERIFICATION.md`.

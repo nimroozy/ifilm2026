@@ -56,6 +56,10 @@ Optional `MAINTENANCE_MODE` can signal customer APIs while admins watch update p
 ## Offline / manual update
 
 1. Copy a signed release archive, `release-manifest.json`, and `.sig` to the host.
-2. Verify signature with `packaging/keys/release-signing.pub`.
+2. Verify signature with `packaging/keys/release-signing.pub` (`openssl pkeyutl -verify ... -rawin`).
 3. Ask the update agent (or ops runbook) to install that verified release.
 4. Never point production at an arbitrary Git URL or commit SHA.
+
+## Disposable verification
+
+See `DISPOSABLE_VERIFICATION.md` for the recorded clean install (`v0.1.0-test`), update (`v0.1.1-test`), checksum rejection, and automatic health-failure rollback.

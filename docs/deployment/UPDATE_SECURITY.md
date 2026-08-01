@@ -36,6 +36,11 @@ Allowed commands only:
 
 ## Troubleshooting
 
-- `update agent is not available`: check systemd unit and `/run/ifilm/update-agent.sock`
-- `invalid_signature`: wrong public key or tampered manifest
-- `concurrent_update`: wait for the active job or inspect agent lock under `/var/lib/ifilm/update-agent`
+- `update agent is not available`: check systemd unit (or supervised process) and `/run/ifilm/update-agent.sock`
+- `invalid_signature`: wrong public key or tampered manifest (Ed25519 verify requires `-rawin`)
+- `concurrent_update` / `lock_free` failed: wait for the active job or clear a *stale* agent lock under `/var/lib/ifilm/update-agent` after confirming no agent is running
+- Backend must receive `CORS_ORIGINS` as JSON from the env file (not Compose-interpolated)
+
+## Disposable security checks
+
+Recorded on the disposable host: low-privilege admin → 403 on version/install; wrong re-auth password → 401; stable channel excludes prereleases; checksum-mismatched signed release refused; UDS mode configurable via `UPDATE_AGENT_SOCKET_MODE`.

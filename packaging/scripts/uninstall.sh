@@ -19,9 +19,16 @@ if [[ -f "$COMPOSE_FILE" && -f "$ENV_FILE" ]]; then
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" down || true
 fi
 
-systemctl disable --now ifilm-update-agent.service 2>/dev/null || true
-rm -f /etc/systemd/system/ifilm-update-agent.service
-systemctl daemon-reload || true
+if [[ -d /run/systemd/system ]] && command -v systemctl >/dev/null 2>&1; then
+  systemctl disable --now ifilm-update-agent.service 2>/dev/null || true
+  rm -f /etc/systemd/system/ifilm-update-agent.service
+  systemctl daemon-reload || true
+else
+  if [[ -f "$IFILM_HOME/agent/agent.pid" ]]; then
+    kill "$(cat "$IFILM_HOME/agent/agent.pid")" 2>/dev/null || true
+    rm -f "$IFILM_HOME/agent/agent.pid"
+  fi
+fi
 
 log "application containers/services removed"
 log "data preserved at ${IFILM_VAR} (default)"

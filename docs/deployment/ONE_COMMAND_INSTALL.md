@@ -15,11 +15,10 @@ curl -fsSL https://raw.githubusercontent.com/nimroozy/ifilm2026/main/install.sh 
 
 ## Supported systems
 
-- Ubuntu Server 24.04 LTS (x86_64)
-- Ubuntu Server 22.04 LTS (x86_64)
-- Debian 12 (x86_64) where verified
+- **Verified:** Ubuntu Server 24.04 LTS (x86_64) — see `DISPOSABLE_VERIFICATION.md`
+- **Installer accepts (not disposable-verified in PR #14):** Ubuntu Server 22.04 LTS, Debian 12 (x86_64)
 
-Unsupported OS or architecture fails clearly. Do not force the installer on other platforms.
+Unsupported OS or architecture fails clearly. Overlay root filesystems (common in cloud VMs) require explicit `IFILM_ALLOW_OVERLAY_FS=1`. Do not force the installer on other platforms.
 
 ## Prerequisites
 

@@ -236,32 +236,8 @@ def create_backup(_payload: dict[str, Any]) -> dict[str, Any]:
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     out = IFILM_VAR / "backups" / f"pre-update-{stamp}"
     out.mkdir(parents=True, exist_ok=True)
-    # PostgreSQL dump via compose
+    # PostgreSQL custom-format dump via compose (binary capture only).
     dump = out / "postgres.dump"
-    proc = _run(
-        [
-            "docker",
-            "compose",
-            "--env-file",
-            str(ENV_FILE),
-            "-f",
-            str(COMPOSE_FILE),
-            "exec",
-            "-T",
-            "postgres",
-            "pg_dump",
-            "-U",
-            os.environ.get("POSTGRES_USER", "ifilm"),
-            "-d",
-            os.environ.get("POSTGRES_DB", "ifilm"),
-            "-Fc",
-        ],
-        timeout=1800,
-    )
-    if proc.returncode != 0:
-        raise AgentError("backup_failed", proc.stderr[-500:] or "pg_dump failed")
-    dump.write_bytes(proc.stdout.encode("latin1", errors="ignore") if isinstance(proc.stdout, str) else proc.stdout)
-    # Re-run capturing binary properly
     proc_bin = subprocess.run(
         [
             "docker",
@@ -285,7 +261,10 @@ def create_backup(_payload: dict[str, Any]) -> dict[str, Any]:
         timeout=1800,
     )
     if proc_bin.returncode != 0:
-        raise AgentError("backup_failed", (proc_bin.stderr or b"").decode("utf-8", errors="replace")[-500:])
+        raise AgentError(
+            "backup_failed",
+            (proc_bin.stderr or b"").decode("utf-8", errors="replace")[-500:] or "pg_dump failed",
+        )
     dump.write_bytes(proc_bin.stdout)
 
     list_proc = _run(
@@ -372,8 +351,8 @@ def install_verified_release(payload: dict[str, Any]) -> dict[str, Any]:
         "backup_id": None,
     }
     _write_job(job_id, job)
-    _acquire_lock(job_id)
     try:
+        # Preflight before acquiring the exclusive lock so lock_free can pass.
         pre = run_preflight(payload)
         job["preflight"] = pre
         if not pre["ok"]:
@@ -382,6 +361,7 @@ def install_verified_release(payload: dict[str, Any]) -> dict[str, Any]:
             _write_job(job_id, job)
             return job
 
+        _acquire_lock(job_id)
         job["state"] = "backing_up"
         _write_job(job_id, job)
         backup = create_backup({})

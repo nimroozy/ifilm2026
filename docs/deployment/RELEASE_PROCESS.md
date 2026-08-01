@@ -38,3 +38,7 @@ Mutable tags such as `latest` alone must not be trusted. Pin digests (or version
 
 - Public key: `packaging/keys/release-signing.pub` (committed)
 - Private key: GitHub Actions secret `IFILM_RELEASE_SIGNING_KEY` only
+- Algorithm: Ed25519 via `openssl pkeyutl` (`-rawin` required on modern OpenSSL)
+- Disposable test releases may be published with `packaging/scripts/build_and_publish_test_release.sh` using `IFILM_RELEASE_SIGNING_KEY_FILE` when the Actions secret cannot be written by the automation token
+
+Never log or commit private key material.
