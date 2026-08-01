@@ -84,7 +84,12 @@ def _utc_now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
-def _run(argv: list[str], *, timeout: int = 600) -> subprocess.CompletedProcess[str]:
+def _run(
+    argv: list[str],
+    *,
+    timeout: int = 600,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     """Fixed-argv subprocess helper. Never uses shell=True."""
     return subprocess.run(
         argv,
@@ -92,7 +97,42 @@ def _run(argv: list[str], *, timeout: int = 600) -> subprocess.CompletedProcess[
         capture_output=True,
         text=True,
         timeout=timeout,
+        env=env,
     )
+
+
+def _compose_env() -> dict[str, str]:
+    """Build subprocess env so compose --env-file wins over a stale agent process env.
+
+    Operators (and our non-systemd supervisor) may start the agent with
+    ``set -a; . /etc/ifilm/ifilm.env``, which exports IFILM_IMAGE_* into the
+    agent process. Docker Compose prefers process env over ``--env-file``, so
+    digest updates written during an update would otherwise be ignored.
+    """
+    env = dict(os.environ)
+    if ENV_FILE.is_file():
+        for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            if key.startswith("IFILM_IMAGE_") or key in {
+                "POSTGRES_DB",
+                "POSTGRES_USER",
+                "POSTGRES_PASSWORD",
+                "REDIS_PASSWORD",
+                "JWT_SECRET",
+                "PLAYBACK_TOKEN_SECRET",
+                "UPDATE_CHANNEL",
+                "UPDATE_AGENT_SOCKET",
+                "UPDATE_AGENT_SHARED_SECRET",
+                "IFILM_HTTP_PORT",
+                "IFILM_ENV_FILE",
+                "APP_ENV",
+            }:
+                env[key] = value
+    # Prefer the on-disk env file for compose interpolation.
+    env["IFILM_ENV_FILE"] = str(ENV_FILE)
+    return env
 
 
 def _require_secret(payload: dict[str, Any]) -> None:
@@ -417,23 +457,46 @@ def _verify_pulled_image(ref: str) -> None:
         )
 
 
-def _compose_pull_and_up() -> None:
-    pull = _run(
-        ["docker", "compose", "--env-file", str(ENV_FILE), "-f", str(COMPOSE_FILE), "pull"],
-        timeout=1800,
-    )
-    if pull.returncode != 0:
-        raise AgentError("image_pull_failed", "docker compose pull failed")
-    # Verify both application images against env (written from signed manifest).
+def _image_refs_from_env() -> dict[str, str]:
     env_text = ENV_FILE.read_text(encoding="utf-8")
     refs: dict[str, str] = {}
     for line in env_text.splitlines():
         if line.startswith("IFILM_IMAGE_BACKEND_API="):
-            refs["backend-api"] = line.split("=", 1)[1]
+            refs["backend-api"] = line.split("=", 1)[1].strip()
         elif line.startswith("IFILM_IMAGE_FRONTEND="):
-            refs["frontend"] = line.split("=", 1)[1]
+            refs["frontend"] = line.split("=", 1)[1].strip()
     if "backend-api" not in refs or "frontend" not in refs:
         raise AgentError("invalid_image_digest", "image digest env vars missing after apply")
+    return refs
+
+
+def _docker_pull_ref(ref: str) -> None:
+    """Pull one immutable digest ref; compose pull alone has raced to a no-op success."""
+    pull = _run(["docker", "pull", ref], timeout=1800, env=_compose_env())
+    if pull.returncode != 0:
+        detail = (pull.stderr or pull.stdout or "").strip().splitlines()
+        tail = detail[-1] if detail else "docker pull failed"
+        raise AgentError("image_pull_failed", f"docker pull failed for {ref}: {tail[:240]}")
+    _verify_pulled_image(ref)
+
+
+def _compose_pull_and_up() -> None:
+    # Pull application images by explicit digest first (authoritative), then let
+    # compose refresh remaining service images and recreate containers.
+    refs = _image_refs_from_env()
+    compose_env = _compose_env()
+    _docker_pull_ref(refs["backend-api"])
+    _docker_pull_ref(refs["frontend"])
+    pull = _run(
+        ["docker", "compose", "--env-file", str(ENV_FILE), "-f", str(COMPOSE_FILE), "pull"],
+        timeout=1800,
+        env=compose_env,
+    )
+    if pull.returncode != 0:
+        detail = (pull.stderr or pull.stdout or "").strip().splitlines()
+        tail = detail[-1] if detail else "docker compose pull failed"
+        raise AgentError("image_pull_failed", f"docker compose pull failed: {tail[:240]}")
+    # Re-verify after compose pull in case a tag rewrite occurred.
     _verify_pulled_image(refs["backend-api"])
     _verify_pulled_image(refs["frontend"])
     up = _run(
@@ -447,11 +510,44 @@ def _compose_pull_and_up() -> None:
             "up",
             "-d",
             "--no-build",
+            # Digest pins can change while service names stay the same; force
+            # recreation so pull/verify cannot leave stale containers running.
+            "--force-recreate",
+            "backend-api",
+            "frontend",
+            "media-processing-worker",
+            "publishing-worker",
         ],
         timeout=1800,
+        env=compose_env,
     )
     if up.returncode != 0:
-        raise AgentError("compose_up_failed", "docker compose up failed")
+        detail = (up.stderr or up.stdout or "").strip().splitlines()
+        tail = detail[-1] if detail else "docker compose up failed"
+        raise AgentError("compose_up_failed", f"docker compose up failed: {tail[:240]}")
+    # Ensure dependent edge services are up without unnecessarily recreating data stores.
+    edge = _run(
+        [
+            "docker",
+            "compose",
+            "--env-file",
+            str(ENV_FILE),
+            "-f",
+            str(COMPOSE_FILE),
+            "up",
+            "-d",
+            "--no-build",
+            "nginx",
+            "postgres",
+            "redis",
+        ],
+        timeout=1800,
+        env=compose_env,
+    )
+    if edge.returncode != 0:
+        detail = (edge.stderr or edge.stdout or "").strip().splitlines()
+        tail = detail[-1] if detail else "docker compose up failed"
+        raise AgentError("compose_up_failed", f"docker compose up failed: {tail[:240]}")
 
 
 def _flatten_release_tree(dest: Path) -> None:
@@ -483,6 +579,7 @@ def install_verified_release(payload: dict[str, Any]) -> dict[str, Any]:
         "backup_id": None,
     }
     _write_job(job_id, job)
+    release_switched = False
     try:
         # Preflight before acquiring the exclusive lock so lock_free can pass.
         pre = run_preflight(payload)
@@ -561,6 +658,7 @@ def install_verified_release(payload: dict[str, Any]) -> dict[str, Any]:
             if previous.exists() or previous.is_symlink():
                 previous.unlink()
             previous.symlink_to(dest)
+            release_switched = True
 
             # Pin compose to the newly signed immutable digests, then pull/verify.
             _apply_image_digests(manifest)
@@ -627,6 +725,24 @@ def install_verified_release(payload: dict[str, Any]) -> dict[str, Any]:
         job["error"] = {"code": exc.code, "message": exc.message}
         job["finished_at"] = _utc_now()
         _write_job(job_id, job)
+        # If the release symlink/env were already mutated, restore previous release.
+        if release_switched:
+            try:
+                rolled = rollback_last_update({"job_id": job_id, "reason": exc.code})
+                job = _read_job(job_id)
+                if rolled.get("state") == "rolled_back":
+                    job["state"] = "rolled_back"
+                    job["rollback_result"] = "application_only"
+                    job["finished_at"] = _utc_now()
+                    _write_job(job_id, job)
+            except AgentError as rollback_exc:
+                job["state"] = "rollback_failed"
+                job["error"] = {
+                    "code": "rollback_failed",
+                    "message": f"update failed ({exc.code}); rollback failed: {rollback_exc.message}",
+                }
+                job["finished_at"] = _utc_now()
+                _write_job(job_id, job)
         return job
     finally:
         _release_lock()
@@ -726,7 +842,12 @@ class Handler(socketserver.StreamRequestHandler):
             STATE_DIR.mkdir(parents=True, exist_ok=True)
             with (STATE_DIR / "agent-errors.log").open("a", encoding="utf-8") as fh:
                 fh.write(f"{_utc_now()} {type(exc).__name__}\n")
-        self.wfile.write((json.dumps(resp) + "\n").encode("utf-8"))
+        try:
+            self.wfile.write((json.dumps(resp) + "\n").encode("utf-8"))
+        except BrokenPipeError:
+            # Client disconnected (common for long install calls when the API
+            # worker is recycled); job state is already persisted on disk.
+            return
 
 
 def main() -> None:

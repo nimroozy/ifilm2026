@@ -246,6 +246,37 @@ def test_concurrent_update_rejected(client, fake_agent: FakeAgent):
         db.close()
 
 
+def test_successful_preflight_does_not_block_install(client, fake_agent: FakeAgent):
+    headers = _admin_headers(client)
+    pre = client.post("/api/admin/system/updates/preflight", headers=headers)
+    assert pre.status_code == 200
+    assert pre.json()["ok"] is True
+
+    db = SessionLocal()
+    try:
+        admin = db.query(AdminUser).filter(AdminUser.username == "admin").one()
+        recorded = (
+            db.query(SystemUpdateJob)
+            .filter(SystemUpdateJob.state == "preflight_ok")
+            .order_by(SystemUpdateJob.started_at.desc())
+            .first()
+        )
+        assert recorded is not None
+        assert recorded.preflight_ok is True
+        job = svc.start_install(
+            db,
+            admin,
+            password=TEST_ADMIN_PASSWORD,
+            confirm=True,
+            target_version="0.1.1-test",
+            client=fake_agent,  # type: ignore[arg-type]
+            background=False,
+        )
+        assert job["state"] == "completed"
+    finally:
+        db.close()
+
+
 def test_permission_enforcement(client, fake_agent: FakeAgent):
     db = SessionLocal()
     try:

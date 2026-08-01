@@ -126,6 +126,49 @@ class UpdateAgentTests(unittest.TestCase):
         names = {c["name"]: c["passed"] for c in result["checks"]}
         self.assertFalse(names["lock_free"])
 
+    def test_compose_pull_and_up_pulls_digest_refs_explicitly(self) -> None:
+        backend = (
+            "ghcr.io/nimroozy/ifilm2026/backend-api@"
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        )
+        frontend = (
+            "ghcr.io/nimroozy/ifilm2026/frontend@"
+            "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        )
+        agent.ENV_FILE.write_text(
+            f"IFILM_IMAGE_BACKEND_API={backend}\nIFILM_IMAGE_FRONTEND={frontend}\n",
+            encoding="utf-8",
+        )
+
+        def fake_run(argv, *, timeout=600, env=None):  # noqa: ARG001
+            if argv[:2] == ["docker", "pull"]:
+                self.assertIsNotNone(env)
+                self.assertEqual(env.get("IFILM_IMAGE_BACKEND_API"), backend)
+                return mock.Mock(returncode=0, stdout="pulled\n", stderr="")
+            if argv[:3] == ["docker", "image", "inspect"]:
+                ref = argv[-1]
+                digest = ref.split("@", 1)[1]
+                repo = ref.split("@", 1)[0]
+                return mock.Mock(
+                    returncode=0,
+                    stdout=json.dumps([f"{repo}@{digest}"]),
+                    stderr="",
+                )
+            if argv[:2] == ["docker", "compose"] and "pull" in argv:
+                return mock.Mock(returncode=0, stdout="pulled\n", stderr="")
+            if argv[:2] == ["docker", "compose"] and "up" in argv:
+                return mock.Mock(returncode=0, stdout="up\n", stderr="")
+            return mock.Mock(returncode=1, stdout="", stderr="unexpected")
+
+        with mock.patch.object(agent, "_run", side_effect=fake_run) as run:
+            agent._compose_pull_and_up()
+
+        pull_cmds = [c.args[0] for c in run.call_args_list if c.args[0][:2] == ["docker", "pull"]]
+        self.assertEqual(pull_cmds[0], ["docker", "pull", backend])
+        self.assertEqual(pull_cmds[1], ["docker", "pull", frontend])
+        up_cmds = [c.args[0] for c in run.call_args_list if c.args[0][:2] == ["docker", "compose"] and "up" in c.args[0]]
+        self.assertTrue(any("--force-recreate" in cmd for cmd in up_cmds))
+
 
 if __name__ == "__main__":
     unittest.main()

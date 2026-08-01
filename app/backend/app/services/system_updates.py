@@ -235,9 +235,11 @@ def run_preflight(
         if latest.get("signature_url"):
             payload["signature_url"] = latest["signature_url"]
     result = agent.call("run_preflight", payload)
+    # Successful preflight is a finished audit record, not an in-flight job.
+    # Keeping state="preflight" would block install via ACTIVE_STATES.
     job = SystemUpdateJob(
         id=str(uuid.uuid4()),
-        state="preflight" if result.get("ok") else "preflight_failed",
+        state="preflight_ok" if result.get("ok") else "preflight_failed",
         channel=get_settings().update_channel,
         current_version=str((check.get("current") or {}).get("version") or ""),
         target_version=str(latest.get("version") or "") if isinstance(latest, dict) else None,
@@ -378,10 +380,20 @@ def _execute_install(
             err = result["error"]
             job.error_code = str(err.get("code") or "failed")[:64]
             job.error_message = _safe_error(str(err.get("message") or ""))
-        if job.state in {"completed", "rolled_back"}:
+        if job.state in {
+            "completed",
+            "rolled_back",
+            "failed",
+            "verification_failed",
+            "rollback_failed",
+            "preflight_failed",
+            "migration_failed",
+            "health_check_failed",
+        }:
             job.finished_at = _utcnow()
-            ver = get_version_info(client=agent)
-            job.resulting_migration_head = ver.get("migration_head")
+            if job.state in {"completed", "rolled_back"}:
+                ver = get_version_info(client=agent)
+                job.resulting_migration_head = ver.get("migration_head")
         _add_event(db, job_id, "install_finished", job.state)
         db.commit()
     except UpdateAgentError as exc:
@@ -406,6 +418,70 @@ def _execute_install(
         db.commit()
 
 
+def _reconcile_active_job(
+    db: Session,
+    job: SystemUpdateJob,
+    *,
+    client: UpdateAgentClient | None = None,
+) -> None:
+    """Sync DB job state after API restarts mid-update/rollback.
+
+    Compose recreation restarts backend-api, which can kill the in-process
+    waiter thread before it persists the agent result. Prefer the agent job
+    file when present; otherwise infer completion from the live version.
+    """
+    if job.state not in ACTIVE_STATES:
+        return
+    agent = client or get_update_agent_client()
+    if job.agent_job_id:
+        try:
+            progress = agent.call("query_update_progress", {"job_id": job.agent_job_id})
+            state = str(progress.get("state") or job.state)
+            if state != job.state:
+                job.state = state
+                if progress.get("backup_id"):
+                    job.backup_id = str(progress.get("backup_id"))
+                if progress.get("error"):
+                    err = progress["error"]
+                    job.error_code = str(err.get("code") or "")[:64] or job.error_code
+                    job.error_message = _safe_error(str(err.get("message") or "")) or job.error_message
+                if state in {
+                    "completed",
+                    "rolled_back",
+                    "failed",
+                    "verification_failed",
+                    "rollback_failed",
+                    "preflight_failed",
+                    "migration_failed",
+                    "health_check_failed",
+                }:
+                    job.finished_at = job.finished_at or _utcnow()
+                    if state == "rolled_back" and not job.rollback_result:
+                        job.rollback_result = "application_only"
+                db.commit()
+                return
+        except UpdateAgentError:
+            pass
+    # Fallback: compare live version to the job target/current after agent work.
+    try:
+        live = get_version_info(client=agent)
+    except Exception:  # noqa: BLE001
+        return
+    live_version = str(live.get("version") or "")
+    target = str(job.target_version or "").lstrip("v")
+    current = str(job.current_version or "").lstrip("v")
+    if job.state == "installing" and target and live_version == target:
+        job.state = "completed"
+        job.finished_at = job.finished_at or _utcnow()
+        job.resulting_migration_head = live.get("migration_head")
+        db.commit()
+    elif job.state == "rollback_running" and current and live_version == current:
+        job.state = "rolled_back"
+        job.rollback_result = job.rollback_result or "application_only"
+        job.finished_at = job.finished_at or _utcnow()
+        db.commit()
+
+
 def get_job(db: Session, job_id: str, admin: AdminUser, *, client: UpdateAgentClient | None = None) -> dict[str, Any]:
     job = db.get(SystemUpdateJob, job_id)
     if job is None:
@@ -414,16 +490,7 @@ def get_job(db: Session, job_id: str, admin: AdminUser, *, client: UpdateAgentCl
     perms = set((admin.role.permissions if admin.role else None) or [])
     if "system_updates.manage" not in perms and job.actor_admin_id != admin.id:
         raise PermissionError("forbidden")
-    if job.agent_job_id and job.state in ACTIVE_STATES:
-        try:
-            agent = client or get_update_agent_client()
-            progress = agent.call("query_update_progress", {"job_id": job.agent_job_id})
-            state = str(progress.get("state") or job.state)
-            if state != job.state:
-                job.state = state
-                db.commit()
-        except UpdateAgentError:
-            pass
+    _reconcile_active_job(db, job, client=client)
     events = (
         db.query(SystemUpdateEvent)
         .filter(SystemUpdateEvent.job_id == job_id)

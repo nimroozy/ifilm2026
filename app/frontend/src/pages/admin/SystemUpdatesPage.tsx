@@ -67,7 +67,7 @@ export default function SystemUpdatesPage() {
         .getSystemUpdateJob(activeJob.id)
         .then((job) => {
           setActiveJob(job);
-          if (job.finished_at || ['completed', 'failed', 'rolled_back', 'rollback_failed', 'preflight_failed', 'backup_failed', 'verification_failed', 'migration_failed', 'health_check_failed'].includes(job.state)) {
+          if (job.finished_at || ['completed', 'failed', 'rolled_back', 'rollback_failed', 'preflight_failed', 'preflight_ok', 'backup_failed', 'verification_failed', 'migration_failed', 'health_check_failed', 'check_recorded'].includes(job.state)) {
             refresh().catch(() => undefined);
           }
         })

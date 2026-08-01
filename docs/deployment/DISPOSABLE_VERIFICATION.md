@@ -30,8 +30,8 @@ Staging containers/volumes were **not** used for data. Disposable paths:
 
 - Scheme: Ed25519 (`openssl pkeyutl` with `-rawin`)
 - Public key committed: `packaging/keys/release-signing.pub`
-- Private key: temporary test key held only in a mode-`600` temp file during publish; **not** committed; **not** printed; shredded after verification
-- GitHub Actions secret `IFILM_RELEASE_SIGNING_KEY`: **could not be written** by the agent token (`403 Resource not accessible by integration`). Releases were signed locally with the same cryptographic material that secret would hold. A repo admin should store the production/signing key as that secret for CI publish.
+- Public fingerprint (SHA-256 of DER): `e7b365230a5b360f417532cba134fdb91eaa73b814163f3175a3f13d28286612`
+- Private key: Environment secret `IFILM_RELEASE_SIGNING_KEY` in `production-release` for Actions-signed candidates; **not** committed; **not** printed; local PEM copies shredded after verification
 
 Rejection matrix exercised (tooling tests + bad published release):
 
@@ -134,32 +134,48 @@ Revoked fingerprint: `8c04b9141a9fe72346edf9e1f6bc27b0fbef3dc728d6e61124fb897e74
 Current fingerprint: `e7b365230a5b360f417532cba134fdb91eaa73b814163f3175a3f13d28286612`.
 See `KEY_ROTATION_EMERGENCY_2026-08-01.md`. Do not trust artifacts signed under the revoked identity.
 
-## Actions-signed candidate attempt (`v0.1.4-candidate`)
+## Actions-signed candidates (`v0.1.4-candidate` → `v0.1.5-candidate`)
 
-As of post-rotation branch tip (see git history):
+Production Ed25519 key stored in Environment secret `IFILM_RELEASE_SIGNING_KEY`
+(`production-release`). Public fingerprint verified:
 
-| Gate | Result |
-| --- | --- |
-| Release `quality` job | Pass (backend/frontend/installer/compose) |
-| GHCR push + registry digests | Pass |
-| SBOM generation | Pass |
-| Trivy hard gate | Pass (CRITICAL ignores + actionable HIGH policy) |
-| Manifest sign with `production-release` secret | **FAIL** — secret accessible but `signing_key_bytes=19` (not a PEM) |
-| GitHub prerelease created | Not yet |
-| Disposable install from Actions-signed candidate | Blocked on signing |
+`e7b365230a5b360f417532cba134fdb91eaa73b814163f3175a3f13d28286612`
 
-Admin must re-set `IFILM_RELEASE_SIGNING_KEY` to the full private key PEM — see `ADMIN_SIGNING_SETUP.md`.
+| Tag | Release run | Result |
+| --- | --- | --- |
+| `v0.1.4-candidate` | https://github.com/nimroozy/ifilm2026/actions/runs/30703638647 | Actions-signed success (`manifest_signed=true`) |
+| `v0.1.5-candidate` | https://github.com/nimroozy/ifilm2026/actions/runs/30703891825 | Actions-signed success |
+
+Immutable digests:
+
+| Release | backend-api | frontend |
+| --- | --- | --- |
+| `0.1.4-candidate` | `...@sha256:6a18a77fac4df24baeb400879db648bdc480ff9f7ce00c013c70831348e5041c` | `...@sha256:0e7fc89a5ef6dc0547f21a77d6ce5cee4dc0c198846f27452e816d7f0ee74a0e` |
+| `0.1.5-candidate` | `...@sha256:52ea7339d1433e7c2763969f107d810d7e704a7bf80b0fd4a687b7a4de3319af` | `...@sha256:9aca7350b6b321dec7bf5cd8d8d71fd9479bfe728aa5780816e893dd287171a6` |
+
+### Disposable proof (Ubuntu 24.04 overlay, port `18080`)
+
+1. **Clean install** of Actions-signed `v0.1.4-candidate` (bootstrap public key URL still branch-pinned pre-merge). Ready OK; migration head `012_system_update_notes`; env mode `600`; marker row `cand-014-marker`.
+2. **Update** via admin API to Actions-signed `v0.1.5-candidate`: preflight signature OK; backup `pg_restore -l` OK; agent job `completed`; live version `0.1.5-candidate`; containers on 0.1.5 digests; marker preserved.
+3. **Rollback** via admin API (`application_only`): agent job `rolled_back`; live version `0.1.4-candidate`; previous digests restored; marker preserved; ready OK.
+
+### Fixes found during the Actions-signed proof
+
+- Successful API preflight must record terminal state `preflight_ok` (not active `preflight`) so install is not blocked.
+- Update-agent compose subprocesses must refresh `IFILM_IMAGE_*` from `/etc/ifilm/ifilm.env` (process env from `EnvironmentFile` / supervised `set -a` otherwise shadows `--env-file` and leaves stale containers).
+- Explicit `docker pull <digest>` + `--force-recreate` for app services; auto-rollback after release-tree mutation failures.
+- Backend reconciles active install/rollback jobs after API restart during compose recreate.
 
 ## Limitations / deviations
 
-1. Environment `production-release` exists; secret name present but value is not a usable PEM (19 bytes). Agent token cannot rewrite secrets (403).
-2. Bootstrap URL used PR branch/commit for earlier disposable tests, not `main` (pre-merge).
-3. Overlay root FS required explicit opt-in.
-4. No systemd — update-agent run as supervised process.
-5. Port `18080` to avoid colliding with staging on `8080`.
-6. Hotfixes applied during early verification committed on the PR branch.
-7. Database rollback classification for `012`: **backward-compatible / rollback-safe column**; failhealth test used **application_only** rollback (no DB restore).
-8. Trivy policy: unapproved CRITICAL always fail (time-bound ignores for unfixed Debian base); HIGH fail only when `FixedVersion` exists.
+1. Bootstrap URL used PR branch/commit for disposable tests, not `main` (pre-merge).
+2. Overlay root FS required explicit opt-in.
+3. No systemd — update-agent run as supervised process (`UPDATE_AGENT_SOCKET_MODE=0o666`).
+4. Port `18080` to avoid colliding with staging on `8080`.
+5. Hotfixes applied during verification committed on the PR branch.
+6. Database rollback classification for `012`: **backward-compatible / rollback-safe column**; rollback proof used **application_only** (no DB restore).
+7. Trivy policy: unapproved CRITICAL always fail (time-bound ignores for unfixed Debian base); HIGH fail only when `FixedVersion` exists.
+8. Admin API HTTP calls that recreate `backend-api` may return `502` while the agent job still finishes successfully; job reconciliation / agent job files are authoritative.
 
 ## Rollback classification reminder
 
