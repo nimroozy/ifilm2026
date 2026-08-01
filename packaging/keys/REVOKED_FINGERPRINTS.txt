@@ -1,0 +1,5 @@
+# Revoked release-signing public key fingerprints (SHA-256 of DER).
+# Bootstrap and operators MUST reject these. One fingerprint per line.
+# Format: <sha256hex>  # reason / UTC date
+
+8c04b9141a9fe72346edf9e1f6bc27b0fbef3dc728d6e61124fb897e74ac1e26  # EMERGENCY: private key exposed 2026-08-01; permanently compromised

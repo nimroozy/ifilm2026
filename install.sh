@@ -14,7 +14,7 @@ IFILM_VERSION="${IFILM_VERSION:-}"          # empty = latest matching channel
 IFILM_INSTALL_ROOT="${IFILM_INSTALL_ROOT:-/opt/ifilm}"
 # Trust anchor: fingerprint of packaging/keys/release-signing.pub (DER SHA-256).
 # The downloaded public key MUST match this fingerprint before signature verify.
-IFILM_RELEASE_PUBLIC_KEY_SHA256="${IFILM_RELEASE_PUBLIC_KEY_SHA256:-8c04b9141a9fe72346edf9e1f6bc27b0fbef3dc728d6e61124fb897e74ac1e26}"
+IFILM_RELEASE_PUBLIC_KEY_SHA256="${IFILM_RELEASE_PUBLIC_KEY_SHA256:-e7b365230a5b360f417532cba134fdb91eaa73b814163f3175a3f13d28286612}"
 IFILM_RELEASE_PUBLIC_KEY_URL="${IFILM_RELEASE_PUBLIC_KEY_URL:-https://raw.githubusercontent.com/${IFILM_REPO}/main/packaging/keys/release-signing.pub}"
 MIN_RAM_MB="${IFILM_MIN_RAM_MB:-2048}"
 MIN_DISK_GB="${IFILM_MIN_DISK_GB:-20}"
@@ -177,6 +177,12 @@ download_and_verify() {
   curl -fsSL "$IFILM_RELEASE_PUBLIC_KEY_URL" -o "$work/release-signing.pub"
   local fp
   fp="$(openssl pkey -pubin -in "$work/release-signing.pub" -outform DER 2>/dev/null | sha256sum | awk '{print $1}')"
+  # Hard-reject known compromised production identities (see packaging/keys/REVOKED_FINGERPRINTS.txt).
+  case "$fp" in
+    8c04b9141a9fe72346edf9e1f6bc27b0fbef3dc728d6e61124fb897e74ac1e26)
+      die "public key fingerprint is REVOKED (compromised production key 2026-08-01) — aborting"
+      ;;
+  esac
   [[ "$fp" == "$IFILM_RELEASE_PUBLIC_KEY_SHA256" ]] \
     || die "public key fingerprint mismatch (got ${fp}, expected ${IFILM_RELEASE_PUBLIC_KEY_SHA256}) — aborting"
   curl -fsSL "$MANIFEST_URL" -o "$work/release-manifest.json"

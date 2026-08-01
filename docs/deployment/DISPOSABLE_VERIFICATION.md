@@ -127,9 +127,16 @@ sudo env \
 | Other OS/arch | Rejected | Installer hard-fail |
 | Overlay FS / no-systemd | Explicit opt-in only | Not normal production deployment |
 
+## Emergency key rotation (2026-08-01)
+
+Previous production signing private key was **exposed and permanently compromised**.
+Revoked fingerprint: `8c04b9141a9fe72346edf9e1f6bc27b0fbef3dc728d6e61124fb897e74ac1e26`.
+Current fingerprint: `e7b365230a5b360f417532cba134fdb91eaa73b814163f3175a3f13d28286612`.
+See `KEY_ROTATION_EMERGENCY_2026-08-01.md`. Do not trust artifacts signed under the revoked identity.
+
 ## Actions-signed candidate attempt (`v0.1.4-candidate`)
 
-As of head `3f06353c4785c7dcc0fb53c557da779ae525f241`:
+As of post-rotation branch tip (see git history):
 
 | Gate | Result |
 | --- | --- |

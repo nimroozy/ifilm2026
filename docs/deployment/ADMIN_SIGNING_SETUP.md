@@ -3,24 +3,15 @@
 Environment: **`production-release`**  
 Secret name: **`IFILM_RELEASE_SIGNING_KEY`**
 
-## Current blocker (observed in Actions)
+## Emergency rotation (2026-08-01)
 
-Release run diagnostics (no secret material printed):
+The previous production private key was **exposed and is permanently compromised**.
 
-```text
-signing_key_bytes=19
-signing_key_has_begin_private=False
-signing_key_has_end_private=False
-```
+- Revoked fingerprint: `8c04b9141a9fe72346edf9e1f6bc27b0fbef3dc728d6e61124fb897e74ac1e26`
+- Current fingerprint: `e7b365230a5b360f417532cba134fdb91eaa73b814163f3175a3f13d28286612`
+- Details: `docs/deployment/KEY_ROTATION_EMERGENCY_2026-08-01.md`
 
-A usable Ed25519 PKCS#8 PEM is ~119 bytes and includes:
-
-```text
------BEGIN PRIVATE KEY-----
------END PRIVATE KEY-----
-```
-
-**19 bytes matches the filename `release-signing.pub`.** The Environment secret currently looks like a placeholder/path, not the private key PEM. Please delete and re-create it.
+**Delete the old Environment secret value and set only the new PEM.**
 
 ## Required PEM format
 
@@ -30,56 +21,44 @@ A usable Ed25519 PKCS#8 PEM is ~119 bytes and includes:
 -----END PRIVATE KEY-----
 ```
 
-Do **not** store:
+Do **not** store the public key, a fingerprint, a filename, or the revoked key.
 
-- the public key (`release-signing.pub`)
-- the fingerprint
-- a file path / filename
-- a password
+## Downloadable package (Cursor VM artifact)
 
-Public fingerprint (SHA-256 of DER public key):
+The Cursor VM GitHub token cannot write Environment secrets (403). Use:
 
 ```text
-8c04b9141a9fe72346edf9e1f6bc27b0fbef3dc728d6e61124fb897e74ac1e26
+/opt/cursor/artifacts/signing/download/IFILM_RELEASE_SIGNING_KEY.pem
 ```
 
-## Re-set from file (recommended)
+Integrity helpers (no private key body):
 
-On a secure admin workstation that has the private key PEM:
+```text
+/opt/cursor/artifacts/signing/download/INTEGRITY.txt
+/opt/cursor/artifacts/signing/download/release-signing.pub
+/opt/cursor/artifacts/signing/download/PUBLIC_KEY_SHA256.txt
+/opt/cursor/artifacts/signing/download/README_SET_SECRET.txt
+```
+
+Expected: PEM **~119 bytes**; public fingerprint  
+`e7b365230a5b360f417532cba134fdb91eaa73b814163f3175a3f13d28286612`.
+
+## Set from file on your Mac
 
 ```bash
 gh secret set IFILM_RELEASE_SIGNING_KEY \
   --repo nimroozy/ifilm2026 \
   --env production-release \
-  < /path/to/IFILM_RELEASE_SIGNING_KEY.pem
+  < ./IFILM_RELEASE_SIGNING_KEY.pem
 ```
 
-### Downloadable package (Cursor VM artifact)
+Then tell the agent to re-run `v0.1.4-candidate`.
 
-The Cursor VM GitHub token cannot write Environment secrets (403). A temporary
-download package is available from the agent artifacts UI:
+## Verify without printing the secret
 
-```text
-/opt/cursor/artifacts/signing/download/IFILM_RELEASE_SIGNING_KEY.pem
-/opt/cursor/artifacts/signing/download/IFILM_RELEASE_SIGNING_KEY.pem.b64
-/opt/cursor/artifacts/signing/download/README_SET_SECRET.txt
-/opt/cursor/artifacts/signing/download/INTEGRITY.txt
-```
+Publish step **Build and sign manifest** must log:
 
-Expected integrity: PEM **119 bytes**; public fingerprint  
-`8c04b9141a9fe72346edf9e1f6bc27b0fbef3dc728d6e61124fb897e74ac1e26`.
-
-After setting the secret on your Mac, tell the agent to re-run `v0.1.4-candidate`.
-The agent will delete the download package and shred local PEMs only after the
-Actions-signed candidate succeeds.
-
-Never commit the private key.
-
-## Verify
-
-Re-run / retag `v0.1.4-candidate`. Publish step **Build and sign manifest** must log:
-
-- `signing_key_bytes` around `119` (not `19`)
+- `signing_key_bytes` around `119`
 - `signing_key_has_begin_private=True`
 - `signing_key_has_end_private=True`
 - `manifest_signed=true`
@@ -88,4 +67,4 @@ Logs must never contain PEM body lines.
 
 ## Key rotation / emergency revocation
 
-See `packaging/keys/README.md`.
+See `packaging/keys/README.md` and `KEY_ROTATION_EMERGENCY_2026-08-01.md`.

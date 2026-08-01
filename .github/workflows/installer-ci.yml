@@ -41,7 +41,11 @@ jobs:
         run: |
           FP="$(openssl pkey -pubin -in packaging/keys/release-signing.pub -outform DER | sha256sum | awk '{print $1}')"
           grep -q "$FP" install.sh
-          test "$FP" = "8c04b9141a9fe72346edf9e1f6bc27b0fbef3dc728d6e61124fb897e74ac1e26"
+          test "$FP" = "e7b365230a5b360f417532cba134fdb91eaa73b814163f3175a3f13d28286612"
+          # Compromised identity must remain revoked and must not equal current key.
+          grep -q '8c04b9141a9fe72346edf9e1f6bc27b0fbef3dc728d6e61124fb897e74ac1e26' packaging/keys/REVOKED_FINGERPRINTS.txt
+          grep -q '8c04b9141a9fe72346edf9e1f6bc27b0fbef3dc728d6e61124fb897e74ac1e26' install.sh
+          test "$FP" != "8c04b9141a9fe72346edf9e1f6bc27b0fbef3dc728d6e61124fb897e74ac1e26"
 
       - name: Trivy ignore policy validation
         run: python3 packaging/security/validate_trivy_ignores.py
@@ -57,6 +61,9 @@ jobs:
 
       - name: Image digest policy tests
         run: python3 packaging/tests/test_image_digests.py -v
+
+      - name: Signing trust anchor / revocation
+        run: python3 packaging/tests/test_signing_trust_anchor.py -v
 
       - name: Manifest build/sign roundtrip
         run: |
