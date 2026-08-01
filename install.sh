@@ -58,6 +58,11 @@ check_resources() {
   fstype="$(findmnt -no FSTYPE /)"
   case "$fstype" in
     ext4|xfs|btrfs) ;;
+    overlay)
+      # Cloud/CI disposable hosts often use overlay; allow only with explicit opt-in.
+      [[ "${IFILM_ALLOW_OVERLAY_FS:-0}" == "1" ]] \
+        || die "unsupported root filesystem overlay (set IFILM_ALLOW_OVERLAY_FS=1 for disposable cloud hosts)"
+      ;;
     *) die "unsupported root filesystem ${fstype}" ;;
   esac
   log "resources ok: cpus=${cpus} ram_mb=${mem_mb} disk_gb=${disk_gb} fs=${fstype}"
