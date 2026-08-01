@@ -28,6 +28,7 @@ class SystemUpdateJob(Base):
     error_message: Mapped[str | None] = mapped_column(String(512), nullable=True)
     rollback_result: Mapped[str | None] = mapped_column(String(64), nullable=True)
     agent_job_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    operator_notes: Mapped[str | None] = mapped_column(String(512), nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

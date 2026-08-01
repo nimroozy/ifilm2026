@@ -143,8 +143,10 @@ fetch_release_metadata() {
 
 download_and_verify() {
   local work
+  local work
   work="$(mktemp -d /tmp/ifilm-bootstrap.XXXXXX)"
-  trap 'rm -rf "$work"' EXIT
+  IFILM_BOOTSTRAP_WORK="$work"
+  trap 'rm -rf "${IFILM_BOOTSTRAP_WORK:-}"' EXIT
   curl -fsSL "$IFILM_RELEASE_PUBLIC_KEY_URL" -o "$work/release-signing.pub"
   curl -fsSL "$MANIFEST_URL" -o "$work/release-manifest.json"
   curl -fsSL "$SIG_URL" -o "$work/release-manifest.json.sig"

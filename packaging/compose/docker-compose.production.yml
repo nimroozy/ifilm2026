@@ -78,13 +78,13 @@ services:
       ENABLE_CDN_SYNC: "false"
       ENABLE_RADIUS_LOGIN: "false"
       SUBSCRIBER_IDENTITY_MODE: ${SUBSCRIBER_IDENTITY_MODE:-disabled}
-      STAGING_ALLOW_FIXTURE_AUTH: "false"
+      STAGING_ALLOW_FIXTURE_AUTH: ${STAGING_ALLOW_FIXTURE_AUTH:-false}
       RADIUS_ENTITLEMENT_MAPPING_ENABLED: "false"
       RADIUS_ENABLED: "false"
       ADMIN_BOOTSTRAP_USERNAME: ${ADMIN_BOOTSTRAP_USERNAME:-admin}
       ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:-}
       ADMIN_BOOTSTRAP_EMAIL: ${ADMIN_BOOTSTRAP_EMAIL:-}
-      CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost"]}
+      # CORS_ORIGINS must come from env_file as JSON (do not interpolate here).
       CSP_MODE: production
     volumes:
       - /var/lib/ifilm/media/originals:/data/media/originals

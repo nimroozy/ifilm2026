@@ -89,7 +89,7 @@ jobs:
           mypy app
           pytest -q
           alembic heads | tee /tmp/alembic-heads.txt
-          grep -q '011_system_updates' /tmp/alembic-heads.txt
+          grep -q '012_system_update_notes' /tmp/alembic-heads.txt
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -170,7 +170,7 @@ jobs:
             --version "$VERSION" \
             --channel stable \
             --archive "$ARCHIVE" \
-            --migration-head 011_system_updates \
+            --migration-head 012_system_update_notes \
             --minimum-version 0.1.0 \
             --database-backup-required \
             --rollback-supported \

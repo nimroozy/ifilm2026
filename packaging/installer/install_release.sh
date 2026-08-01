@@ -107,7 +107,7 @@ write_env() {
 APP_ENV=${INSTALL_MODE}
 DEBUG=false
 PUBLIC_DOMAIN=${PUBLIC_DOMAIN}
-CORS_ORIGINS=["https://${PUBLIC_DOMAIN}","http://${PUBLIC_DOMAIN}","http://localhost"]
+CORS_ORIGINS=["https://${PUBLIC_DOMAIN}","http://${PUBLIC_DOMAIN}","http://localhost","http://127.0.0.1:${IFILM_HTTP_PORT:-8080}"]
 CSP_MODE=production
 
 POSTGRES_DB=ifilm
@@ -126,6 +126,7 @@ JWT_SECRET=${jwt}
 PLAYBACK_TOKEN_SECRET=${playback}
 UPDATE_AGENT_SHARED_SECRET=${agent}
 UPDATE_AGENT_SOCKET=/run/ifilm/update-agent.sock
+UPDATE_AGENT_SOCKET_MODE=0o666
 UPDATE_CHANNEL=stable
 
 ADMIN_BOOTSTRAP_USERNAME=${ADMIN_USERNAME}

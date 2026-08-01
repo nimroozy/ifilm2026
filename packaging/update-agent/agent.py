@@ -623,7 +623,7 @@ def main() -> None:
         SOCKET_PATH.unlink()
     SOCKET_PATH.parent.mkdir(parents=True, exist_ok=True)
     server = ThreadedUnixServer(str(SOCKET_PATH), Handler)
-    os.chmod(SOCKET_PATH, 0o660)
+    os.chmod(SOCKET_PATH, int(os.environ.get("UPDATE_AGENT_SOCKET_MODE", "0o660"), 8))
     print(f"ifilm-update-agent listening on {SOCKET_PATH}", flush=True)
     server.serve_forever()
 
