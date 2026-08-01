@@ -88,6 +88,38 @@ Generated at install time (never stored in git):
 - Update-agent shared secret
 - Admin password (prompted or generated)
 
+### Reinstall / existing data
+
+PostgreSQL only applies `POSTGRES_PASSWORD` on **first** data directory init.
+From `v1.0.1` onward, if `/var/lib/ifilm/postgres` already exists the installer
+**reuses** `POSTGRES_PASSWORD` (and Redis/app secrets) from the existing
+`/etc/ifilm/ifilm.env` instead of generating new ones.
+
+If you see `password authentication failed for user "ifilm"`:
+
+**Immediate recovery (works with `v1.0.0` too):** wipe the old DB/Redis data
+directories, then reinstall so Postgres can initialize with the new password:
+
+```bash
+sudo docker compose --env-file /etc/ifilm/ifilm.env \
+  -f /opt/ifilm/current/packaging/compose/docker-compose.production.yml down || true
+sudo rm -rf /var/lib/ifilm/postgres /var/lib/ifilm/redis
+curl -fsSL https://raw.githubusercontent.com/nimroozy/ifilm2026/main/install.sh | sudo \
+  IFILM_CHANNEL=stable IFILM_VERSION=v1.0.0 bash
+```
+
+Prefer restoring a backup of the previous matching `/etc/ifilm/ifilm.env` if you
+must keep the existing database. Do not wipe if you need catalog/media data
+without a backup.
+
+From `v1.0.1` you can also use the installer wipe opt-in:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nimroozy/ifilm2026/main/install.sh | sudo \
+  IFILM_WIPE_DATA=1 IFILM_DELETE_CONFIRM=DELETE-IFILM-DATA \
+  IFILM_CHANNEL=stable IFILM_VERSION=v1.0.1 bash
+```
+
 ## Production defaults
 
 - `SUBSCRIBER_IDENTITY_MODE=disabled`

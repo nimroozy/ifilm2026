@@ -96,10 +96,50 @@ wizard() {
 upsert_env() {
   local key="$1" value="$2"
   if grep -q "^${key}=" "$ENV_FILE" 2>/dev/null; then
+    # Replace the whole assignment; values are generated without shell metacharacters.
     sed -i "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
   else
     printf '%s=%s\n' "$key" "$value" >>"$ENV_FILE"
   fi
+}
+
+read_env_value() {
+  local key="$1" file="${2:-$ENV_FILE}"
+  [[ -f "$file" ]] || return 0
+  # shellcheck disable=SC2162
+  local line
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    case "$line" in
+      "${key}="*)
+        printf '%s' "${line#"${key}"=}"
+        return 0
+        ;;
+    esac
+  done <"$file"
+}
+
+pgdata_initialized() {
+  # Official postgres image initializes only when PGDATA is empty. PG_VERSION
+  # is written on first boot and means the password is already fixed in-cluster.
+  [[ -f "${IFILM_VAR}/postgres/PG_VERSION" ]]
+}
+
+redis_data_present() {
+  [[ -f "${IFILM_VAR}/redis/appendonly.aof" || -f "${IFILM_VAR}/redis/dump.rdb" ]]
+}
+
+maybe_wipe_existing_data() {
+  if [[ "${IFILM_WIPE_DATA:-0}" != "1" ]]; then
+    return 0
+  fi
+  [[ "${IFILM_DELETE_CONFIRM:-}" == "DELETE-IFILM-DATA" ]] \
+    || die "refusing data wipe: set IFILM_WIPE_DATA=1 IFILM_DELETE_CONFIRM=DELETE-IFILM-DATA"
+  log "wiping existing postgres/redis data directories after typed confirmation"
+  if [[ -f "$COMPOSE_FILE" && -f "$ENV_FILE" ]]; then
+    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" down || true
+  fi
+  rm -rf "${IFILM_VAR}/postgres" "${IFILM_VAR}/redis"
+  mkdir -p "${IFILM_VAR}/postgres" "${IFILM_VAR}/redis"
 }
 
 apply_image_digests_from_manifest() {
@@ -125,11 +165,49 @@ apply_image_digests_from_manifest() {
 
 write_env() {
   local pg_pass redis_pass jwt playback agent
-  pg_pass="$(rand_password)"
-  redis_pass="$(rand_password)"
-  jwt="$(rand_hex)"
-  playback="$(rand_hex)"
-  agent="$(rand_hex)"
+  local reuse_db=0 reuse_redis=0
+  local existing_env=""
+
+  maybe_wipe_existing_data
+
+  if [[ -f "$ENV_FILE" ]]; then
+    existing_env="$(mktemp)"
+    cp -a "$ENV_FILE" "$existing_env"
+    chmod 600 "$existing_env"
+  fi
+
+  # Postgres (and Redis with requirepass) only apply credentials on first data
+  # init. Reinstalls must reuse the existing passwords or wipe data explicitly.
+  if pgdata_initialized; then
+    pg_pass="$(read_env_value POSTGRES_PASSWORD "${existing_env:-}")"
+    [[ -n "$pg_pass" ]] || die \
+      "existing PostgreSQL data found at ${IFILM_VAR}/postgres but ${ENV_FILE} has no POSTGRES_PASSWORD. Restore the previous ifilm.env, or wipe data with IFILM_WIPE_DATA=1 IFILM_DELETE_CONFIRM=DELETE-IFILM-DATA and re-run install."
+    reuse_db=1
+    log "reusing POSTGRES_PASSWORD from existing env (initialized database present)"
+  else
+    pg_pass="$(rand_password)"
+  fi
+
+  if redis_data_present; then
+    redis_pass="$(read_env_value REDIS_PASSWORD "${existing_env:-}")"
+    [[ -n "$redis_pass" ]] || die \
+      "existing Redis data found at ${IFILM_VAR}/redis but ${ENV_FILE} has no REDIS_PASSWORD. Restore the previous ifilm.env, or wipe data with IFILM_WIPE_DATA=1 IFILM_DELETE_CONFIRM=DELETE-IFILM-DATA and re-run install."
+    reuse_redis=1
+    log "reusing REDIS_PASSWORD from existing env (persistent Redis data present)"
+  else
+    redis_pass="$(rand_password)"
+  fi
+
+  # Preserve app secrets across reinstall when an env already exists so tokens
+  # and agent auth keep working; generate only on first install.
+  if [[ -n "${existing_env:-}" ]]; then
+    jwt="$(read_env_value JWT_SECRET "$existing_env")"
+    playback="$(read_env_value PLAYBACK_TOKEN_SECRET "$existing_env")"
+    agent="$(read_env_value UPDATE_AGENT_SHARED_SECRET "$existing_env")"
+  fi
+  [[ -n "${jwt:-}" ]] || jwt="$(rand_hex)"
+  [[ -n "${playback:-}" ]] || playback="$(rand_hex)"
+  [[ -n "${agent:-}" ]] || agent="$(rand_hex)"
 
   umask 077
   cat >"$ENV_FILE" <<EOF
@@ -191,6 +269,10 @@ IFILM_IMAGE_BACKEND_API=
 IFILM_IMAGE_FRONTEND=
 EOF
 
+  if [[ -n "${existing_env:-}" ]]; then
+    rm -f "$existing_env"
+  fi
+
   if [[ "$INSTALL_MODE" == "staging" ]]; then
     # Staging may later enable fixture via explicit operator edit; keep defaults safe.
     sed -i 's/^APP_ENV=.*/APP_ENV=staging/' "$ENV_FILE"
@@ -202,9 +284,15 @@ EOF
 
   apply_image_digests_from_manifest
 
-  chown root:root "$ENV_FILE"
+  if [[ "$(id -u)" -eq 0 ]]; then
+    chown root:root "$ENV_FILE"
+  fi
   chmod 600 "$ENV_FILE"
-  log "wrote ${ENV_FILE} (mode 600)"
+  if [[ "$reuse_db" == "1" || "$reuse_redis" == "1" ]]; then
+    log "wrote ${ENV_FILE} (mode 600; preserved existing DB/Redis credentials)"
+  else
+    log "wrote ${ENV_FILE} (mode 600)"
+  fi
 }
 
 install_agent_unit() {
@@ -292,6 +380,12 @@ start_stack() {
   done
   curl -fsS "http://127.0.0.1:${HTTP_PORT}/api/health/live" >/dev/null \
     || die "API liveness check failed"
+
+  # Fail fast with an actionable message if credentials do not match PGDATA.
+  if ! docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T postgres \
+    sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null && PGPASSWORD="$POSTGRES_PASSWORD" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "SELECT 1" >/dev/null'; then
+    die "PostgreSQL password authentication failed for user ifilm. While ${IFILM_VAR}/postgres is initialized the installer reuses POSTGRES_PASSWORD from ${ENV_FILE} and will not invent a new one. Restore the matching ifilm.env, or wipe with IFILM_WIPE_DATA=1 IFILM_DELETE_CONFIRM=DELETE-IFILM-DATA and re-run."
+  fi
 
   # Migrations before readiness: empty databases are live but not ready until schema exists.
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend-api \

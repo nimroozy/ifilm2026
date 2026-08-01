@@ -145,6 +145,7 @@ jobs:
       - name: Packaging / security unit checks
         run: |
           python3 packaging/security/validate_trivy_ignores.py
+          bash packaging/tests/test_install_env_reuse.sh
           python3 packaging/tests/test_release_rejection.py -v
           python3 packaging/tests/test_image_digests.py -v
 

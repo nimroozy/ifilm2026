@@ -50,6 +50,9 @@ jobs:
       - name: Trivy ignore policy validation
         run: python3 packaging/security/validate_trivy_ignores.py
 
+      - name: Installer env reuse / wipe helpers
+        run: bash packaging/tests/test_install_env_reuse.sh
+
       - name: Update agent unit tests
         run: python3 packaging/tests/test_update_agent_unit.py -v
 
