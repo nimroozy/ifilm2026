@@ -175,7 +175,7 @@ EOF
 install_agent_unit() {
   install -d -m 0755 "$IFILM_HOME/agent"
   install -m 0755 "$IFILM_HOME/current/packaging/update-agent/agent.py" "$IFILM_HOME/agent/agent.py"
-  if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files >/dev/null 2>&1; then
+  if [[ -d /run/systemd/system ]] && command -v systemctl >/dev/null 2>&1; then
     install -d -m 0755 /etc/systemd/system
     cat >/etc/systemd/system/ifilm-update-agent.service <<'UNIT'
 [Unit]

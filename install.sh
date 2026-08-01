@@ -107,10 +107,10 @@ install_host_packages() {
     apt-get install -y --no-install-recommends \
       docker-ce docker-ce-cli containerd.io docker-compose-plugin docker-buildx-plugin
   fi
-  if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files >/dev/null 2>&1; then
+  if [[ -d /run/systemd/system ]] && command -v systemctl >/dev/null 2>&1; then
     systemctl enable --now docker
   else
-    # Disposable cloud hosts may run Docker without systemd.
+    # Disposable cloud hosts may run Docker without systemd as PID 1.
     docker info >/dev/null 2>&1 || die "docker daemon not reachable and systemd is unavailable"
   fi
   docker compose version >/dev/null || die "docker compose plugin missing"
