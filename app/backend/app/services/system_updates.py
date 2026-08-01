@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import html
+import json
 import re
 import threading
 import uuid
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -113,13 +115,28 @@ def _active_job(db: Session) -> SystemUpdateJob | None:
     )
 
 
+def _read_local_manifest(settings: Settings) -> dict[str, Any]:
+    path = (settings.ifilm_version_file or "").strip()
+    if not path:
+        return {}
+    try:
+        p = Path(path)
+        if not p.is_file():
+            return {}
+        data = json.loads(p.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
 def get_version_info(settings: Settings | None = None, client: UpdateAgentClient | None = None) -> dict[str, Any]:
     settings = settings or get_settings()
-    version = settings.app_version or "0.0.0-dev"
-    commit = settings.app_commit_sha or "unknown"
-    build_date = settings.app_build_date or None
-    migration_head = settings.app_migration_head or None
-    channel = settings.update_channel or "stable"
+    local = _read_local_manifest(settings)
+    version = str(local.get("version") or settings.app_version or "0.0.0-dev")
+    commit = str(local.get("commit_sha") or settings.app_commit_sha or "unknown")
+    build_date = local.get("published_at") or settings.app_build_date or None
+    migration_head = str(local.get("migration_head") or settings.app_migration_head or "") or None
+    channel = str(local.get("channel") or settings.update_channel or "stable")
     if client is not None or settings.update_agent_shared_secret:
         try:
             agent = client or get_update_agent_client()

@@ -151,11 +151,29 @@ def _verify_manifest(manifest_path: Path, sig_path: Path) -> dict[str, Any]:
             str(PUBLIC_KEY),
             "-sigfile",
             str(sig_path),
+            "-rawin",
             "-in",
             str(manifest_path),
         ],
         timeout=30,
     )
+    if result.returncode != 0:
+        # Older OpenSSL builds may omit -rawin; retry once for compatibility.
+        result = _run(
+            [
+                "openssl",
+                "pkeyutl",
+                "-verify",
+                "-pubin",
+                "-inkey",
+                str(PUBLIC_KEY),
+                "-sigfile",
+                str(sig_path),
+                "-in",
+                str(manifest_path),
+            ],
+            timeout=30,
+        )
     if result.returncode != 0:
         raise AgentError("invalid_signature", "release manifest signature verification failed")
     return json.loads(manifest_path.read_text(encoding="utf-8"))

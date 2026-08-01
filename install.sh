@@ -140,9 +140,10 @@ download_and_verify() {
   curl -fsSL "$SIG_URL" -o "$work/release-manifest.json.sig"
   curl -fsSL "$ARCHIVE_URL" -o "$work/ifilm-release.tar.gz"
 
-  # Verify manifest signature (Ed25519 raw sig over canonical JSON bytes).
+  # Verify manifest signature (Ed25519; OpenSSL requires -rawin).
   openssl pkeyutl -verify -pubin -inkey "$work/release-signing.pub" \
     -sigfile "$work/release-manifest.json.sig" \
+    -rawin \
     -in "$work/release-manifest.json" \
     >/dev/null 2>&1 \
     || die "release-manifest.json signature verification FAILED — aborting"

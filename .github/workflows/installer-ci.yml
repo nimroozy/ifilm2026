@@ -36,6 +36,9 @@ jobs:
       - name: Update agent unit tests
         run: python3 packaging/tests/test_update_agent_unit.py -v
 
+      - name: Disposable signed-update simulation
+        run: python3 packaging/tests/test_disposable_update_simulation.py -v
+
       - name: Manifest build/sign roundtrip
         run: |
           KEY="$(mktemp)"
@@ -55,5 +58,6 @@ jobs:
           openssl pkeyutl -verify -pubin \
             -inkey <(openssl pkey -in "$KEY" -pubout) \
             -sigfile /tmp/ifilm-rel/release-manifest.json.sig \
+            -rawin \
             -in /tmp/ifilm-rel/release-manifest.json
           shred -u "$KEY" 2>/dev/null || rm -f "$KEY"

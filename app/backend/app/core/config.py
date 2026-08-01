@@ -141,6 +141,8 @@ class Settings(BaseSettings):
     maintenance_mode: bool = False
     update_agent_socket: str = "/run/ifilm/update-agent.sock"
     update_agent_shared_secret: str = ""
+    ifilm_version_file: str = ""
+
 
 
     radius_enabled: bool = False
