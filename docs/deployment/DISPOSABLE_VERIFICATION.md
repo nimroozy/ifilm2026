@@ -127,15 +127,32 @@ sudo env \
 | Other OS/arch | Rejected | Installer hard-fail |
 | Overlay FS / no-systemd | Explicit opt-in only | Not normal production deployment |
 
+## Actions-signed candidate attempt (`v0.1.4-candidate`)
+
+As of head `3f06353c4785c7dcc0fb53c557da779ae525f241`:
+
+| Gate | Result |
+| --- | --- |
+| Release `quality` job | Pass (backend/frontend/installer/compose) |
+| GHCR push + registry digests | Pass |
+| SBOM generation | Pass |
+| Trivy hard gate | Pass (CRITICAL ignores + actionable HIGH policy) |
+| Manifest sign with `production-release` secret | **FAIL** — secret accessible but `signing_key_bytes=19` (not a PEM) |
+| GitHub prerelease created | Not yet |
+| Disposable install from Actions-signed candidate | Blocked on signing |
+
+Admin must re-set `IFILM_RELEASE_SIGNING_KEY` to the full private key PEM — see `ADMIN_SIGNING_SETUP.md`.
+
 ## Limitations / deviations
 
-1. Could not set `IFILM_RELEASE_SIGNING_KEY` Actions secret (403).
-2. Bootstrap URL used PR branch/commit, not `main` (pre-merge).
+1. Environment `production-release` exists; secret name present but value is not a usable PEM (19 bytes). Agent token cannot rewrite secrets (403).
+2. Bootstrap URL used PR branch/commit for earlier disposable tests, not `main` (pre-merge).
 3. Overlay root FS required explicit opt-in.
 4. No systemd — update-agent run as supervised process.
 5. Port `18080` to avoid colliding with staging on `8080`.
-6. Hotfixes applied during verification (backup binary capture, lock-before-preflight order, CORS env_file) committed on the PR branch; successful update used hot-patched agent on the host where noted.
+6. Hotfixes applied during early verification committed on the PR branch.
 7. Database rollback classification for `012`: **backward-compatible / rollback-safe column**; failhealth test used **application_only** rollback (no DB restore).
+8. Trivy policy: unapproved CRITICAL always fail (time-bound ignores for unfixed Debian base); HIGH fail only when `FixedVersion` exists.
 
 ## Rollback classification reminder
 
