@@ -88,6 +88,28 @@ Generated at install time (never stored in git):
 - Update-agent shared secret
 - Admin password (prompted or generated)
 
+### Reinstall / existing data
+
+PostgreSQL only applies `POSTGRES_PASSWORD` on **first** data directory init.
+If `/var/lib/ifilm/postgres` already exists, the installer **reuses**
+`POSTGRES_PASSWORD` (and Redis/app secrets) from the existing `/etc/ifilm/ifilm.env`
+instead of generating new ones.
+
+If you see `password authentication failed for user "ifilm"` after a reinstall:
+
+1. Prefer restoring the previous `/etc/ifilm/ifilm.env` that matches the database, or
+2. Intentionally wipe data and reinstall:
+
+```bash
+sudo env IFILM_WIPE_DATA=1 IFILM_DELETE_CONFIRM=DELETE-IFILM-DATA \
+  IFILM_CHANNEL=stable IFILM_VERSION=v1.0.0 \
+  bash -c 'curl -fsSL https://raw.githubusercontent.com/nimroozy/ifilm2026/main/install.sh | sudo bash'
+```
+
+After this hotfix ships as a newer stable tag, prefer that `IFILM_VERSION`. Do not wipe if you need to keep catalog/media data without a backup.
+
+**Note:** A failed reinstall that already overwrote `/etc/ifilm/ifilm.env` with a *new* password while keeping old PostgreSQL data cannot self-heal by reusing env credentials — the matching password is gone unless you have a backup of the previous `ifilm.env`. Use the wipe path above for a clean reinstall.
+
 ## Production defaults
 
 - `SUBSCRIBER_IDENTITY_MODE=disabled`
