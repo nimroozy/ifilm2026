@@ -12,6 +12,7 @@ import {
   Users,
   Menu,
   LogOut,
+  ArrowUpCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -26,6 +27,7 @@ const navItems = [
   { to: '/admin/tools/upload', label: 'Upload', icon: Upload },
   { to: '/admin/media/processing', label: 'Processing', icon: Cpu },
   { to: '/admin/media/playback-sessions', label: 'Playback', icon: PlayCircle },
+  { to: '/admin/system/updates', label: 'Updates', icon: ArrowUpCircle },
   { to: '/admin/tools/encoding', label: 'Encoding (legacy)', icon: Film },
   { to: '/admin/tools/cdn', label: 'CDN (soon)', icon: Server },
   { to: '/admin/tools/users', label: 'Users (soon)', icon: Users },
@@ -35,6 +37,7 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [admin, setAdmin] = useState<AdminUserDto | null>(null);
+  const [versionLabel, setVersionLabel] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,6 +45,12 @@ export default function AdminLayout() {
       .me()
       .then((me) => {
         if (!cancelled) setAdmin(me);
+        if ((me.permissions || []).includes('system_updates.read')) {
+          return adminApi.getSystemVersion().then((v) => {
+            if (!cancelled) setVersionLabel(`${v.version}`);
+          });
+        }
+        return undefined;
       })
       .catch(() => {
         /* RequireAdmin handles auth failures */
@@ -89,6 +98,11 @@ export default function AdminLayout() {
         ))}
       </nav>
       <div className="p-3 border-t border-border space-y-2">
+        {versionLabel && (
+          <p className="text-[11px] text-muted-foreground text-center" data-testid="admin-version">
+            iFilm {versionLabel}
+          </p>
+        )}
         <Button variant="outline" size="sm" className="w-full gap-2" onClick={logout}>
           <LogOut className="h-3.5 w-3.5" />
           Logout

@@ -12,6 +12,7 @@ from app.models.subscriber_auth import (
     SubscriberEntitlementSnapshot,
     SubscriberRefreshToken,
 )
+from app.models.system_update import SystemUpdateEvent, SystemUpdateJob
 from app.models.user import Device, Subscriber, WatchlistItem
 from app.models.watch_progress import UserWatchProgress
 
@@ -40,6 +41,8 @@ __all__ = [
     "SubscriberDeviceSession",
     "SubscriberEntitlementSnapshot",
     "SubscriberRefreshToken",
+    "SystemUpdateEvent",
+    "SystemUpdateJob",
     "UploadJob",
     "UploadSession",
     "UserWatchProgress",

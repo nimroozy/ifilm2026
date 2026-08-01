@@ -1,0 +1,59 @@
+name: Installer CI
+
+on:
+  push:
+    paths:
+      - 'install.sh'
+      - 'packaging/**'
+      - '.github/workflows/installer-ci.yml'
+      - '.github/workflows/release.yml'
+  pull_request:
+    paths:
+      - 'install.sh'
+      - 'packaging/**'
+      - '.github/workflows/installer-ci.yml'
+      - '.github/workflows/release.yml'
+
+jobs:
+  shell-and-agent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ShellCheck
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y shellcheck
+          shellcheck -x install.sh packaging/installer/install_release.sh packaging/scripts/uninstall.sh
+
+      - name: Compose config
+        run: |
+          export POSTGRES_DB=ifilm POSTGRES_USER=ifilm POSTGRES_PASSWORD=x
+          export REDIS_PASSWORD=x JWT_SECRET=x PLAYBACK_TOKEN_SECRET=x
+          docker compose -f packaging/compose/docker-compose.production.yml config >/dev/null
+
+      - name: Update agent unit tests
+        run: python3 packaging/tests/test_update_agent_unit.py -v
+
+      - name: Manifest build/sign roundtrip
+        run: |
+          KEY="$(mktemp)"
+          openssl genpkey -algorithm Ed25519 -out "$KEY"
+          chmod 600 "$KEY"
+          mkdir -p /tmp/ifilm-rel
+          echo hello > /tmp/ifilm-rel/payload.bin
+          tar -C /tmp/ifilm-rel -czf /tmp/ifilm-rel/ifilm-0.0.0-test.tar.gz payload.bin
+          python3 packaging/release/build_manifest.py \
+            --version 0.0.0-test \
+            --archive /tmp/ifilm-rel/ifilm-0.0.0-test.tar.gz \
+            --out /tmp/ifilm-rel/release-manifest.json
+          python3 packaging/release/sign_manifest.py \
+            --manifest /tmp/ifilm-rel/release-manifest.json \
+            --key-file "$KEY" \
+            --signature-out /tmp/ifilm-rel/release-manifest.json.sig
+          openssl pkeyutl -verify -pubin \
+            -inkey <(openssl pkey -in "$KEY" -pubout) \
+            -sigfile /tmp/ifilm-rel/release-manifest.json.sig \
+            -in /tmp/ifilm-rel/release-manifest.json
+          shred -u "$KEY" 2>/dev/null || rm -f "$KEY"

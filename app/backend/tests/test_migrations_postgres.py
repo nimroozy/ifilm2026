@@ -161,7 +161,9 @@ def test_postgresql_migration_succeeds(postgres_url):
     assert "seasons" in tables
     assert "media_assets" in tables
     assert "upload_sessions" in tables
-    assert version == "010_subscriber_entitlements"
+    assert "system_update_jobs" in tables
+    assert "system_update_events" in tables
+    assert version == "011_system_updates"
 
 
 def test_postgresql_migration_from_previous_revision(postgres_url):
@@ -194,7 +196,7 @@ def test_postgresql_migration_from_previous_revision(postgres_url):
     assert movie_slug == "ordinary-film"
     assert series_slug == "ordinary-show"
     assert null_imdb >= 1
-    assert version == "010_subscriber_entitlements"
+    assert version == "011_system_updates"
 
 
 def test_002_to_head_duplicate_and_messy_titles(postgres_url):
@@ -960,6 +962,6 @@ def test_alembic_heads_single(postgres_url):
     result = _run_alembic(postgres_url, "heads")
     assert result.returncode == 0, result.stdout + result.stderr
     lines = [ln for ln in (result.stdout + result.stderr).splitlines() if ln.strip()]
-    head_lines = [ln for ln in lines if "010_subscriber_entitlements" in ln]
+    head_lines = [ln for ln in lines if "011_system_updates" in ln]
     assert head_lines, result.stdout + result.stderr
-    assert sum(1 for ln in lines if ln.strip().startswith("010_subscriber_entitlements")) >= 1
+    assert sum(1 for ln in lines if ln.strip().startswith("011_system_updates")) >= 1

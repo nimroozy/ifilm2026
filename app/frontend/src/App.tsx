@@ -25,6 +25,7 @@ import MediaUploadPage from '@/pages/admin/MediaUploadPage';
 import MediaAssetDetailPage from '@/pages/admin/MediaAssetDetailPage';
 import MediaProcessingJobsPage from '@/pages/admin/MediaProcessingJobsPage';
 import PlaybackSessionsPage from '@/pages/admin/PlaybackSessionsPage';
+import SystemUpdatesPage from '@/pages/admin/SystemUpdatesPage';
 import AdminPlaceholderPage from '@/pages/admin/AdminPlaceholderPage';
 
 const queryClient = new QueryClient();
@@ -80,6 +81,7 @@ const AppRoutes = () => (
       <Route path="media/processing" element={<MediaProcessingJobsPage />} />
       <Route path="media/playback-sessions" element={<PlaybackSessionsPage />} />
       <Route path="media/:assetId" element={<MediaAssetDetailPage />} />
+      <Route path="system/updates" element={<SystemUpdatesPage />} />
       <Route path="tools/encoding" element={<AdminPlaceholderPage section="encoding" />} />
       <Route path="tools/cdn" element={<AdminPlaceholderPage section="cdn" />} />
       <Route path="tools/users" element={<AdminPlaceholderPage section="users" />} />
