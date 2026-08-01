@@ -1,0 +1,69 @@
+# HTTPS-ready example. Copy to ifilm.conf (or include) after placing TLS certs.
+# Do not commit real certificates.
+#
+# Required mounts in compose:
+#   ./certs/fullchain.pem -> /etc/nginx/certs/fullchain.pem:ro
+#   ./certs/privkey.pem   -> /etc/nginx/certs/privkey.pem:ro
+
+# upstream ifilm_api / ifilm_frontend defined in ifilm.conf — keep a single conf
+# or merge this into ifilm.conf when enabling TLS.
+
+server {
+  listen 80;
+  server_name staging.example.invalid;
+  return 301 https://$host$request_uri;
+}
+
+server {
+  listen 443 ssl;
+  http2 on;
+  server_name staging.example.invalid;
+
+  ssl_certificate     /etc/nginx/certs/fullchain.pem;
+  ssl_certificate_key /etc/nginx/certs/privkey.pem;
+  ssl_protocols       TLSv1.2 TLSv1.3;
+  ssl_prefer_server_ciphers off;
+
+  add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+  add_header X-Content-Type-Options nosniff always;
+  add_header X-Frame-Options DENY always;
+  add_header Referrer-Policy strict-origin-when-cross-origin always;
+
+  location = /healthz {
+    access_log off;
+    return 200 "ok\n";
+  }
+
+  location /api/ {
+    proxy_pass http://ifilm_api;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header Connection "";
+    proxy_pass_header Content-Security-Policy;
+    proxy_buffering off;
+    client_max_body_size 50g;
+  }
+
+  location /artwork/ {
+    proxy_pass http://ifilm_api;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header Connection "";
+  }
+
+  location ^~ /media/ { return 404; }
+  location ^~ /packages/ { return 404; }
+  location ^~ /originals/ { return 404; }
+
+  location / {
+    proxy_pass http://ifilm_frontend;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header Connection "";
+  }
+}

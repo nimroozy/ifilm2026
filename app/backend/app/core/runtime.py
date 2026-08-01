@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.core.config import Settings
+from app.core.db_url import validate_database_url
 
 UNSAFE_JWT_SECRETS = {
     "",
@@ -49,6 +50,21 @@ def is_dev_like(app_env: str) -> bool:
     return app_env in {"development", "dev", "test"}
 
 
+def fixture_auth_allowed(settings: Settings) -> bool:
+    """Fixture subscriber identity is allowed in development/test, or staging with explicit opt-in.
+
+    Production/prod must never allow fixture auth.
+    """
+    env = (settings.app_env or "").strip().lower()
+    if env in {"production", "prod"}:
+        return False
+    if is_dev_like(env):
+        return True
+    if env == "staging" and settings.staging_allow_fixture_auth:
+        return True
+    return False
+
+
 @dataclass(frozen=True)
 class ValidationResult:
     ok: bool
@@ -67,13 +83,20 @@ UNSAFE_PLAYBACK_SECRETS = {
 def collect_runtime_errors(settings: Settings) -> list[str]:
     errors: list[str] = []
 
-    if settings.radius_mode == "mock" and not is_dev_like(settings.app_env):
-        errors.append("RADIUS_MODE=mock is only allowed when APP_ENV is development or test")
-
-    if settings.subscriber_identity_mode == "fixture" and not is_dev_like(settings.app_env):
+    if settings.radius_mode == "mock" and not fixture_auth_allowed(settings):
         errors.append(
-            "SUBSCRIBER_IDENTITY_MODE=fixture is only allowed when APP_ENV is development or test"
+            "RADIUS_MODE=mock is only allowed in development/test, or staging with "
+            "STAGING_ALLOW_FIXTURE_AUTH=true"
         )
+
+    if settings.subscriber_identity_mode == "fixture" and not fixture_auth_allowed(settings):
+        errors.append(
+            "SUBSCRIBER_IDENTITY_MODE=fixture is only allowed in development/test, or staging "
+            "with STAGING_ALLOW_FIXTURE_AUTH=true (never in production)"
+        )
+
+    if settings.staging_allow_fixture_auth and settings.app_env in {"production", "prod"}:
+        errors.append("STAGING_ALLOW_FIXTURE_AUTH must not be enabled when APP_ENV is production")
 
     if settings.subscriber_identity_mode == "fixture" and not settings.radius_mock_users:
         errors.append("SUBSCRIBER_IDENTITY_MODE=fixture requires RADIUS_MOCK_USERS")
@@ -84,6 +107,7 @@ def collect_runtime_errors(settings: Settings) -> list[str]:
 
     # Live Radius entitlement mapping is disabled by default. Production/staging
     # must not enable Radius identity without staging-verified attribute mapping.
+    # Staging fixture auth is a separate path and does not enable live Radius.
     if radius_identity_active and not settings.radius_entitlement_mapping_enabled:
         if is_prod_like(settings.app_env):
             errors.append(
@@ -118,6 +142,11 @@ def collect_runtime_errors(settings: Settings) -> list[str]:
             errors.append("DATABASE_URL is required")
         elif any(marker in settings.database_url for marker in DEFAULT_DATABASE_MARKERS):
             errors.append("DATABASE_URL uses default/example credentials")
+        else:
+            try:
+                validate_database_url(settings.database_url)
+            except ValueError as exc:
+                errors.append(f"DATABASE_URL invalid: {exc}")
         if settings.radius_secret in UNSAFE_RADIUS_SECRETS:
             # Only require a strong secret when Radius transport or mapping is actually used.
             if settings.radius_enabled or radius_identity_active or settings.radius_entitlement_mapping_enabled:

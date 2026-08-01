@@ -318,3 +318,37 @@ def test_default_provider_mode_is_disabled(monkeypatch):
     assert settings.subscriber_identity_mode == "disabled"
     assert settings.radius_entitlement_mapping_enabled is False
     validate_runtime_settings(settings)
+
+
+def test_staging_fixture_allowed_with_opt_in():
+    settings = _settings(
+        app_env="staging",
+        jwt_secret="production-grade-jwt-secret-value-32",
+        database_url="postgresql+psycopg2://app:strong-unique-secret@db:5432/ifilm",
+        radius_secret="unique-radius-secret-value",
+        debug=False,
+        subscriber_identity_mode="fixture",
+        staging_allow_fixture_auth=True,
+        radius_mode="mock",
+        radius_entitlement_mapping_enabled=False,
+        radius_enabled=False,
+        enable_radius_login=True,
+        radius_mock_users=[{"username": "x", "password": "y", "package": "P", "expiration": "2027-01-01"}],
+    )
+    validate_runtime_settings(settings)
+
+
+def test_production_fixture_still_forbidden_even_with_staging_flag():
+    settings = _settings(
+        app_env="production",
+        jwt_secret="production-grade-jwt-secret-value-32",
+        database_url="postgresql+psycopg2://app:strong-unique-secret@db:5432/ifilm",
+        radius_secret="unique-radius-secret-value",
+        debug=False,
+        subscriber_identity_mode="fixture",
+        staging_allow_fixture_auth=True,
+        radius_mode="mock",
+        radius_mock_users=[{"username": "x", "password": "y", "package": "P"}],
+    )
+    with pytest.raises(RuntimeConfigurationError):
+        validate_runtime_settings(settings)

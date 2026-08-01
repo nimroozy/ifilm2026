@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     subscriber_login_rate_limit: int = 10
     subscriber_login_rate_window_seconds: int = 60
 
+    # Staging-only: allow fixture subscriber identity when APP_ENV=staging.
+    # Production/prod must never set this. Live SAS Radius stays disabled.
+    staging_allow_fixture_auth: bool = False
+
     # Live Radius entitlement attribute mapping (DISABLED by default).
     # Access-Accept alone never grants playback. Mapping must be staging-verified.
     radius_entitlement_mapping_enabled: bool = False

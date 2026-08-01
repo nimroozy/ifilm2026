@@ -8,7 +8,7 @@ import signal
 import time
 from types import FrameType
 
-from app.db.session import SessionLocal
+from app.db.session import SessionLocal, get_engine
 from app.services.publishing.worker import run_due_batch, run_once
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -32,6 +32,9 @@ def main() -> None:
 
     signal.signal(signal.SIGINT, _handle_signal)
     signal.signal(signal.SIGTERM, _handle_signal)
+
+    # Ensure SessionLocal is bound before creating sessions.
+    get_engine()
 
     if args.batch > 0:
         db = SessionLocal()
