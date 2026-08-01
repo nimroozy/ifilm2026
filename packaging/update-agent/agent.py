@@ -488,8 +488,10 @@ def install_verified_release(payload: dict[str, Any]) -> dict[str, Any]:
             job["state"] = "health_checking"
             _write_job(job_id, job)
             healthy = False
+            http_port = os.environ.get("IFILM_HTTP_PORT", "8080")
+            ready_url = f"http://127.0.0.1:{http_port}/api/health/ready"
             for _ in range(60):
-                health = _run(["curl", "-fsS", "http://127.0.0.1:8080/api/health/ready"], timeout=10)
+                health = _run(["curl", "-fsS", ready_url], timeout=10)
                 if health.returncode == 0:
                     healthy = True
                     break

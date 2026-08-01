@@ -153,11 +153,18 @@ RADIUS_MODE=live
 
 IFILM_VERSION_FILE=/opt/ifilm/current/release-manifest.json
 MAINTENANCE_MODE=false
+IFILM_HTTP_PORT=${IFILM_HTTP_PORT:-8080}
+APP_VERSION=${IFILM_APP_VERSION:-}
+APP_COMMIT_SHA=${IFILM_APP_COMMIT_SHA:-}
 EOF
 
   if [[ "$INSTALL_MODE" == "staging" ]]; then
     # Staging may later enable fixture via explicit operator edit; keep defaults safe.
     sed -i 's/^APP_ENV=.*/APP_ENV=staging/' "$ENV_FILE"
+    # Disposable/test installs may consume prereleases on the staging channel.
+    if [[ "${IFILM_ALLOW_PRERELEASE_CHANNEL:-0}" == "1" ]]; then
+      sed -i 's/^UPDATE_CHANNEL=.*/UPDATE_CHANNEL=staging/' "$ENV_FILE"
+    fi
   fi
 
   chown root:root "$ENV_FILE"
@@ -166,8 +173,11 @@ EOF
 }
 
 install_agent_unit() {
-  install -d -m 0755 /etc/systemd/system
-  cat >/etc/systemd/system/ifilm-update-agent.service <<'UNIT'
+  install -d -m 0755 "$IFILM_HOME/agent"
+  install -m 0755 "$IFILM_HOME/current/packaging/update-agent/agent.py" "$IFILM_HOME/agent/agent.py"
+  if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files >/dev/null 2>&1; then
+    install -d -m 0755 /etc/systemd/system
+    cat >/etc/systemd/system/ifilm-update-agent.service <<'UNIT'
 [Unit]
 Description=iFilm update agent (privileged, typed protocol)
 After=network.target docker.service
@@ -190,22 +200,37 @@ PrivateTmp=true
 [Install]
 WantedBy=multi-user.target
 UNIT
-  systemctl daemon-reload
-  systemctl enable --now ifilm-update-agent.service
+    systemctl daemon-reload
+    systemctl enable --now ifilm-update-agent.service
+  else
+    log "systemd unavailable — starting update-agent as supervised background process"
+    pkill -f '/opt/ifilm/agent/agent.py' 2>/dev/null || true
+    set -a
+    # shellcheck disable=SC1090
+    . "$ENV_FILE"
+    set +a
+    nohup /usr/bin/python3 "$IFILM_HOME/agent/agent.py" \
+      >>"$IFILM_LOG/update-agent.log" 2>&1 &
+    echo $! >"$IFILM_HOME/agent/agent.pid"
+    sleep 1
+    [[ -S "${UPDATE_AGENT_SOCKET:-/run/ifilm/update-agent.sock}" ]] \
+      || die "update-agent socket not created"
+  fi
 }
 
 start_stack() {
   [[ -f "$COMPOSE_FILE" ]] || die "missing compose file ${COMPOSE_FILE}"
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" pull || true
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --build
-  log "waiting for backend health"
+  HTTP_PORT="${IFILM_HTTP_PORT:-8080}"
+  log "waiting for backend health on :${HTTP_PORT}"
   for _ in $(seq 1 60); do
-    if curl -fsS "http://127.0.0.1:8080/api/health/live" >/dev/null 2>&1; then
+    if curl -fsS "http://127.0.0.1:${HTTP_PORT}/api/health/live" >/dev/null 2>&1; then
       break
     fi
     sleep 2
   done
-  curl -fsS "http://127.0.0.1:8080/api/health/ready" >/dev/null \
+  curl -fsS "http://127.0.0.1:${HTTP_PORT}/api/health/ready" >/dev/null \
     || die "API readiness check failed"
 
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend-api \

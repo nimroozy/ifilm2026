@@ -39,6 +39,9 @@ jobs:
       - name: Disposable signed-update simulation
         run: python3 packaging/tests/test_disposable_update_simulation.py -v
 
+      - name: Release rejection matrix
+        run: python3 packaging/tests/test_release_rejection.py -v
+
       - name: Manifest build/sign roundtrip
         run: |
           KEY="$(mktemp)"
