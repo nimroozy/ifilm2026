@@ -283,21 +283,32 @@ start_stack() {
   verify_pulled_digest "${IFILM_IMAGE_FRONTEND}"
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --no-build
   HTTP_PORT="${IFILM_HTTP_PORT:-8080}"
-  log "waiting for backend health on :${HTTP_PORT}"
+  log "waiting for backend liveness on :${HTTP_PORT}"
   for _ in $(seq 1 60); do
     if curl -fsS "http://127.0.0.1:${HTTP_PORT}/api/health/live" >/dev/null 2>&1; then
       break
     fi
     sleep 2
   done
-  curl -fsS "http://127.0.0.1:${HTTP_PORT}/api/health/ready" >/dev/null \
-    || die "API readiness check failed"
+  curl -fsS "http://127.0.0.1:${HTTP_PORT}/api/health/live" >/dev/null \
+    || die "API liveness check failed"
 
+  # Migrations before readiness: empty databases are live but not ready until schema exists.
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend-api \
     sh -c 'set -a; . /run/ifilm/runtime.env 2>/dev/null || true; set +a; alembic upgrade head'
   # Explicit admin bootstrap only — never create_all, never unsafe demo seed.
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend-api \
     sh -c 'set -a; . /run/ifilm/runtime.env 2>/dev/null || true; set +a; python -m scripts.seed_production_admin'
+
+  log "waiting for backend readiness on :${HTTP_PORT}"
+  for _ in $(seq 1 60); do
+    if curl -fsS "http://127.0.0.1:${HTTP_PORT}/api/health/ready" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 2
+  done
+  curl -fsS "http://127.0.0.1:${HTTP_PORT}/api/health/ready" >/dev/null \
+    || die "API readiness check failed"
 }
 
 main() {
