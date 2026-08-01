@@ -1,11 +1,13 @@
 # Stage backend image for staging (non-root where practical).
 FROM python:3.12-slim AS base
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    ffmpeg \
-    curl \
-    gosu \
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends \
+      build-essential \
+      ffmpeg \
+      curl \
+      gosu \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system --gid 10001 ifilm \
     && useradd --system --uid 10001 --gid ifilm --home-dir /app --shell /usr/sbin/nologin ifilm

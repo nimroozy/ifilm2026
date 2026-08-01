@@ -614,6 +614,58 @@ export interface StreamingStatusDto {
   subscriber_entitlement: string;
 }
 
+export interface SystemVersionDto {
+  version: string;
+  build_commit: string;
+  build_date?: string | null;
+  migration_head?: string | null;
+  deployment_mode: string;
+  update_channel: string;
+  maintenance_mode: boolean;
+}
+
+export interface SystemUpdateCheckDto {
+  update_available: boolean;
+  channel: string;
+  current: Record<string, unknown>;
+  latest: {
+    version?: string;
+    tag?: string;
+    published_at?: string;
+    notes?: string;
+    prerelease?: boolean;
+    migration_head?: string;
+    database_backup_required?: boolean;
+  } | null;
+}
+
+export interface SystemPreflightDto {
+  ok: boolean;
+  checks: Array<{ name: string; passed: boolean; detail?: string }>;
+  checked_at?: string | null;
+}
+
+export interface SystemUpdateJobDto {
+  id: string;
+  state: string;
+  channel: string;
+  current_version?: string | null;
+  target_version?: string | null;
+  actor_admin_id?: number | null;
+  backup_id?: string | null;
+  previous_migration_head?: string | null;
+  resulting_migration_head?: string | null;
+  release_commit_sha?: string | null;
+  preflight_ok?: boolean | null;
+  error_code?: string | null;
+  error_message?: string | null;
+  rollback_result?: string | null;
+  agent_job_id?: string | null;
+  started_at: string;
+  finished_at?: string | null;
+  events?: Array<{ event_type: string; detail?: string | null; created_at?: string | null }>;
+}
+
 export interface PublicationReadinessIssueDto {
   code: string;
   message: string;
@@ -1430,6 +1482,58 @@ export const adminApi = {
     hls_path: string;
   }) {
     const { data } = await adminHttp.post('/admin/cdn/sync', payload);
+    return data;
+  },
+
+  async getSystemVersion() {
+    const { data } = await adminHttp.get<SystemVersionDto>('/admin/system/version');
+    return data;
+  },
+
+  async checkSystemUpdates() {
+    const { data } = await adminHttp.post<SystemUpdateCheckDto>('/admin/system/updates/check');
+    return data;
+  },
+
+  async runSystemUpdatePreflight() {
+    const { data } = await adminHttp.post<SystemPreflightDto>('/admin/system/updates/preflight');
+    return data;
+  },
+
+  async createSystemUpdateBackup(password: string) {
+    const { data } = await adminHttp.post<{ backup_id: string; created_at?: string; validated: boolean }>(
+      '/admin/system/updates/backup',
+      { password, confirm: true }
+    );
+    return data;
+  },
+
+  async installSystemUpdate(payload: { password: string; confirm: boolean; target_version?: string }) {
+    const { data } = await adminHttp.post<SystemUpdateJobDto>('/admin/system/updates/install', payload);
+    return data;
+  },
+
+  async getSystemUpdateJob(jobId: string) {
+    const { data } = await adminHttp.get<SystemUpdateJobDto>(`/admin/system/updates/${jobId}`);
+    return data;
+  },
+
+  async rollbackSystemUpdate(
+    jobId: string,
+    payload: { password: string; confirm: boolean; confirm_database_restore?: boolean }
+  ) {
+    const { data } = await adminHttp.post<SystemUpdateJobDto>(
+      `/admin/system/updates/${jobId}/rollback`,
+      payload
+    );
+    return data;
+  },
+
+  async listSystemUpdateHistory(limit = 50) {
+    const { data } = await adminHttp.get<{ items: SystemUpdateJobDto[]; total: number }>(
+      '/admin/system/updates/history',
+      { params: { limit } }
+    );
     return data;
   },
 };

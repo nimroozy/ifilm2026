@@ -18,6 +18,7 @@ from app.api.routes import (
     seasons,
     series,
     stream,
+    system_updates,
     upload,
 )
 
@@ -40,3 +41,4 @@ api_router.include_router(media_processing.router)
 api_router.include_router(encoding.router)
 api_router.include_router(cdn.router)
 api_router.include_router(stream.router)
+api_router.include_router(system_updates.router)

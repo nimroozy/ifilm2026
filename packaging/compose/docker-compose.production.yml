@@ -1,0 +1,189 @@
+# Production compose used by the verified installer / update agent.
+# Application images MUST be pinned by immutable GHCR digest via:
+#   IFILM_IMAGE_BACKEND_API=ghcr.io/nimroozy/ifilm2026/backend-api@sha256:...
+#   IFILM_IMAGE_FRONTEND=ghcr.io/nimroozy/ifilm2026/frontend@sha256:...
+# Workers share the backend-api image digest (no distinct worker image).
+# Never use latest / mutable branch tags for application services.
+name: ifilm
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?}
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+    volumes:
+      - /var/lib/ifilm/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks: [ifilm_net]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--requirepass",
+        "${REDIS_PASSWORD:?}",
+      ]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?}
+    volumes:
+      - /var/lib/ifilm/redis:/data
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$REDIS_PASSWORD redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [ifilm_net]
+
+  backend-api:
+    image: ${IFILM_IMAGE_BACKEND_API:?immutable GHCR digest required}
+    pull_policy: always
+    restart: unless-stopped
+    env_file:
+      # Override with IFILM_ENV_FILE for CI compose validation on non-root hosts.
+      - path: ${IFILM_ENV_FILE:-/etc/ifilm/ifilm.env}
+        required: false
+    environment: &api_env
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:?}
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_DB: "0"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?}
+      MEDIA_ROOT: /data/media
+      ARTWORK_ROOT: /data/artwork
+      APP_ENV: ${APP_ENV:-production}
+      DEBUG: "false"
+      JWT_SECRET: ${JWT_SECRET:?}
+      PLAYBACK_TOKEN_SECRET: ${PLAYBACK_TOKEN_SECRET:?}
+      UPDATE_AGENT_SOCKET: ${UPDATE_AGENT_SOCKET:-/run/ifilm/update-agent.sock}
+      UPDATE_AGENT_SHARED_SECRET: ${UPDATE_AGENT_SHARED_SECRET:-}
+      UPDATE_CHANNEL: ${UPDATE_CHANNEL:-stable}
+      IFILM_VERSION_FILE: ${IFILM_VERSION_FILE:-/opt/ifilm/current/release-manifest.json}
+      MAINTENANCE_MODE: ${MAINTENANCE_MODE:-false}
+      ENABLE_UPLOADS: ${ENABLE_UPLOADS:-false}
+      ENABLE_MEDIA_PROCESSING: ${ENABLE_MEDIA_PROCESSING:-true}
+      ENABLE_HLS_ENCODING: ${ENABLE_HLS_ENCODING:-true}
+      ENABLE_LOCAL_STREAMING: ${ENABLE_LOCAL_STREAMING:-true}
+      ENABLE_WATCH_HISTORY: ${ENABLE_WATCH_HISTORY:-true}
+      ENABLE_CDN_SYNC: "false"
+      ENABLE_RADIUS_LOGIN: "false"
+      SUBSCRIBER_IDENTITY_MODE: ${SUBSCRIBER_IDENTITY_MODE:-disabled}
+      STAGING_ALLOW_FIXTURE_AUTH: ${STAGING_ALLOW_FIXTURE_AUTH:-false}
+      RADIUS_ENTITLEMENT_MAPPING_ENABLED: "false"
+      RADIUS_ENABLED: "false"
+      ADMIN_BOOTSTRAP_USERNAME: ${ADMIN_BOOTSTRAP_USERNAME:-admin}
+      ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:-}
+      ADMIN_BOOTSTRAP_EMAIL: ${ADMIN_BOOTSTRAP_EMAIL:-}
+      # CORS_ORIGINS must come from env_file as JSON (do not interpolate here).
+      CSP_MODE: production
+    volumes:
+      - /var/lib/ifilm/media/originals:/data/media/originals
+      - /var/lib/ifilm/media/temp:/data/media/temp
+      - /var/lib/ifilm/media/trailers:/data/media/trailers
+      - /var/lib/ifilm/media/subtitles:/data/media/subtitles
+      - /var/lib/ifilm/media/posters:/data/media/posters
+      - /var/lib/ifilm/media/backdrops:/data/media/backdrops
+      - type: bind
+        source: /var/lib/ifilm/media/packages
+        target: /data/media/packages
+        read_only: true
+      - /var/lib/ifilm/artwork:/data/artwork
+      - /run/ifilm:/run/ifilm
+      - /opt/ifilm/current/release-manifest.json:/opt/ifilm/current/release-manifest.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "set -a; . /run/ifilm/runtime.env; set +a; curl -fsS http://127.0.0.1:8000/api/health/live",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    networks: [ifilm_net]
+
+  media-processing-worker:
+    image: ${IFILM_IMAGE_BACKEND_API:?immutable GHCR digest required}
+    pull_policy: always
+    restart: unless-stopped
+    command: ["python", "-m", "app.workers.media_processing"]
+    environment:
+      <<: *api_env
+    volumes:
+      - /var/lib/ifilm/media/originals:/data/media/originals:ro
+      - /var/lib/ifilm/media/packages:/data/media/packages
+      - /var/lib/ifilm/media/temp:/data/media/temp
+    depends_on:
+      backend-api:
+        condition: service_healthy
+    networks: [ifilm_net]
+
+  publishing-worker:
+    image: ${IFILM_IMAGE_BACKEND_API:?immutable GHCR digest required}
+    pull_policy: always
+    restart: unless-stopped
+    command: ["python", "-m", "app.workers.publishing"]
+    environment:
+      <<: *api_env
+    volumes:
+      - /var/lib/ifilm/media/packages:/data/media/packages:ro
+      - /var/lib/ifilm/media/originals:/data/media/originals:ro
+    depends_on:
+      backend-api:
+        condition: service_healthy
+    networks: [ifilm_net]
+
+  frontend:
+    image: ${IFILM_IMAGE_FRONTEND:?immutable GHCR digest required}
+    pull_policy: always
+    restart: unless-stopped
+    expose: ["80"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    networks: [ifilm_net]
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      backend-api:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    ports:
+      - "${IFILM_HTTP_PORT:-8080}:80"
+    volumes:
+      - ../../deploy/staging/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../../deploy/staging/nginx/conf.d:/etc/nginx/conf.d:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks: [ifilm_net]
+
+networks:
+  ifilm_net:
+    driver: bridge

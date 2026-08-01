@@ -9,6 +9,8 @@ dist/
 # Backend
 app/backend/.venv/
 app/backend/**/__pycache__/
+**/__pycache__/
+*.py[cod]
 app/backend/.pytest_cache/
 app/backend/.mypy_cache/
 app/backend/.ruff_cache/

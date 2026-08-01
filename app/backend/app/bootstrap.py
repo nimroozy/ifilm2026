@@ -49,6 +49,8 @@ SUPER_PERMISSIONS = [
     "branches",
     "reports",
     "settings",
+    "system_updates.read",
+    "system_updates.manage",
 ]
 
 # Default HLS ladder (same seed as migration 006_hls_encoding).

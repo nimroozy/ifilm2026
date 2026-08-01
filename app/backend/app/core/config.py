@@ -132,6 +132,19 @@ class Settings(BaseSettings):
     # Force CSP profile: production | development | "" (derive from APP_ENV).
     csp_mode: str = ""
 
+    # Deployed release metadata (safe to expose via admin version endpoint).
+    app_version: str = "0.0.0-dev"
+    app_commit_sha: str = ""
+    app_build_date: str = ""
+    app_migration_head: str = ""
+    update_channel: str = "stable"
+    maintenance_mode: bool = False
+    update_agent_socket: str = "/run/ifilm/update-agent.sock"
+    update_agent_shared_secret: str = ""
+    ifilm_version_file: str = ""
+
+
+
     radius_enabled: bool = False
     radius_mode: str = "live"  # mock | live — mock only allowed in development/test
     radius_server: str = "127.0.0.1"

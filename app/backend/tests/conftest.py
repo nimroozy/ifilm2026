@@ -17,6 +17,9 @@ os.environ["APP_ENV"] = "test"
 os.environ["DEBUG"] = "false"
 os.environ["DATABASE_URL"] = "sqlite://"
 os.environ["JWT_SECRET"] = TEST_JWT
+# Isolate unit tests from a developer FRONTEND_DIST in app/backend/.env.
+# SPA mounting is covered by dedicated CSP / frontend_dist tests.
+os.environ["FRONTEND_DIST"] = ""
 os.environ["ADMIN_BOOTSTRAP_USERNAME"] = "admin"
 os.environ["ADMIN_BOOTSTRAP_PASSWORD"] = TEST_ADMIN_PASSWORD
 os.environ["ADMIN_BOOTSTRAP_EMAIL"] = "admin@example.test"

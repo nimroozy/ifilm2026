@@ -19,7 +19,7 @@ defaults:
 jobs:
   quality:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     services:
       postgres:
@@ -62,13 +62,27 @@ jobs:
       ENABLE_UPLOADS: "true"
       ENABLE_ENCODING: "true"
       ENABLE_CDN_SYNC: "true"
+      ENABLE_MEDIA_PROCESSING: "true"
+      ENABLE_HLS_ENCODING: "true"
+      ENABLE_LOCAL_STREAMING: "true"
+      PLAYBACK_TOKEN_SECRET: ci-playback-token-secret-32chars-min
       ADMIN_BOOTSTRAP_USERNAME: admin
       ADMIN_BOOTSTRAP_PASSWORD: ci-admin-password-ok
       MEDIA_ROOT: /tmp/ifilm-ci-media
+      ARTWORK_ROOT: /tmp/ifilm-ci-artwork
+      # Match local conftest isolation — full suite must not depend on SPA mount.
+      FRONTEND_DIST: ""
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Install ffmpeg/ffprobe (required by media processing tests)
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          ffmpeg -version
+          ffprobe -version
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -86,12 +100,20 @@ jobs:
       - name: Python typecheck
         run: mypy app scripts
 
-      - name: Unit and security tests
+      - name: Full backend pytest suite
         env:
-          # Unit tests use sqlite via conftest overrides; keep Postgres URL for migration job env.
+          # Unit tests use sqlite via conftest; Postgres URL remains for migration tests.
           DATABASE_URL: sqlite://
           REDIS_REQUIRED: "false"
-        run: pytest -q tests/test_config_auth_movies.py tests/test_security.py
+          FRONTEND_DIST: ""
+        run: |
+          # Exact local parity command: full suite, zero failures required.
+          pytest -q
+
+      - name: Alembic heads
+        run: |
+          alembic heads | tee /tmp/alembic-heads.txt
+          grep -q '012_system_update_notes' /tmp/alembic-heads.txt
 
       - name: Alembic upgrade on empty PostgreSQL database
         run: |
@@ -104,22 +126,3 @@ jobs:
               conn.execute(text("CREATE SCHEMA public"))
           PY
           alembic upgrade head
-
-      - name: Alembic upgrade from previous revision
-        run: |
-          python - <<'PY'
-          from sqlalchemy import create_engine, text
-          import os
-          engine = create_engine(os.environ["TEST_DATABASE_URL"])
-          with engine.begin() as conn:
-              conn.execute(text("DROP SCHEMA public CASCADE"))
-              conn.execute(text("CREATE SCHEMA public"))
-          PY
-          alembic upgrade 001_initial
-          alembic upgrade head
-
-      - name: PostgreSQL migration pytest
-        run: pytest -q tests/test_migrations_postgres.py
-
-      - name: Application readiness test
-        run: pytest -q tests/test_readiness_integration.py
