@@ -3,9 +3,26 @@
 Environment: **`production-release`**  
 Secret name: **`IFILM_RELEASE_SIGNING_KEY`**
 
-## Required PEM format
+## Current blocker (observed in Actions)
 
-The secret **must** be the full PKCS#8 Ed25519 private key PEM (not the public key, not a fingerprint, not a single-line hash):
+Release run diagnostics (no secret material printed):
+
+```text
+signing_key_bytes=19
+signing_key_has_begin_private=False
+signing_key_has_end_private=False
+```
+
+A usable Ed25519 PKCS#8 PEM is ~119 bytes and includes:
+
+```text
+-----BEGIN PRIVATE KEY-----
+-----END PRIVATE KEY-----
+```
+
+**19 bytes matches the filename `release-signing.pub`.** The Environment secret currently looks like a placeholder/path, not the private key PEM. Please delete and re-create it.
+
+## Required PEM format
 
 ```text
 -----BEGIN PRIVATE KEY-----
@@ -13,42 +30,54 @@ The secret **must** be the full PKCS#8 Ed25519 private key PEM (not the public k
 -----END PRIVATE KEY-----
 ```
 
-Public fingerprint (SHA-256 of DER public key) for verification after setup:
+Do **not** store:
+
+- the public key (`release-signing.pub`)
+- the fingerprint
+- a file path / filename
+- a password
+
+Public fingerprint (SHA-256 of DER public key):
 
 ```text
 8c04b9141a9fe72346edf9e1f6bc27b0fbef3dc728d6e61124fb897e74ac1e26
 ```
 
-## Recommended: set from file (avoids UI paste corruption)
+## Re-set from file (recommended)
+
+On a secure admin workstation that has the private key PEM:
 
 ```bash
-# From a secure admin workstation that has the PEM file:
 gh secret set IFILM_RELEASE_SIGNING_KEY \
   --repo nimroozy/ifilm2026 \
   --env production-release \
   < /path/to/IFILM_RELEASE_SIGNING_KEY.pem
 ```
 
-If you previously pasted into the GitHub UI, **delete and re-create** the secret from the PEM file. UI pastes often drop newlines or store the public key by mistake.
-
-Cloud-agent staged copy (this VM only, mode 600):
+Cloud-agent staged copy on the verification VM (mode 600):
 
 ```text
 /opt/cursor/artifacts/signing/IFILM_RELEASE_SIGNING_KEY.pem
 ```
 
+Base64 of that same PEM (artifact only, not in git):
+
+```text
+/opt/cursor/artifacts/signing/IFILM_RELEASE_SIGNING_KEY.pem.b64
+```
+
 After setting, shred local copies (`shred -u`). Never commit the private key.
 
-## Verify without printing the secret
+## Verify
 
-1. Push / re-run a version-tag Release workflow (`v0.1.4-candidate`)
-2. Confirm job `publish` runs on Environment `production-release`
-3. Step **Build and sign manifest** should log:
-   - `signing_key_has_begin_private=True`
-   - `signing_key_has_end_private=True`
-   - `manifest_signed=true`
-4. Logs must **not** contain PEM body lines
-5. Release assets include `release-manifest.json` + `.sig`
+Re-run / retag `v0.1.4-candidate`. Publish step **Build and sign manifest** must log:
+
+- `signing_key_bytes` around `119` (not `19`)
+- `signing_key_has_begin_private=True`
+- `signing_key_has_end_private=True`
+- `manifest_signed=true`
+
+Logs must never contain PEM body lines.
 
 ## Key rotation / emergency revocation
 
