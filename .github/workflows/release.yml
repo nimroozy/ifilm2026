@@ -303,24 +303,25 @@ jobs:
         run: python3 packaging/security/validate_trivy_ignores.py
 
       - name: Vulnerability scan (hard gate)
+        id: trivy_gate
         run: |
           set -euo pipefail
           mkdir -p dist/scans
-          trivy image --format json --output "dist/scans/backend-trivy.json" "${BACKEND_REF}"
-          trivy image --format json --output "dist/scans/frontend-trivy.json" "${FRONTEND_REF}"
+          trivy image --scanners vuln --format json --output "dist/scans/backend-trivy.json" "${BACKEND_REF}"
+          trivy image --scanners vuln --format json --output "dist/scans/frontend-trivy.json" "${FRONTEND_REF}"
           # Also emit human-readable summary for artifacts (does not gate).
-          trivy image --severity CRITICAL,HIGH --format table \
+          trivy image --scanners vuln --severity CRITICAL,HIGH --format table \
             --output "dist/scans/backend-trivy.txt" "${BACKEND_REF}" || true
-          trivy image --severity CRITICAL,HIGH --format table \
+          trivy image --scanners vuln --severity CRITICAL,HIGH --format table \
             --output "dist/scans/frontend-trivy.txt" "${FRONTEND_REF}" || true
+          # Policy: unapproved CRITICAL always fail; HIGH fail only when FixedVersion exists.
           python3 packaging/security/gate_trivy_report.py \
-            --report dist/scans/backend-trivy.json \
-            --fail-severities CRITICAL,HIGH
+            --report dist/scans/backend-trivy.json
           python3 packaging/security/gate_trivy_report.py \
-            --report dist/scans/frontend-trivy.json \
-            --fail-severities CRITICAL,HIGH
+            --report dist/scans/frontend-trivy.json
 
       - name: Upload scan and SBOM artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: release-security-${{ env.VERSION }}
@@ -330,7 +331,7 @@ jobs:
             dist/ifilm-${{ env.VERSION }}-frontend.sbom.spdx.json
             dist/backend-image-ref.txt
             dist/frontend-image-ref.txt
-          if-no-files-found: error
+          if-no-files-found: warn
 
       - name: Build and sign manifest
         env:

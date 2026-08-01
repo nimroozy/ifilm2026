@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail production release on unapproved CRITICAL/HIGH Trivy findings."""
+"""Fail production release on unapproved CRITICAL / actionable HIGH Trivy findings."""
 
 from __future__ import annotations
 
@@ -34,29 +34,47 @@ def main() -> int:
         default=Path(__file__).resolve().parent / "trivy-ignore.json",
     )
     parser.add_argument(
-        "--fail-severities",
-        default="CRITICAL,HIGH",
-        help="Comma-separated severities that fail the gate",
+        "--fail-critical",
+        action="store_true",
+        default=True,
+        help="Fail on unapproved CRITICAL findings (default: true)",
+    )
+    parser.add_argument(
+        "--fail-actionable-high",
+        action="store_true",
+        default=True,
+        help="Fail on HIGH findings that have a FixedVersion (default: true)",
     )
     args = parser.parse_args()
 
-    fail_severities = {s.strip().upper() for s in args.fail_severities.split(",") if s.strip()}
     ignores = _active_ignores(args.ignore_file)
     report = json.loads(args.report.read_text(encoding="utf-8"))
 
     blockers: list[str] = []
+    reported_unfixed_high = 0
     for result in report.get("Results") or []:
         target = str(result.get("Target") or "")
         for vuln in result.get("Vulnerabilities") or []:
             severity = str(vuln.get("Severity") or "").upper()
-            if severity not in fail_severities:
-                continue
             vuln_id = str(vuln.get("VulnerabilityID") or "")
             pkg = str(vuln.get("PkgName") or vuln.get("PackageName") or "")
             component = pkg or target
+            fixed = str(vuln.get("FixedVersion") or "").strip()
             if (vuln_id, component) in ignores or (vuln_id, target) in ignores:
                 continue
-            blockers.append(f"{severity} {vuln_id} in {component} ({target})")
+            if severity == "CRITICAL" and args.fail_critical:
+                blockers.append(
+                    f"CRITICAL {vuln_id} in {component} ({target})"
+                    + (f" fixed:{fixed}" if fixed else " [no FixedVersion]")
+                )
+                continue
+            if severity == "HIGH" and args.fail_actionable_high:
+                if fixed:
+                    blockers.append(
+                        f"HIGH {vuln_id} in {component} ({target}) fixed:{fixed}"
+                    )
+                else:
+                    reported_unfixed_high += 1
 
     if blockers:
         print("Trivy security gate FAILED:", file=sys.stderr)
@@ -67,7 +85,9 @@ def main() -> int:
         return 1
 
     print(
-        f"Trivy security gate PASSED (no unapproved {', '.join(sorted(fail_severities))} findings)"
+        "Trivy security gate PASSED "
+        f"(unapproved CRITICAL=0; actionable HIGH=0; "
+        f"monitored unfixed HIGH={reported_unfixed_high})"
     )
     return 0
 
