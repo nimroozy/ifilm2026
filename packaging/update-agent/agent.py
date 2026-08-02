@@ -679,9 +679,9 @@ def install_verified_release(payload: dict[str, Any]) -> dict[str, Any]:
                     "exec",
                     "-T",
                     "backend-api",
-                    "sh",
-                    "-c",
-                    "set -a; . /run/ifilm/runtime.env 2>/dev/null || true; set +a; alembic upgrade head",
+                    "ifilm-alembic",
+                    "upgrade",
+                    "head",
                 ],
                 timeout=1800,
             )

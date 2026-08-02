@@ -1,0 +1,27 @@
+#!/bin/sh
+# Official Alembic maintenance wrapper for iFilm production/staging images.
+#
+# Usage (from host):
+#   docker compose exec backend-api ifilm-alembic current
+#   docker compose exec backend-api ifilm-alembic upgrade head
+#   docker compose exec backend-api ifilm-alembic history
+#
+# Prefer /run/ifilm/runtime.env when present (written by entrypoint).
+# Otherwise Alembic resolves DATABASE_URL from POSTGRES_* components.
+# Never prints DATABASE_URL or passwords.
+set -eu
+
+if [ -f /run/ifilm/runtime.env ]; then
+  # shellcheck disable=SC1091
+  set -a
+  # shellcheck disable=SC1091
+  . /run/ifilm/runtime.env
+  set +a
+fi
+
+# Drop APP_ENV override from older runtime.env files that hardcoded staging.
+# Compose / process env remains authoritative when runtime.env omitted APP_ENV.
+# (No-op when APP_ENV was not in the file.)
+
+cd /app
+exec python -m alembic "$@"

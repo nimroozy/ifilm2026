@@ -389,7 +389,7 @@ start_stack() {
 
   # Migrations before readiness: empty databases are live but not ready until schema exists.
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend-api \
-    sh -c 'set -a; . /run/ifilm/runtime.env 2>/dev/null || true; set +a; alembic upgrade head'
+    ifilm-alembic upgrade head
   # Explicit admin bootstrap only — never create_all, never unsafe demo seed.
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend-api \
     sh -c 'set -a; . /run/ifilm/runtime.env 2>/dev/null || true; set +a; python -m scripts.seed_production_admin'

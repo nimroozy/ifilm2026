@@ -120,6 +120,31 @@ curl -fsSL https://raw.githubusercontent.com/nimroozy/ifilm2026/main/install.sh 
   IFILM_CHANNEL=stable IFILM_VERSION=v1.0.1 bash
 ```
 
+## Alembic maintenance (production)
+
+Compose injects `POSTGRES_*` into `backend-api` and does **not** set `DATABASE_URL`
+in the container environment (passwords with `@ : / # %` stay safe). The API
+entrypoint writes encoded URLs to `/run/ifilm/runtime.env`.
+
+From `v1.0.3` onward, manual Alembic works without crafting a URL:
+
+```bash
+cd /opt/ifilm/current/packaging/compose
+# Official wrapper (sources runtime.env, never prints secrets):
+sudo docker compose --env-file /etc/ifilm/ifilm.env \
+  -f docker-compose.production.yml exec -T backend-api \
+  ifilm-alembic current
+
+sudo docker compose --env-file /etc/ifilm/ifilm.env \
+  -f docker-compose.production.yml exec -T backend-api \
+  ifilm-alembic upgrade head
+
+# Bare alembic also works — env.py builds DATABASE_URL from POSTGRES_*:
+sudo docker compose --env-file /etc/ifilm/ifilm.env \
+  -f docker-compose.production.yml exec -T backend-api \
+  alembic history
+```
+
 ## Production defaults
 
 - `SUBSCRIBER_IDENTITY_MODE=disabled`

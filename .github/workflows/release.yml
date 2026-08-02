@@ -146,6 +146,7 @@ jobs:
         run: |
           python3 packaging/security/validate_trivy_ignores.py
           bash packaging/tests/test_install_env_reuse.sh
+          bash packaging/tests/test_alembic_prod_exec.sh
           python3 packaging/tests/test_release_rejection.py -v
           python3 packaging/tests/test_image_digests.py -v
 

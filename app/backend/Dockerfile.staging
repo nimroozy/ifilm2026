@@ -19,7 +19,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 COPY docker/entrypoint.staging.sh /entrypoint.staging.sh
-RUN chmod 755 /entrypoint.staging.sh \
+COPY docker/ifilm-alembic /usr/local/bin/ifilm-alembic
+RUN chmod 755 /entrypoint.staging.sh /usr/local/bin/ifilm-alembic \
     && rm -f /app/.env \
     && mkdir -p /data/media /data/artwork /run/ifilm \
     && chown -R ifilm:ifilm /app /data
