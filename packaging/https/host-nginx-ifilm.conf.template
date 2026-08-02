@@ -1,0 +1,67 @@
+# iFilm host Nginx edge (TLS termination + ACME webroot).
+# Rendered by packaging/https/enable_https.sh — do not edit the live site by hand.
+# Upstream is the compose Nginx bound to 127.0.0.1:__IFILM_HTTP_PORT__.
+
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+upstream ifilm_app {
+    server 127.0.0.1:__IFILM_HTTP_PORT__;
+    keepalive 32;
+}
+
+# HTTP — ACME challenges + permanent redirect to HTTPS
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __PUBLIC_DOMAIN__ __WWW_SERVER_NAME__;
+
+    client_max_body_size 20g;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+        default_type "text/plain";
+        try_files $uri =404;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# HTTPS — public edge for iFilm
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name __PUBLIC_DOMAIN__ __WWW_SERVER_NAME__;
+
+    ssl_certificate     /etc/letsencrypt/live/__PUBLIC_DOMAIN__/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/__PUBLIC_DOMAIN__/privkey.pem;
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_tickets off;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+
+    # Conservative HSTS — enable includeSubDomains/preload only after all subdomains are ready.
+    add_header Strict-Transport-Security "max-age=3600" always;
+
+    client_max_body_size 20g;
+
+    location / {
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        $connection_upgrade;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        proxy_request_buffering off;
+        # Do not map /media, /packages, or /originals as public static roots.
+        proxy_pass http://ifilm_app;
+    }
+}

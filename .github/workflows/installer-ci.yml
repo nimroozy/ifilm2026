@@ -25,7 +25,7 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y shellcheck
-          shellcheck -x install.sh packaging/installer/install_release.sh packaging/scripts/uninstall.sh
+          shellcheck -x install.sh packaging/installer/install_release.sh packaging/scripts/uninstall.sh packaging/https/enable_https.sh packaging/scripts/run_demo_seed.sh
 
       - name: Compose config (immutable digest placeholders)
         run: |
@@ -49,6 +49,9 @@ jobs:
 
       - name: Trivy ignore policy validation
         run: python3 packaging/security/validate_trivy_ignores.py
+
+      - name: HTTPS packaging layout
+        run: bash packaging/tests/test_https_packaging.sh
 
       - name: Installer env reuse / wipe helpers
         run: bash packaging/tests/test_install_env_reuse.sh
