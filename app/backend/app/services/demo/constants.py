@@ -2,6 +2,62 @@
 
 from __future__ import annotations
 
+from typing import TypedDict
+
+
+class AdminFixture(TypedDict):
+    username: str
+    email: str
+    full_name: str
+    role_name: str
+    permissions: list[str]
+
+
+class SubscriberFixture(TypedDict):
+    username: str
+    name: str
+    status: str
+    service_status: str
+    package: str
+    branch: str
+    max_devices: int
+    valid_days: int
+    expired: bool
+
+
+class MovieFixture(TypedDict):
+    title: str
+    original_title: str
+    slug: str
+    description: str
+    short_description: str
+    release_year: int
+    country: str
+    duration_minutes: int
+    genres: list[str]
+    language: str
+    status_path: str
+    is_featured: bool
+    is_trending: bool
+    with_media: bool
+    color: str
+
+
+class SeriesFixture(TypedDict):
+    title: str
+    original_title: str
+    slug: str
+    description: str
+    short_description: str
+    release_year: int
+    country: str
+    language: str
+    genres: list[str]
+    mode: str
+    color: str
+    with_episode_media: bool
+
+
 DEMO_SEED_VERSION = "1.0.0"
 DEMO_OWNERSHIP_FILENAME = "ownership.json"
 DEMO_DIRNAME = ".demo"
@@ -14,7 +70,7 @@ SETTING_DEMO_INSTALLED_AT = "DEMO_SEED_INSTALLED_AT"
 
 PROVIDER_DEMO = "demo"
 
-ADMIN_FIXTURES = (
+ADMIN_FIXTURES: tuple[AdminFixture, ...] = (
     {
         "username": "catalog_manager",
         "email": "catalog_manager@ifilm.demo",
@@ -101,7 +157,7 @@ GENRE_NAMES = [
     "Pashto",
 ]
 
-MOVIE_FIXTURES = [
+MOVIE_FIXTURES: list[MovieFixture] = [
     {
         "title": "Kabul Nights",
         "original_title": "شب‌های کابل",
@@ -308,7 +364,7 @@ MOVIE_FIXTURES = [
     },
 ]
 
-SERIES_FIXTURES = [
+SERIES_FIXTURES: list[SeriesFixture] = [
     {
         "title": "Mountain Echo",
         "original_title": "پژواک کوه",
@@ -353,7 +409,7 @@ SERIES_FIXTURES = [
     },
 ]
 
-SUBSCRIBER_FIXTURES = (
+SUBSCRIBER_FIXTURES: tuple[SubscriberFixture, ...] = (
     {
         "username": "demo_active",
         "name": "Demo Active Subscriber",

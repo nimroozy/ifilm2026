@@ -9,8 +9,9 @@ import time
 from io import BytesIO
 from pathlib import Path
 
+from fastapi import UploadFile
 from sqlalchemy.orm import Session
-from starlette.datastructures import Headers, UploadFile
+from starlette.datastructures import Headers
 
 from app.core.config import Settings
 from app.models.admin import AdminUser

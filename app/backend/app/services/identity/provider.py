@@ -17,7 +17,11 @@ from datetime import UTC, date, datetime
 from typing import Protocol
 
 from app.core.config import Settings, get_settings
-from app.core.runtime import RuntimeConfigurationError, demo_local_auth_allowed, fixture_auth_allowed
+from app.core.runtime import (
+    RuntimeConfigurationError,
+    demo_local_auth_allowed,
+    fixture_auth_allowed,
+)
 from app.core.security import verify_password
 
 logger = logging.getLogger(__name__)

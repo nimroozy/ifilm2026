@@ -103,21 +103,21 @@ def build_cleanup_plan(db: Session, settings: Settings) -> CleanupPlan:
         ]
 
     # Only delete subscribers that are demo provider / known fixtures.
-    safe_subs = []
+    safe_subs: list[str] = []
     for username in plan.subscriber_usernames:
-        row = db.query(Subscriber).filter(Subscriber.username == username).one_or_none()
-        if row is None:
+        subscriber = db.query(Subscriber).filter(Subscriber.username == username).one_or_none()
+        if subscriber is None:
             continue
-        if row.identity_provider == PROVIDER_DEMO or username.startswith("demo_"):
+        if subscriber.identity_provider == PROVIDER_DEMO or username.startswith("demo_"):
             safe_subs.append(username)
     plan.subscriber_usernames = safe_subs
 
-    safe_admins = []
+    safe_admins: list[str] = []
     for username in plan.admin_usernames:
-        row = db.query(AdminUser).filter(AdminUser.username == username).one_or_none()
-        if row is None:
+        admin = db.query(AdminUser).filter(AdminUser.username == username).one_or_none()
+        if admin is None:
             continue
-        if (row.email or "").endswith("@ifilm.demo") or username in {
+        if (admin.email or "").endswith("@ifilm.demo") or username in {
             f["username"] for f in ADMIN_FIXTURES
         }:
             safe_admins.append(username)
