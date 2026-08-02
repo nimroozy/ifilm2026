@@ -87,10 +87,24 @@ def _generate_password(length: int = 24) -> str:
 
 
 def _public_base(settings: Settings) -> str:
+    """Public origin for artwork absolute URLs.
+
+    Prefer DEMO_PUBLIC_BASE_URL. Otherwise build from PUBLIC_DOMAIN + IFILM_HTTP_PORT
+    using http unless HTTPS is explicitly provided. Never default to bare https://host
+    when the install only exposes HTTP on :8080.
+    """
     explicit = (os.environ.get("DEMO_PUBLIC_BASE_URL") or "").strip()
     if explicit:
         return explicit.rstrip("/")
-    return "https://ifilm.af"
+    domain = (os.environ.get("PUBLIC_DOMAIN") or getattr(settings, "public_domain", "") or "").strip()
+    if domain:
+        if "://" in domain:
+            return domain.rstrip("/")
+        port = (os.environ.get("IFILM_HTTP_PORT") or "").strip()
+        if port and port not in {"80", "443"}:
+            return f"http://{domain}:{port}"
+        return f"http://{domain}"
+    return "http://127.0.0.1:8080"
 
 
 def _commit_sha() -> str:

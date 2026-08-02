@@ -8,7 +8,6 @@ COMPOSE_FILE="${COMPOSE_FILE:-/opt/ifilm/current/packaging/compose/docker-compos
 COMPOSE_DIR="$(dirname "$COMPOSE_FILE")"
 HOST_CRED_FILE="${HOST_CRED_FILE:-/root/ifilm-demo-credentials.txt}"
 CONTAINER_CRED_FILE="${CONTAINER_CRED_FILE:-/data/artwork/.demo/credentials.txt}"
-PUBLIC_BASE_URL="${DEMO_PUBLIC_BASE_URL:-https://ifilm.af}"
 
 if [[ ! -f "$IFILM_ENV_FILE" ]]; then
   echo "Missing env file: $IFILM_ENV_FILE" >&2
@@ -18,6 +17,27 @@ if [[ ! -f "$COMPOSE_FILE" ]]; then
   echo "Missing compose file: $COMPOSE_FILE" >&2
   exit 1
 fi
+
+# Prefer explicit DEMO_PUBLIC_BASE_URL; else http://PUBLIC_DOMAIN:IFILM_HTTP_PORT.
+if [[ -z "${DEMO_PUBLIC_BASE_URL:-}" ]]; then
+  # shellcheck disable=SC1090
+  set -a
+  # shellcheck disable=SC1090
+  . "$IFILM_ENV_FILE"
+  set +a
+  if [[ -n "${PUBLIC_DOMAIN:-}" ]]; then
+    if [[ "${PUBLIC_DOMAIN}" == *"://"* ]]; then
+      DEMO_PUBLIC_BASE_URL="${PUBLIC_DOMAIN}"
+    elif [[ -n "${IFILM_HTTP_PORT:-}" && "${IFILM_HTTP_PORT}" != "80" && "${IFILM_HTTP_PORT}" != "443" ]]; then
+      DEMO_PUBLIC_BASE_URL="http://${PUBLIC_DOMAIN}:${IFILM_HTTP_PORT}"
+    else
+      DEMO_PUBLIC_BASE_URL="http://${PUBLIC_DOMAIN}"
+    fi
+  else
+    DEMO_PUBLIC_BASE_URL="http://127.0.0.1:${IFILM_HTTP_PORT:-8080}"
+  fi
+fi
+PUBLIC_BASE_URL="${DEMO_PUBLIC_BASE_URL}"
 
 cd "$COMPOSE_DIR"
 

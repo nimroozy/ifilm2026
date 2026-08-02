@@ -45,6 +45,25 @@ def test_demo_png_placeholder(tmp_path: Path):
     assert path.stat().st_size > 200
 
 
+def test_demo_artwork_urls_avoid_double_demo_prefix(tmp_path: Path, monkeypatch):
+    from app.services.demo.artwork import ensure_placeholder_pair
+
+    monkeypatch.setenv("ARTWORK_ROOT", str(tmp_path / "art"))
+    settings = _settings(artwork_root=str(tmp_path / "art"))
+    poster, backdrop, files = ensure_placeholder_pair(
+        settings,
+        slug="demo-kabul-nights",
+        title="Kabul Nights",
+        color="1a3a5c",
+        public_base_url="http://ifilm.af:8080",
+    )
+    assert poster == "http://ifilm.af:8080/artwork/posters/demo-kabul-nights.png"
+    assert backdrop == "http://ifilm.af:8080/artwork/backdrops/demo-kabul-nights.png"
+    assert "posters/demo-kabul-nights.png" in files
+    assert not any("demo-demo-" in f for f in files)
+    assert (tmp_path / "art" / "posters" / "demo-kabul-nights.png").is_file()
+
+
 def test_demo_rgb_hex_is_lavfi_compatible():
     color = _demo_rgb_hex("demo-kabul-nights")
     assert color.startswith("0x")
