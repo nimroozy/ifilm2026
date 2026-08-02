@@ -8,7 +8,9 @@ import pytest
 from app.core.db_url import (
     build_postgres_sqlalchemy_url,
     build_redis_url,
+    database_url_from_postgres_env,
     redact_database_url,
+    resolve_database_url,
     validate_database_url,
 )
 from sqlalchemy import create_engine, text
@@ -68,6 +70,61 @@ def test_redact_database_url_hides_password():
     redacted = redact_database_url(url)
     assert SPECIAL_PASSWORD not in redacted
     assert "***" in redacted or ":***@" in redacted or "hide" in redacted.lower() or "xxx" in redacted
+
+
+def test_database_url_from_postgres_env_encodes_special_password():
+    url = database_url_from_postgres_env(
+        {
+            "POSTGRES_USER": "ifilm",
+            "POSTGRES_PASSWORD": SPECIAL_PASSWORD,
+            "POSTGRES_HOST": "postgres",
+            "POSTGRES_PORT": "5432",
+            "POSTGRES_DB": "ifilm",
+        }
+    )
+    assert url is not None
+    assert make_url(url).password == SPECIAL_PASSWORD
+    assert SPECIAL_PASSWORD not in (url.split("@", 1)[0])
+
+
+def test_database_url_from_postgres_env_incomplete_returns_none():
+    assert database_url_from_postgres_env({"POSTGRES_USER": "u"}) is None
+
+
+def test_resolve_database_url_prefers_explicit_env(monkeypatch):
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql+psycopg2://explicit:secret@db:5432/app",
+    )
+    monkeypatch.setenv("POSTGRES_USER", "ifilm")
+    monkeypatch.setenv("POSTGRES_PASSWORD", "pw")
+    monkeypatch.setenv("POSTGRES_DB", "ifilm")
+    assert resolve_database_url().startswith("postgresql+psycopg2://explicit:")
+
+
+def test_resolve_database_url_falls_back_to_postgres_components(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("POSTGRES_USER", "ifilm")
+    monkeypatch.setenv("POSTGRES_PASSWORD", SPECIAL_PASSWORD)
+    monkeypatch.setenv("POSTGRES_HOST", "postgres")
+    monkeypatch.setenv("POSTGRES_DB", "ifilm")
+    url = resolve_database_url(settings_database_url="")
+    assert make_url(url).password == SPECIAL_PASSWORD
+    assert make_url(url).username == "ifilm"
+
+
+def test_resolve_database_url_raises_when_unavailable(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    for key in (
+        "POSTGRES_USER",
+        "POSTGRES_PASSWORD",
+        "POSTGRES_DB",
+        "POSTGRES_HOST",
+        "POSTGRES_PORT",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    with pytest.raises(RuntimeError, match="DATABASE_URL must be set"):
+        resolve_database_url(settings_database_url="")
 
 
 def test_connect_with_special_password_database_url():

@@ -48,10 +48,11 @@ redis_url = build_redis_url(
 )
 
 runtime = Path("/run/ifilm/runtime.env")
+# Only export URLs. Do not hardcode APP_ENV — Compose sets production/staging
+# and sourcing a stale APP_ENV=staging would clobber the real mode.
 runtime.write_text(
     f"DATABASE_URL={database_url}\n"
     f"REDIS_URL={redis_url}\n"
-    "APP_ENV=staging\n"
 )
 runtime.chmod(0o644)
 print("Wrote", runtime, "(URL secrets not printed)")

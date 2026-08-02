@@ -53,6 +53,9 @@ jobs:
       - name: Installer env reuse / wipe helpers
         run: bash packaging/tests/test_install_env_reuse.sh
 
+      - name: Alembic works in production-like Compose (no DATABASE_URL env)
+        run: bash packaging/tests/test_alembic_prod_exec.sh
+
       - name: Update agent unit tests
         run: python3 packaging/tests/test_update_agent_unit.py -v
 

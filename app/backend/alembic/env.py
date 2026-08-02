@@ -5,6 +5,7 @@ from alembic import context
 from sqlalchemy import create_engine, pool
 
 from app.core.config import get_settings
+from app.core.db_url import resolve_database_url
 from app.db.base import Base
 import app.models  # noqa: F401
 
@@ -14,9 +15,9 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 settings = get_settings()
-database_url = os.getenv("DATABASE_URL") or settings.database_url
-if not database_url:
-    raise RuntimeError("DATABASE_URL must be set for Alembic")
+# Production Compose injects POSTGRES_* only. Resolve URL without requiring
+# DATABASE_URL in the process environment (and never print it).
+database_url = resolve_database_url(settings_database_url=settings.database_url)
 
 # ConfigParser treats '%' as interpolation. Escape when storing in alembic.ini options,
 # and prefer create_engine(database_url) directly for online migrations.
