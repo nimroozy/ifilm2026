@@ -24,10 +24,18 @@ CDN work.
 
 ## Seed and refresh
 
-From the backend runtime environment:
+On a Compose host (recommended):
 
 ```bash
-python -m scripts.seed_real_demo
+# Token must already be present in /etc/ifilm/ifilm.env
+sudo bash /opt/ifilm/current/packaging/scripts/run_real_demo_seed.sh
+```
+
+From inside the API container runtime environment:
+
+```bash
+set -a; . /run/ifilm/runtime.env; set +a
+DEMO_SEED_ALLOW_PROD=true python -m scripts.seed_real_demo
 python -m scripts.refresh_real_demo_metadata
 ```
 

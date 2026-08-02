@@ -25,7 +25,7 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y shellcheck
-          shellcheck -x install.sh packaging/installer/install_release.sh packaging/scripts/uninstall.sh packaging/https/enable_https.sh packaging/scripts/run_demo_seed.sh
+          shellcheck -x install.sh packaging/installer/install_release.sh packaging/scripts/uninstall.sh packaging/https/enable_https.sh packaging/scripts/run_demo_seed.sh packaging/scripts/run_real_demo_seed.sh
 
       - name: Compose config (immutable digest placeholders)
         run: |
