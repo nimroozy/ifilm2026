@@ -3,6 +3,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import CustomerLayout, { LangProvider, AuthProvider } from '@/components/CustomerLayout';
+import DocumentLangSync from '@/components/DocumentLangSync';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Index from '@/pages/Index';
 import { MoviesPage, SeriesPage, MovieDetailsPage, SeriesDetailsPage, SearchPage } from '@/pages/Browse';
@@ -97,6 +98,7 @@ const App = () => (
           <TooltipProvider>
             <Toaster />
             <BrowserRouter>
+              <DocumentLangSync />
               <AppRoutes />
             </BrowserRouter>
           </TooltipProvider>

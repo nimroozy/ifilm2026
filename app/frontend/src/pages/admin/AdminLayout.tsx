@@ -40,6 +40,14 @@ export default function AdminLayout() {
   const [versionLabel, setVersionLabel] = useState<string | null>(null);
 
   useEffect(() => {
+    const previousTitle = document.title;
+    document.title = 'iFilm Admin';
+    return () => {
+      document.title = previousTitle;
+    };
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     adminApi
       .me()
@@ -66,18 +74,20 @@ export default function AdminLayout() {
   }
 
   const SidebarContent = () => (
-    <div className="flex flex-col h-full">
-      <div className="p-4 border-b border-border">
-        <h2 className="text-xl font-serif font-bold text-primary">Mobin Play</h2>
-        <p className="text-xs text-muted-foreground mt-1">Admin Panel</p>
+    <div className="flex h-full flex-col text-left" data-testid="admin-sidebar-content">
+      <div className="border-b border-border p-4">
+        <h2 className="font-serif text-xl font-bold text-primary">iFilm</h2>
+        <p className="mt-1 text-xs text-muted-foreground">Admin Panel</p>
       </div>
       {admin && (
-        <div className="p-3 border-b border-border">
-          <p className="text-sm font-medium text-foreground truncate">{admin.full_name || admin.username}</p>
-          <p className="text-xs text-muted-foreground truncate">{admin.role_name || 'Admin'}</p>
+        <div className="border-b border-border p-3">
+          <p className="truncate text-sm font-medium text-foreground">
+            {admin.full_name || admin.username}
+          </p>
+          <p className="truncate text-xs text-muted-foreground">{admin.role_name || 'Admin'}</p>
         </div>
       )}
-      <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
+      <nav className="flex-1 space-y-1 overflow-y-auto p-2">
         {navItems.map((item) => (
           <NavLink
             key={item.to}
@@ -85,26 +95,26 @@ export default function AdminLayout() {
             end={item.end}
             onClick={() => setSidebarOpen(false)}
             className={({ isActive }) =>
-              `w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              `flex w-full flex-row items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors ${
                 isActive
                   ? 'bg-primary/10 text-primary'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
               }`
             }
           >
-            <item.icon className="h-4 w-4" />
-            {item.label}
+            <item.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>{item.label}</span>
           </NavLink>
         ))}
       </nav>
-      <div className="p-3 border-t border-border space-y-2">
+      <div className="space-y-2 border-t border-border p-3">
         {versionLabel && (
-          <p className="text-[11px] text-muted-foreground text-center" data-testid="admin-version">
+          <p className="text-center text-[11px] text-muted-foreground" data-testid="admin-version">
             iFilm {versionLabel}
           </p>
         )}
         <Button variant="outline" size="sm" className="w-full gap-2" onClick={logout}>
-          <LogOut className="h-3.5 w-3.5" />
+          <LogOut className="h-3.5 w-3.5 shrink-0" />
           Logout
         </Button>
         <Button variant="ghost" size="sm" className="w-full" onClick={() => navigate('/')}>
@@ -115,25 +125,41 @@ export default function AdminLayout() {
   );
 
   return (
-    <div className="min-h-screen bg-background flex">
-      <aside className="hidden lg:flex w-64 border-r border-border flex-col fixed h-full bg-card">
+    <div
+      dir="ltr"
+      lang="en"
+      className="min-h-screen overflow-x-hidden bg-background text-left"
+      data-testid="admin-layout-root"
+    >
+      <aside
+        className="fixed left-0 top-0 z-30 hidden h-screen w-64 flex-col border-r border-border bg-card lg:flex"
+        data-testid="admin-desktop-sidebar"
+      >
         <SidebarContent />
       </aside>
 
       <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-        <SheetContent side="left" className="w-64 p-0 bg-card">
+        <SheetContent
+          side="left"
+          dir="ltr"
+          lang="en"
+          className="w-64 border-r border-border bg-card p-0 text-left"
+          data-testid="admin-mobile-drawer"
+        >
           <SidebarContent />
         </SheetContent>
       </Sheet>
 
-      <div className="flex-1 lg:ml-64">
-        <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-md border-b border-border px-4 lg:px-6 h-14 flex items-center justify-between">
+      <div className="min-h-screen w-full lg:ml-64" data-testid="admin-content-wrapper">
+        <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border bg-background/95 px-4 backdrop-blur-md lg:px-6">
           <div className="flex items-center gap-3">
             <Button
               variant="ghost"
               size="icon"
               className="lg:hidden"
               onClick={() => setSidebarOpen(true)}
+              aria-label="Open admin menu"
+              data-testid="admin-mobile-menu-button"
             >
               <Menu className="h-5 w-5" />
             </Button>
