@@ -11,7 +11,7 @@ from app.core.security import hash_password
 from app.models.user import Subscriber
 from app.services.demo.artwork import write_rgb_png
 from app.services.demo.constants import DEMO_SEED_VERSION, PROVIDER_DEMO
-from app.services.demo.media import _demo_rgb_hex
+from app.services.demo.media import _demo_rgb_hex, normalize_media_owners
 from app.services.demo.ownership import DemoOwnership, load_ownership, save_ownership
 from app.services.identity.provider import DemoIdentityProvider, get_identity_provider
 from tests.conftest import TEST_JWT
@@ -52,6 +52,11 @@ def test_demo_rgb_hex_is_lavfi_compatible():
     int(color[2:], 16)
     assert _demo_rgb_hex("demo-kabul-nights") == color
     assert _demo_rgb_hex("other-tag") != color
+
+
+def test_normalize_media_owners_single_fk():
+    assert normalize_media_owners(episode_id=7, series_id=1, season_id=2) == (None, None, None, 7)
+    assert normalize_media_owners(movie_id=3, series_id=1) == (3, None, None, None)
 
 
 def test_ownership_roundtrip(tmp_path: Path, monkeypatch):

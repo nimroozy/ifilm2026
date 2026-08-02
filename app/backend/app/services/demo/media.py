@@ -90,6 +90,24 @@ def generate_synthetic_mp4(path: Path, *, duration_seconds: int = 20, tag: str =
     return path
 
 
+def normalize_media_owners(
+    *,
+    movie_id: int | None = None,
+    episode_id: int | None = None,
+    series_id: int | None = None,
+    season_id: int | None = None,
+) -> tuple[int | None, int | None, int | None, int | None]:
+    """Return (movie_id, series_id, season_id, episode_id) for single-owner constraint."""
+    if episode_id is not None:
+        return None, None, None, episode_id
+    if movie_id is not None:
+        return movie_id, None, None, None
+    owners = [series_id, season_id]
+    if sum(1 for owner in owners if owner is not None) > 1:
+        raise ValueError("Only one of series_id or season_id may be set without episode_id")
+    return None, series_id, season_id, None
+
+
 async def _upload_file(
     db: Session,
     *,
@@ -170,6 +188,13 @@ def upload_and_encode(
             if package.id not in ownership.package_ids:
                 ownership.package_ids.append(package.id)
             return existing
+
+    movie_id, series_id, season_id, episode_id = normalize_media_owners(
+        movie_id=movie_id,
+        episode_id=episode_id,
+        series_id=series_id,
+        season_id=season_id,
+    )
 
     clip = work_dir / f"{label}.mp4"
     generate_synthetic_mp4(clip, duration_seconds=duration_seconds, tag=label)

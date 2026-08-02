@@ -84,6 +84,7 @@ def main(argv: list[str] | None = None) -> int:
             skip_media=skip_media,
         )
     except Exception as exc:  # noqa: BLE001
+        db.rollback()
         print(f"Seed failed: {exc}", file=sys.stderr)
         return 1
     finally:
