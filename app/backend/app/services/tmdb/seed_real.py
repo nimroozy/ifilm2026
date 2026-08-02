@@ -223,11 +223,11 @@ def seed_real_demo(
     actor = _pick_actor(db)
     client = client or TMDBClient(settings)
 
-    for item in CURATED_MOVIES:
+    for curated_movie in CURATED_MOVIES:
         result = import_movie(
             db,
             settings,
-            item.tmdb_id,
+            curated_movie.tmdb_id,
             client=client,
             demo_owned=True,
             seed_version=REAL_DEMO_SEED_VERSION,
@@ -239,25 +239,25 @@ def seed_real_demo(
         _track_unique(ownership.movie_ids, [movie.id])
         _track_unique(ownership.movie_slugs, [movie.slug])
         _track_unique(ownership.artwork_files, result.artwork_files)
-        if item.with_demo_clip and not skip_media:
+        if curated_movie.with_demo_clip and not skip_media:
             _attach_movie_clip(db, settings, ownership, movie, actor, report)
         try:
-            _apply_movie_status(db, movie, item.status, actor, report)
+            _apply_movie_status(db, movie, curated_movie.status, actor, report)
         except Exception as exc:  # noqa: BLE001
-            report.deviations.append(f"Movie status failed for TMDB {item.tmdb_id}: {exc}")
-            logger.exception("Movie status failed for TMDB %s", item.tmdb_id)
+            report.deviations.append(f"Movie status failed for TMDB {curated_movie.tmdb_id}: {exc}")
+            logger.exception("Movie status failed for TMDB %s", curated_movie.tmdb_id)
 
-    for item in CURATED_SERIES:
+    for curated_series in CURATED_SERIES:
         result = import_series(
             db,
             settings,
-            item.tmdb_id,
+            curated_series.tmdb_id,
             client=client,
             demo_owned=True,
             seed_version=REAL_DEMO_SEED_VERSION,
             force=True,
-            seasons_limit=item.seasons,
-            episodes_per_season=item.episodes_per_season,
+            seasons_limit=curated_series.seasons,
+            episodes_per_season=curated_series.episodes_per_season,
         )
         series = db.get(Series, result.entity_id)
         if series is None:
@@ -268,12 +268,12 @@ def seed_real_demo(
         _track_unique(ownership.episode_ids, result.episode_ids)
         _track_unique(ownership.artwork_files, result.artwork_files)
         if not skip_media:
-            _attach_episode_clips(db, settings, ownership, series, actor, report, item.with_demo_clips)
+            _attach_episode_clips(db, settings, ownership, series, actor, report, curated_series.with_demo_clips)
         try:
-            _apply_series_mode(db, series, item.mode, actor, report)
+            _apply_series_mode(db, series, curated_series.mode, actor, report)
         except Exception as exc:  # noqa: BLE001
-            report.deviations.append(f"Series mode failed for TMDB {item.tmdb_id}: {exc}")
-            logger.exception("Series mode failed for TMDB %s", item.tmdb_id)
+            report.deviations.append(f"Series mode failed for TMDB {curated_series.tmdb_id}: {exc}")
+            logger.exception("Series mode failed for TMDB %s", curated_series.tmdb_id)
 
     mark_demo_installed(
         db,

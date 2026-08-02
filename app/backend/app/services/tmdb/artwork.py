@@ -88,7 +88,7 @@ def build_image_url(settings: Settings, path: str, *, size: str = "original") ->
 
 def _dimensions_with_pillow(data: bytes) -> tuple[int | None, int | None]:
     try:
-        from PIL import Image  # type: ignore
+        from PIL import Image
     except Exception:  # noqa: BLE001 - Pillow is optional in backend requirements.
         return None, None
     with Image.open(BytesIO(data)) as image:

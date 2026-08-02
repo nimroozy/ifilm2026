@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -10,6 +10,7 @@ from app.core.config import get_settings
 from app.core.deps import DbSession, admin_permissions, get_current_admin
 from app.models.admin import AdminUser
 from app.models.content import Movie, Series
+from app.schemas.content import MovieOut, SeriesOut
 from app.services.catalog import movie_out, series_out
 from app.services.tmdb.artwork import build_image_url, download_artwork
 from app.services.tmdb.client import TMDBClient, TMDBClientError
@@ -69,8 +70,8 @@ def _client() -> TMDBClient:
 
 
 def _jsonable(value: Any) -> Any:
-    if is_dataclass(value):
-        return asdict(value)
+    if not isinstance(value, type) and is_dataclass(value):
+        return asdict(cast(Any, value))
     if isinstance(value, dict):
         return {k: _jsonable(v) for k, v in value.items()}
     if isinstance(value, list):
@@ -80,13 +81,11 @@ def _jsonable(value: Any) -> Any:
 
 @router.get("/admin/tools/tmdb/search")
 def search_tmdb_get(
-    db: DbSession,
     _: TMDBAdmin,
     query: str = Query(min_length=1),
     media_type: Literal["movie", "series"] = "movie",
     page: int = Query(1, ge=1),
 ):
-    _ = db
     client = _client()
     try:
         return client.search_movie(query, page=page) if media_type == "movie" else client.search_tv(query, page=page)
@@ -95,8 +94,7 @@ def search_tmdb_get(
 
 
 @router.post("/admin/tools/tmdb/search")
-def search_tmdb_post(payload: SearchRequest, db: DbSession, _: TMDBAdmin):
-    _ = db
+def search_tmdb_post(payload: SearchRequest, _: TMDBAdmin):
     client = _client()
     try:
         return (
@@ -109,8 +107,7 @@ def search_tmdb_post(payload: SearchRequest, db: DbSession, _: TMDBAdmin):
 
 
 @router.post("/admin/tools/tmdb/preview")
-def preview_tmdb(payload: PreviewRequest, db: DbSession, _: TMDBAdmin):
-    _ = db
+def preview_tmdb(payload: PreviewRequest, _: TMDBAdmin):
     client = _client()
     try:
         data = (
@@ -127,6 +124,7 @@ def preview_tmdb(payload: PreviewRequest, db: DbSession, _: TMDBAdmin):
 def import_tmdb_draft(payload: ImportRequest, db: DbSession, _: TMDBAdmin):
     settings = get_settings()
     client = _client()
+    item: MovieOut | SeriesOut
     try:
         if payload.media_type == "movie":
             result = import_movie(db, settings, payload.tmdb_id, client=client, force=payload.force)
@@ -171,16 +169,22 @@ def refresh_tmdb_demo(payload: RefreshRequest, db: DbSession, _: TMDBAdmin):
 def replace_tmdb_artwork(payload: ReplaceArtworkRequest, db: DbSession, _: TMDBAdmin):
     settings = get_settings()
     client = _client()
+    entity: Movie | Series
+    tmdb_id: int
     if payload.media_type == "movie":
-        entity = db.get(Movie, payload.entity_id)
-        if entity is None or not entity.tmdb_id:
+        movie = db.get(Movie, payload.entity_id)
+        if movie is None or movie.tmdb_id is None:
             raise HTTPException(status_code=404, detail="Movie not found or missing TMDB id")
-        details = client.movie_details(entity.tmdb_id)
+        entity = movie
+        tmdb_id = movie.tmdb_id
+        details = client.movie_details(tmdb_id)
     else:
-        entity = db.get(Series, payload.entity_id)
-        if entity is None or not entity.tmdb_id:
+        series = db.get(Series, payload.entity_id)
+        if series is None or series.tmdb_id is None:
             raise HTTPException(status_code=404, detail="Series not found or missing TMDB id")
-        details = client.tv_details(entity.tmdb_id)
+        entity = series
+        tmdb_id = series.tmdb_id
+        details = client.tv_details(tmdb_id)
     config = client.configuration()
     selected = {
         "poster": details.get("poster_path"),
@@ -197,7 +201,7 @@ def replace_tmdb_artwork(payload: ReplaceArtworkRequest, db: DbSession, _: TMDBA
                 settings,
                 build_image_url(settings, str(path), size="original"),
                 kind=kind,
-                tmdb_id=int(entity.tmdb_id),
+                tmdb_id=tmdb_id,
                 tmdb_configuration=config,
             )
             field = {"poster": "poster_url", "backdrop": "backdrop_url", "logo": "logo_url"}[kind]

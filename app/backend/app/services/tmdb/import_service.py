@@ -459,9 +459,15 @@ def refresh_demo_metadata(
     results: list[ImportResult] = []
     client = client or TMDBClient(settings)
     for movie in db.query(Movie).filter(Movie.metadata_source == "tmdb", Movie.demo_owned.is_(True), Movie.tmdb_id.isnot(None)).all():
-        results.append(import_movie(db, settings, int(movie.tmdb_id), client=client, demo_owned=True, seed_version=movie.demo_seed_version, force=force))
+        tmdb_id = movie.tmdb_id
+        if tmdb_id is None:
+            continue
+        results.append(import_movie(db, settings, tmdb_id, client=client, demo_owned=True, seed_version=movie.demo_seed_version, force=force))
     for series in db.query(Series).filter(Series.metadata_source == "tmdb", Series.demo_owned.is_(True), Series.tmdb_id.isnot(None)).all():
-        results.append(import_series(db, settings, int(series.tmdb_id), client=client, demo_owned=True, seed_version=series.demo_seed_version, force=force))
+        tmdb_id = series.tmdb_id
+        if tmdb_id is None:
+            continue
+        results.append(import_series(db, settings, tmdb_id, client=client, demo_owned=True, seed_version=series.demo_seed_version, force=force))
     return results
 
 

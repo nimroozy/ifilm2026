@@ -130,7 +130,7 @@ echo "==> ifilm-alembic current (expects head)"
 docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T backend-api \
   ifilm-alembic current >/tmp/alembic-current2.txt 2>&1
 assert_no_secret_leak "$(cat /tmp/alembic-current2.txt)"
-grep -q '013_app_settings' /tmp/alembic-current2.txt
+grep -q '014_tmdb_demo_metadata' /tmp/alembic-current2.txt
 
 echo "==> Bare alembic upgrade head is idempotent"
 docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T backend-api \
