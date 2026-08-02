@@ -125,6 +125,12 @@ fi
 
 upsert_env() {
   local key="$1" value="$2"
+  # systemd EnvironmentFile needs JSON values double-quoted with escaped quotes.
+  if [[ "$key" == "CORS_ORIGINS" || "$key" == "RADIUS_MOCK_USERS" ]]; then
+    if [[ "$value" != \"*\" ]]; then
+      value="\"${value//\"/\\\"}\""
+    fi
+  fi
   if grep -qE "^${key}=" "$IFILM_ENV_FILE"; then
     sed -i "s|^${key}=.*|${key}=${value}|" "$IFILM_ENV_FILE"
   else
