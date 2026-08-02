@@ -11,6 +11,7 @@ import {
   List,
   Search as SearchIcon,
   X,
+  ExternalLink,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -30,6 +31,8 @@ import {
   type CatalogSeries,
 } from '@/lib/catalogData';
 import { ApiError } from '@/lib/api';
+import { canPlayFullMovie, fullMovieUnavailableLabel, hasDemoClip, isDemoCatalogItem } from '@/lib/catalogPresentation';
+import { trailerEmbedUrl } from '@/lib/trailers';
 
 function PageLoading() {
   return (
@@ -58,6 +61,15 @@ function sortParam(sort: string): string {
   if (sort === 'popular') return 'views_desc';
   if (sort === 'title') return 'title_asc';
   return 'newest';
+}
+
+function DemoClipBadge({ item }: { item: unknown }) {
+  if (!hasDemoClip(item)) return null;
+  return (
+    <Badge className="bg-emerald-500 text-white text-[10px]" data-testid="demo-clip-badge">
+      Demo Clip
+    </Badge>
+  );
 }
 
 // ============ MOVIES PAGE ============
@@ -173,6 +185,11 @@ export function MoviesPage() {
                   <Badge className="absolute top-2 left-2 bg-primary/90 text-primary-foreground text-[10px]">
                     {movie.qualities[0] || 'HD'}
                   </Badge>
+                  {hasDemoClip(movie) && (
+                    <div className="absolute top-2 right-2">
+                      <DemoClipBadge item={movie} />
+                    </div>
+                  )}
                 </div>
                 <h3 className="text-sm font-medium text-foreground truncate">{movie.title}</h3>
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -201,6 +218,9 @@ export function MoviesPage() {
                     <span>{movie.duration} min</span>
                     <Star className="h-3 w-3 text-primary fill-primary" />
                     <span>{movie.rating}</span>
+                  </div>
+                  <div className="mt-2">
+                    <DemoClipBadge item={movie} />
                   </div>
                 </div>
               </div>
@@ -306,6 +326,11 @@ export function SeriesPage() {
                       NEW
                     </Badge>
                   )}
+                  {hasDemoClip(s) && (
+                    <div className="absolute top-9 right-2">
+                      <DemoClipBadge item={s} />
+                    </div>
+                  )}
                   <Badge className="absolute bottom-2 left-2 bg-background/80 text-foreground text-[10px]">
                     {s.seasons}S • {s.episodes}E
                   </Badge>
@@ -367,6 +392,9 @@ export function MovieDetailsPage() {
 
   if (loading) return <PageLoading />;
   if (error || !movie) return <PageError message={error || 'Movie not found'} onRetry={load} />;
+
+  const movieTrailerEmbed = trailerEmbedUrl(movie);
+  const movieIsDemo = isDemoCatalogItem(movie);
 
   return (
     <div className="min-h-screen">
@@ -434,15 +462,41 @@ export function MovieDetailsPage() {
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 pt-2">
-              <Button
-                size="lg"
-                onClick={() => navigate(`/player/movie/${movie.id}`)}
-                className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 font-semibold"
-              >
-                <Play className="h-5 w-5 fill-current" />
-                {t.movie.play}
-              </Button>
+            <div className="flex flex-wrap items-center gap-3 pt-2" aria-label="Movie actions">
+              {movieTrailerEmbed && (
+                <Button variant="outline" size="lg" asChild className="gap-2">
+                  <a href={movieTrailerEmbed} target="_blank" rel="noreferrer" aria-label={`Watch trailer for ${movie.title}`}>
+                    <ExternalLink className="h-5 w-5" />
+                    Watch Trailer
+                  </a>
+                </Button>
+              )}
+              {canPlayFullMovie(movie) ? (
+                <Button
+                  size="lg"
+                  onClick={() => navigate(`/player/movie/${movie.id}`)}
+                  className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 font-semibold"
+                  aria-label={`Play ${movie.title}`}
+                >
+                  <Play className="h-5 w-5 fill-current" />
+                  {t.movie.play}
+                </Button>
+              ) : hasDemoClip(movie) ? (
+                <Button
+                  size="lg"
+                  onClick={() => navigate(`/player/movie/${movie.id}`)}
+                  className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 font-semibold"
+                  aria-label={`Play demo clip for ${movie.title}`}
+                >
+                  <Play className="h-5 w-5 fill-current" />
+                  Play Demo Clip
+                </Button>
+              ) : null}
+              {movieIsDemo && (
+                <Badge variant="secondary" className="px-3 py-2 text-sm" data-testid="full-movie-unavailable">
+                  {fullMovieUnavailableLabel()}
+                </Badge>
+              )}
               <Button
                 variant="outline"
                 size="lg"
@@ -464,8 +518,32 @@ export function MovieDetailsPage() {
                 <Share2 className="h-5 w-5" />
               </Button>
             </div>
+            {movieIsDemo && (
+              <p className="text-xs text-muted-foreground">
+                Demo catalog item: trailer and demo clip access do not indicate full commercial film availability.
+              </p>
+            )}
           </div>
         </div>
+
+        {movieTrailerEmbed && (
+          <section className="mt-10 space-y-3" aria-labelledby="movie-trailer-heading">
+            <h2 id="movie-trailer-heading" className="text-xl font-serif font-bold text-foreground">
+              Watch Trailer
+            </h2>
+            <div className="aspect-video overflow-hidden rounded-lg border border-border bg-black">
+              <iframe
+                src={movieTrailerEmbed}
+                title={`${movie.title} trailer`}
+                className="h-full w-full"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+                loading="lazy"
+                data-testid="youtube-trailer-embed"
+              />
+            </div>
+          </section>
+        )}
 
         {related.length > 0 && (
           <div className="mt-12">
@@ -479,6 +557,11 @@ export function MovieDetailsPage() {
                       alt={m.title}
                       className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                     />
+                    {hasDemoClip(m) && (
+                      <div className="absolute top-2 right-2">
+                        <DemoClipBadge item={m} />
+                      </div>
+                    )}
                   </div>
                   <h3 className="text-xs font-medium text-foreground truncate">{m.title}</h3>
                 </div>
@@ -532,6 +615,8 @@ export function SeriesDetailsPage() {
   if (error || !detail) return <PageError message={error || 'Series not found'} onRetry={load} />;
 
   const show = detail.series;
+  const showTrailerEmbed = trailerEmbedUrl(show);
+  const showIsDemo = isDemoCatalogItem(show);
 
   return (
     <div className="min-h-screen">
@@ -570,19 +655,61 @@ export function SeriesDetailsPage() {
                 </Badge>
               ))}
             </div>
-            <Button
-              size="lg"
-              onClick={() => {
-                const first = showEpisodes[0];
-                if (first) navigate(`/player/episode/${first.id}`);
-              }}
-              className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2"
-            >
-              <Play className="h-5 w-5 fill-current" />
-              {t.movie.play}
-            </Button>
+            <div className="flex flex-wrap items-center gap-3" aria-label="Series actions">
+              {showTrailerEmbed && (
+                <Button variant="outline" size="lg" asChild className="gap-2">
+                  <a href={showTrailerEmbed} target="_blank" rel="noreferrer" aria-label={`Watch trailer for ${show.title}`}>
+                    <ExternalLink className="h-5 w-5" />
+                    Watch Trailer
+                  </a>
+                </Button>
+              )}
+              {canPlayFullMovie(show) || hasDemoClip(show) ? (
+                <Button
+                  size="lg"
+                  onClick={() => {
+                    const first = showEpisodes[0];
+                    if (first) navigate(`/player/episode/${first.id}`);
+                  }}
+                  className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2"
+                  aria-label={hasDemoClip(show) ? `Play demo clip for ${show.title}` : `Play ${show.title}`}
+                >
+                  <Play className="h-5 w-5 fill-current" />
+                  {hasDemoClip(show) ? 'Play Demo Clip' : t.movie.play}
+                </Button>
+              ) : null}
+              {showIsDemo && (
+                <Badge variant="secondary" className="px-3 py-2 text-sm" data-testid="full-series-unavailable">
+                  Full Series Unavailable
+                </Badge>
+              )}
+            </div>
+            {showIsDemo && (
+              <p className="text-xs text-muted-foreground">
+                Demo catalog item: trailer and demo clip access do not indicate full series availability.
+              </p>
+            )}
           </div>
         </div>
+
+        {showTrailerEmbed && (
+          <section className="mt-10 space-y-3" aria-labelledby="series-trailer-heading">
+            <h2 id="series-trailer-heading" className="text-xl font-serif font-bold text-foreground">
+              Watch Trailer
+            </h2>
+            <div className="aspect-video overflow-hidden rounded-lg border border-border bg-black">
+              <iframe
+                src={showTrailerEmbed}
+                title={`${show.title} trailer`}
+                className="h-full w-full"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+                loading="lazy"
+                data-testid="youtube-trailer-embed"
+              />
+            </div>
+          </section>
+        )}
 
         <div className="mt-8">
           <div className="flex items-center gap-4 mb-4">
@@ -754,6 +881,11 @@ export function SearchPage() {
                   <Badge className="absolute top-2 left-2 bg-primary/90 text-primary-foreground text-[10px]">
                     {item.resultType === 'series' ? 'Series' : 'Movie'}
                   </Badge>
+                  {hasDemoClip(item) && (
+                    <div className="absolute top-2 right-2">
+                      <DemoClipBadge item={item} />
+                    </div>
+                  )}
                 </div>
                 <h3 className="text-sm font-medium text-foreground truncate">{item.title}</h3>
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">

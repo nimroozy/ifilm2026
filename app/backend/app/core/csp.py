@@ -47,6 +47,8 @@ def build_csp(mode: CspMode = "production") -> str:
         f"connect-src {' '.join(connect)}",
         # Protected stream origin is same-origin (/api/stream/…). blob: for MSE.
         "media-src 'self' blob:",
+        "frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com",
+        "child-src 'self' https://www.youtube-nocookie.com https://www.youtube.com",
         "worker-src 'self' blob:",
         "object-src 'none'",
         "base-uri 'self'",
