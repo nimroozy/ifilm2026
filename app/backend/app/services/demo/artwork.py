@@ -141,8 +141,10 @@ def ensure_placeholder_pair(
     ensure_artwork_layout()
     root = Path(settings.artwork_root).resolve()
     rgb = _parse_hex_color(color)
-    poster_rel = f"posters/demo-{slug}.png"
-    backdrop_rel = f"backdrops/demo-{slug}.png"
+    # Slugs are already demo-prefixed (e.g. demo-kabul-nights); do not add another demo-.
+    file_stem = slug if slug.startswith("demo-") else f"demo-{slug}"
+    poster_rel = f"posters/{file_stem}.png"
+    backdrop_rel = f"backdrops/{file_stem}.png"
     write_rgb_png(root / poster_rel, 300, 450, rgb, title)
     write_rgb_png(root / backdrop_rel, 1280, 720, rgb, title)
     base = public_base_url.rstrip("/")
