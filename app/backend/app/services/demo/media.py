@@ -76,7 +76,7 @@ def generate_synthetic_mp4(path: Path, *, duration_seconds: int = 20, tag: str =
         "aac",
         "-shortest",
         "-metadata",
-        f"title=iFilm demo {tag}",
+        "title=iFilm Demo Playback Clip",
         "-metadata",
         f"comment=ifilm-demo-{tag}",
         str(path),
