@@ -27,8 +27,10 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60
     refresh_token_expire_days: int = 30
 
-    # Subscriber identity: fixture | radius | disabled
+    # Subscriber identity: fixture | radius | disabled | demo
     # fixture is rejected outside development/test.
+    # demo authenticates only demo-owned subscribers with local hashes when
+    # DEMO_ALLOW_LOCAL_AUTH=true (never enables live Radius).
     # Default disabled — live Radius must not be enabled in production without
     # staging-verified entitlement attribute mapping.
     subscriber_identity_mode: str = "disabled"
@@ -41,6 +43,10 @@ class Settings(BaseSettings):
     # Staging-only: allow fixture subscriber identity when APP_ENV=staging.
     # Production/prod must never set this. Live SAS Radius stays disabled.
     staging_allow_fixture_auth: bool = False
+
+    # Demo/staging validation: local hashed-password auth for demo_* subscribers only.
+    # Requires SUBSCRIBER_IDENTITY_MODE=demo. Never enables live SAS Radius.
+    demo_allow_local_auth: bool = False
 
     # Live Radius entitlement attribute mapping (DISABLED by default).
     # Access-Accept alone never grants playback. Mapping must be staging-verified.
@@ -194,9 +200,9 @@ class Settings(BaseSettings):
         self.csp_mode = (self.csp_mode or "").strip().lower()
         if self.csp_mode and self.csp_mode not in {"production", "development"}:
             raise ValueError("CSP_MODE must be production, development, or empty")
-        if self.subscriber_identity_mode not in {"fixture", "radius", "disabled"}:
+        if self.subscriber_identity_mode not in {"fixture", "radius", "disabled", "demo"}:
             raise ValueError(
-                "SUBSCRIBER_IDENTITY_MODE must be fixture, radius, or disabled"
+                "SUBSCRIBER_IDENTITY_MODE must be fixture, radius, disabled, or demo"
             )
         # Legacy bridge: ENABLE_RADIUS_LOGIN + RADIUS_MODE=mock → fixture identity.
         if self.subscriber_identity_mode == "disabled" and self.enable_radius_login:
