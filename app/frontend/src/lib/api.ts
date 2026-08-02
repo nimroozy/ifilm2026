@@ -118,9 +118,21 @@ export interface MovieDto {
   country?: string;
   imdb_id?: string | null;
   imdb_rating?: number | null;
+  tmdb_id?: number | null;
+  metadata_source?: string;
+  demo_owned?: boolean;
   poster_url?: string;
   backdrop_url?: string;
+  logo_url?: string;
   trailer_url?: string;
+  spoken_languages?: unknown[];
+  trailer_provider?: string;
+  trailer_key?: string;
+  trailer_title?: string;
+  trailer_official?: boolean;
+  trailer_language?: string;
+  trailer_published_at?: string | null;
+  has_demo_clip?: boolean;
   status: CatalogStatus | string;
   is_featured?: boolean;
   is_trending?: boolean;
@@ -161,9 +173,21 @@ export interface SeriesDto {
   country?: string;
   imdb_id?: string | null;
   imdb_rating?: number | null;
+  tmdb_id?: number | null;
+  metadata_source?: string;
+  demo_owned?: boolean;
   poster_url?: string;
   backdrop_url?: string;
+  logo_url?: string;
   trailer_url?: string;
+  spoken_languages?: unknown[];
+  trailer_provider?: string;
+  trailer_key?: string;
+  trailer_title?: string;
+  trailer_official?: boolean;
+  trailer_language?: string;
+  trailer_published_at?: string | null;
+  has_demo_clip?: boolean;
   status: CatalogStatus | string;
   airing_status?: string;
   is_featured?: boolean;
@@ -211,6 +235,10 @@ export interface EpisodeDto {
   season_id: number;
   series_id: number;
   episode_number: number;
+  tmdb_id?: number | null;
+  metadata_source?: string;
+  demo_owned?: boolean;
+  has_demo_clip?: boolean;
   title: string;
   description?: string;
   duration_minutes?: number | null;
@@ -569,6 +597,111 @@ export interface PlaybackSessionCreatedDto {
   expires_at: string;
   playback_token: string;
   master_playlist_url: string;
+}
+
+export type TmdbMediaType = 'movie' | 'series';
+
+export interface TmdbSearchResultDto {
+  id: number;
+  title?: string;
+  name?: string;
+  original_title?: string;
+  original_name?: string;
+  overview?: string;
+  release_date?: string;
+  first_air_date?: string;
+  poster_path?: string | null;
+  backdrop_path?: string | null;
+  vote_average?: number;
+  original_language?: string;
+}
+
+export interface TmdbSearchResponseDto {
+  page: number;
+  results: TmdbSearchResultDto[];
+  total_pages?: number;
+  total_results?: number;
+}
+
+export interface TmdbTrailerDto {
+  provider?: string;
+  key?: string;
+  title?: string;
+  name?: string;
+  official?: boolean;
+  language?: string;
+  iso_639_1?: string;
+  published_at?: string | null;
+  embed_url?: string;
+  site?: string;
+  type?: string;
+}
+
+export interface TmdbTranslationDto {
+  iso_3166_1?: string;
+  iso_639_1?: string;
+  name?: string;
+  english_name?: string;
+  data?: {
+    title?: string;
+    name?: string;
+    overview?: string;
+    homepage?: string;
+    tagline?: string;
+  };
+}
+
+export interface TmdbPreviewDto {
+  id: number;
+  title?: string;
+  name?: string;
+  original_title?: string;
+  original_name?: string;
+  overview?: string;
+  release_date?: string;
+  first_air_date?: string;
+  runtime?: number | null;
+  number_of_seasons?: number;
+  number_of_episodes?: number;
+  vote_average?: number;
+  poster_path?: string | null;
+  backdrop_path?: string | null;
+  images?: {
+    posters?: Array<{ file_path?: string; iso_639_1?: string | null }>;
+    backdrops?: Array<{ file_path?: string; iso_639_1?: string | null }>;
+    logos?: Array<{ file_path?: string; iso_639_1?: string | null }>;
+  };
+  translations?: {
+    translations?: TmdbTranslationDto[];
+  };
+  videos?: {
+    results?: TmdbTrailerDto[];
+  };
+  selected_trailer?: TmdbTrailerDto | null;
+}
+
+export interface TmdbImportResultDto {
+  media_type: TmdbMediaType;
+  entity_id: number;
+  tmdb_id: number;
+  created: boolean;
+  artwork_files?: string[];
+  episode_ids?: number[];
+  season_ids?: number[];
+}
+
+export interface TmdbImportResponseDto {
+  result: TmdbImportResultDto;
+  item: MovieDto | SeriesDto;
+}
+
+export interface TmdbRefreshResponseDto {
+  refreshed: number;
+  results: TmdbImportResultDto[];
+}
+
+export interface TmdbArtworkReplaceResponseDto {
+  changed: Record<string, string>;
 }
 
 export interface WatchProgressDto {
@@ -1283,6 +1416,49 @@ export const adminApi = {
     return data;
   },
 
+  async searchTmdb(params: { query: string; media_type: TmdbMediaType; page?: number }) {
+    const { data } = await adminHttp.get<TmdbSearchResponseDto>('/admin/tools/tmdb/search', {
+      params: {
+        query: params.query,
+        media_type: params.media_type,
+        page: params.page ?? 1,
+      },
+    });
+    return data;
+  },
+
+  async previewTmdb(payload: { tmdb_id: number; media_type: TmdbMediaType }) {
+    const { data } = await adminHttp.post<TmdbPreviewDto>('/admin/tools/tmdb/preview', payload);
+    return data;
+  },
+
+  async importTmdbDraft(payload: { tmdb_id: number; media_type: TmdbMediaType; force?: boolean }) {
+    const { data } = await adminHttp.post<TmdbImportResponseDto>('/admin/tools/tmdb/import', {
+      ...payload,
+      force: payload.force ?? false,
+    });
+    return data;
+  },
+
+  async refreshTmdbDemo(payload?: { force?: boolean }) {
+    const { data } = await adminHttp.post<TmdbRefreshResponseDto>('/admin/tools/tmdb/refresh', {
+      force: payload?.force ?? false,
+    });
+    return data;
+  },
+
+  async replaceTmdbArtwork(payload: {
+    media_type: TmdbMediaType;
+    entity_id: number;
+    kinds: Array<'poster' | 'backdrop' | 'logo'>;
+  }) {
+    const { data } = await adminHttp.post<TmdbArtworkReplaceResponseDto>(
+      '/admin/tools/tmdb/artwork/replace',
+      payload
+    );
+    return data;
+  },
+
   // Placeholder tooling endpoints (not wired in catalog admin UI)
   async listEncodingJobs() {
     const { data } = await adminHttp.get('/admin/encoding/jobs');
@@ -1573,6 +1749,18 @@ export function mapMovieDto(dto: MovieDto) {
     slug: dto.slug,
     status: dto.status,
     isTrending: dto.is_trending ?? false,
+    tmdbId: dto.tmdb_id ?? null,
+    metadataSource: dto.metadata_source || '',
+    demoOwned: dto.demo_owned ?? false,
+    hasDemoClip: dto.has_demo_clip ?? false,
+    trailerUrl: dto.trailer_url || '',
+    trailerProvider: dto.trailer_provider || '',
+    trailerKey: dto.trailer_key || '',
+    trailerTitle: dto.trailer_title || '',
+    trailerOfficial: dto.trailer_official ?? false,
+    trailerLanguage: dto.trailer_language || '',
+    trailerPublishedAt: dto.trailer_published_at ?? null,
+    hlsPath: dto.hls_path ?? null,
     genreIds: Array.isArray(dto.genres)
       ? dto.genres.filter((g): g is GenreDto => typeof g !== 'string').map((g) => g.id)
       : [],
@@ -1614,6 +1802,17 @@ export function mapSeriesDto(dto: SeriesDto) {
     catalogStatus: dto.status,
     isFeatured: dto.is_featured ?? dto.featured ?? false,
     isTrending: dto.is_trending ?? false,
+    tmdbId: dto.tmdb_id ?? null,
+    metadataSource: dto.metadata_source || '',
+    demoOwned: dto.demo_owned ?? false,
+    hasDemoClip: dto.has_demo_clip ?? false,
+    trailerUrl: dto.trailer_url || '',
+    trailerProvider: dto.trailer_provider || '',
+    trailerKey: dto.trailer_key || '',
+    trailerTitle: dto.trailer_title || '',
+    trailerOfficial: dto.trailer_official ?? false,
+    trailerLanguage: dto.trailer_language || '',
+    trailerPublishedAt: dto.trailer_published_at ?? null,
     genreIds: Array.isArray(dto.genres)
       ? dto.genres.filter((g): g is GenreDto => typeof g !== 'string').map((g) => g.id)
       : [],
@@ -1632,6 +1831,10 @@ export function mapEpisodeDto(dto: EpisodeDto) {
     description: dto.description || '',
     thumbnail: dto.thumbnail_url || dto.thumbnail || '',
     status: dto.status,
+    tmdbId: dto.tmdb_id ?? null,
+    metadataSource: dto.metadata_source || '',
+    demoOwned: dto.demo_owned ?? false,
+    hasDemoClip: dto.has_demo_clip ?? false,
   };
 }
 

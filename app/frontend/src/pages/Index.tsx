@@ -9,6 +9,7 @@ import { watchHistory } from '@/data/mockData';
 import { fetchHomeCatalog, type CatalogMovie, type CatalogSeries } from '@/lib/catalogData';
 import { api, ApiError, tokenStore, type WatchProgressDto } from '@/lib/api';
 import { isMockMode } from '@/lib/dataMode';
+import { canPlayFullMovie, fullMovieUnavailableLabel, hasDemoClip } from '@/lib/catalogPresentation';
 
 type HomeData = Awaited<ReturnType<typeof fetchHomeCatalog>>;
 
@@ -86,15 +87,22 @@ function HeroBanner({ featured }: { featured: CatalogMovie[] }) {
                 {t.movie.subtitles}: {movie.subtitles.join(', ')}
               </span>
             </div>
-            <div className="flex items-center gap-3 pt-2">
-              <Button
-                size="lg"
-                onClick={() => navigate(`/player/movie/${movie.id}`)}
-                className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 font-semibold shadow-lg"
-              >
-                <Play className="h-5 w-5 fill-current" />
-                {t.hero.play}
-              </Button>
+            <div className="flex flex-wrap items-center gap-3 pt-2">
+              {canPlayFullMovie(movie) || hasDemoClip(movie) ? (
+                <Button
+                  size="lg"
+                  onClick={() => navigate(`/player/movie/${movie.id}`)}
+                  className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 font-semibold shadow-lg"
+                  aria-label={hasDemoClip(movie) ? `Play demo clip for ${movie.title}` : `Play ${movie.title}`}
+                >
+                  <Play className="h-5 w-5 fill-current" />
+                  {hasDemoClip(movie) ? 'Play Demo Clip' : t.hero.play}
+                </Button>
+              ) : (
+                <Badge variant="secondary" className="px-3 py-2 text-sm">
+                  {fullMovieUnavailableLabel()}
+                </Badge>
+              )}
               <Button
                 size="lg"
                 variant="secondary"
@@ -178,6 +186,11 @@ function ContentRow({
                   <Badge className="bg-primary/90 text-primary-foreground text-[10px] px-1.5 py-0.5">
                     {'qualities' in item && item.qualities?.[0] ? item.qualities[0] : '720p'}
                   </Badge>
+                  {hasDemoClip(item) && (
+                    <Badge className="bg-emerald-500 text-white text-[10px] px-1.5 py-0.5">
+                      Demo Clip
+                    </Badge>
+                  )}
                   {item.type === 'series' && 'newEpisode' in item && item.newEpisode && (
                     <Badge className="bg-destructive text-destructive-foreground text-[10px] px-1.5 py-0.5">
                       NEW

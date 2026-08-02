@@ -19,6 +19,7 @@ from app.api.routes import (
     series,
     stream,
     system_updates,
+    tmdb_admin,
     upload,
 )
 
@@ -42,3 +43,4 @@ api_router.include_router(encoding.router)
 api_router.include_router(cdn.router)
 api_router.include_router(stream.router)
 api_router.include_router(system_updates.router)
+api_router.include_router(tmdb_admin.router)

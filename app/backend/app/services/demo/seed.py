@@ -9,6 +9,7 @@ import string
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -654,7 +655,7 @@ def _publish_entity(
     entity_type: str,
     entity_id: int,
     actor: AdminUser,
-    report: SeedReport,
+    report: Any,
     label: str,
 ) -> None:
     entity = workflow.get_entity(db, entity_type, entity_id)

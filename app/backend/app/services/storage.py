@@ -20,7 +20,7 @@ def artwork_root() -> Path:
 
 def ensure_artwork_layout() -> Path:
     root = artwork_root()
-    for name in ("posters", "backdrops"):
+    for name in ("posters", "backdrops", "logos", "stills"):
         (root / name).mkdir(parents=True, exist_ok=True)
     return root
 

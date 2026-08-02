@@ -1,0 +1,276 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import httpx
+import pytest
+from app.core.config import Settings
+from app.models.content import Episode, Movie
+from app.services.catalog import movie_out
+from app.services.demo.artwork import write_rgb_png
+from app.services.demo.cleanup import build_cleanup_plan
+from app.services.tmdb.artwork import ArtworkError, store_artwork_bytes, validate_artwork_url
+from app.services.tmdb.client import TMDBClient, TMDBClientError
+from app.services.tmdb.import_service import import_movie, import_series, refresh_demo_metadata
+from app.services.tmdb.trailers import select_trailer
+from tests.conftest import TEST_JWT
+
+
+def _settings(tmp_path: Path | None = None, **kwargs) -> Settings:
+    base = {
+        "app_env": "test",
+        "jwt_secret": TEST_JWT,
+        "database_url": "sqlite://",
+        "playback_token_secret": "playback-token-secret-for-unit-tests-32",
+        "tmdb_enabled": True,
+        "tmdb_api_read_token": "unit-test-tmdb-token",
+        "tmdb_language": "en-US",
+        "tmdb_fallback_language": "en-US",
+        "artwork_root": str((tmp_path or Path("/tmp")) / "tmdb-artwork"),
+        "_env_file": None,
+    }
+    base.update(kwargs)
+    return Settings(**base)
+
+
+def _movie_details(**overrides):
+    data = {
+        "id": 100,
+        "title": "Demo Movie",
+        "original_title": "Demo Movie",
+        "overview": "A local imported movie.",
+        "release_date": "2024-01-02",
+        "runtime": 101,
+        "original_language": "en",
+        "spoken_languages": [{"iso_639_1": "en", "english_name": "English"}],
+        "production_countries": [{"iso_3166_1": "US"}],
+        "external_ids": {"imdb_id": "tt100"},
+        "vote_average": 7.5,
+        "genres": [{"name": "Drama"}],
+        "images": {"logos": []},
+        "poster_path": None,
+        "backdrop_path": None,
+        "translations": {"translations": []},
+    }
+    data.update(overrides)
+    return data
+
+
+def _series_details(**overrides):
+    data = {
+        "id": 200,
+        "name": "Demo Series",
+        "original_name": "Demo Series",
+        "overview": "A local imported series.",
+        "first_air_date": "2023-01-01",
+        "last_air_date": "2024-01-01",
+        "status": "Returning Series",
+        "original_language": "en",
+        "spoken_languages": [{"iso_639_1": "en", "english_name": "English"}],
+        "origin_country": ["US"],
+        "external_ids": {"imdb_id": "tt200"},
+        "vote_average": 8.0,
+        "genres": [{"name": "Science Fiction"}],
+        "images": {"logos": []},
+        "poster_path": None,
+        "backdrop_path": None,
+        "seasons": [{"season_number": 1}],
+        "translations": {"translations": []},
+    }
+    data.update(overrides)
+    return data
+
+
+class FakeTMDB:
+    def __init__(self):
+        self.movie_detail_calls: list[str] = []
+        self.tv_detail_calls = 0
+
+    def search_movie(self, query, *, page=1, language=None):
+        return {"results": [{"id": 100, "title": query}], "page": page}
+
+    def search_tv(self, query, *, page=1, language=None):
+        return {"results": [{"id": 200, "name": query}], "page": page}
+
+    def movie_details(self, tmdb_id, *, language=None):
+        self.movie_detail_calls.append(language or "en-US")
+        return _movie_details(id=tmdb_id)
+
+    def tv_details(self, tmdb_id, *, language=None):
+        self.tv_detail_calls += 1
+        return _series_details(id=tmdb_id)
+
+    def season_details(self, tmdb_id, season_number, *, language=None):
+        return {
+            "id": 1,
+            "name": "Season 1",
+            "overview": "Season overview",
+            "air_date": "2023-01-01",
+            "episodes": [
+                {
+                    "id": 9001,
+                    "episode_number": 1,
+                    "name": "Pilot",
+                    "overview": "Episode overview",
+                    "runtime": 42,
+                    "air_date": "2023-01-02",
+                }
+            ],
+        }
+
+    def configuration(self):
+        return {"images": {"secure_base_url": "https://image.tmdb.org/t/p/"}}
+
+    def movie_videos(self, tmdb_id, *, language=None):
+        return {
+            "results": [
+                {
+                    "site": "YouTube",
+                    "type": "Trailer",
+                    "key": "abc123",
+                    "name": "Official Trailer",
+                    "official": True,
+                    "iso_639_1": "en",
+                    "published_at": "2024-01-01T00:00:00.000Z",
+                }
+            ]
+        }
+
+    def tv_videos(self, tmdb_id, *, language=None):
+        return {"results": []}
+
+
+def test_tmdb_client_search_and_token_redaction():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["authorization"] == "Bearer unit-test-tmdb-token"
+        return httpx.Response(200, json={"results": [{"id": 1}]})
+
+    client = TMDBClient(_settings(), http_client=httpx.Client(transport=httpx.MockTransport(handler)))
+    assert client.search_movie("demo")["results"][0]["id"] == 1
+
+    def bad_handler(request: httpx.Request) -> httpx.Response:
+        raise RuntimeError("unit-test-tmdb-token leaked")
+
+    bad = TMDBClient(_settings(), http_client=httpx.Client(transport=httpx.MockTransport(bad_handler)))
+    with pytest.raises(TMDBClientError) as exc:
+        bad.search_movie("demo")
+    assert "unit-test-tmdb-token" not in str(exc.value)
+    assert "[REDACTED]" in str(exc.value)
+
+
+def test_movie_import_duplicate_trailer_and_offline_catalog(db_session, tmp_path: Path):
+    settings = _settings(tmp_path)
+    fake = FakeTMDB()
+    result = import_movie(db_session, settings, 100, client=fake, demo_owned=True, seed_version="2.0.0")
+    db_session.commit()
+    movie = db_session.get(Movie, result.entity_id)
+    assert movie.status == "draft"
+    assert movie.tmdb_id == 100
+    assert movie.metadata_source == "tmdb"
+    assert movie.demo_owned is True
+    assert movie.trailer_provider == "YouTube"
+    assert movie.trailer_key == "abc123"
+    assert movie.trailer_url == "https://www.youtube-nocookie.com/embed/abc123"
+
+    duplicate = import_movie(db_session, settings, 100, client=fake, demo_owned=True, seed_version="2.0.0")
+    db_session.commit()
+    assert duplicate.entity_id == result.entity_id
+    assert db_session.query(Movie).filter(Movie.tmdb_id == 100).count() == 1
+
+    movie.status = "published"
+    db_session.commit()
+    assert movie_out(movie).title == "Demo Movie"
+
+
+def test_series_import_episode_ownership(db_session, tmp_path: Path):
+    result = import_series(
+        db_session,
+        _settings(tmp_path),
+        200,
+        client=FakeTMDB(),
+        demo_owned=True,
+        seed_version="2.0.0",
+        seasons_limit=1,
+        episodes_per_season=1,
+    )
+    db_session.commit()
+    assert result.episode_ids
+    episode = db_session.get(Episode, result.episode_ids[0])
+    assert episode.tmdb_id == 9001
+    assert episode.demo_owned is True
+    assert episode.metadata_source == "tmdb"
+
+
+def test_translation_fallback(db_session, tmp_path: Path):
+    class FallbackTMDB(FakeTMDB):
+        def movie_details(self, tmdb_id, *, language=None):
+            self.movie_detail_calls.append(language or "en-US")
+            if language == "fa-AF":
+                return _movie_details(id=tmdb_id, title="Fallback Title", overview="Fallback overview")
+            return _movie_details(id=tmdb_id, title="", overview="")
+
+    settings = _settings(tmp_path, tmdb_fallback_language="fa-AF")
+    result = import_movie(db_session, settings, 101, client=FallbackTMDB(), demo_owned=True, seed_version="2.0.0")
+    db_session.commit()
+    movie = db_session.get(Movie, result.entity_id)
+    assert movie.title == "Fallback Title"
+    assert movie.description == "Fallback overview"
+
+
+def test_image_validation_and_ssrf_rejection(tmp_path: Path):
+    settings = _settings(tmp_path)
+    with pytest.raises(ArtworkError):
+        validate_artwork_url("https://example.com/not-tmdb.jpg")
+
+    png = tmp_path / "poster.png"
+    write_rgb_png(png, 32, 32, (1, 2, 3), "Demo")
+    stored = store_artwork_bytes(settings, png.read_bytes(), kind="poster", tmdb_id=123, content_type="image/png")
+    assert stored.relative_path.startswith("posters/tmdb-poster-123-")
+    assert stored.url.startswith("/artwork/posters/")
+    assert (Path(settings.artwork_root) / stored.relative_path).is_file()
+
+
+def test_refresh_demo_metadata_only(db_session, tmp_path: Path):
+    settings = _settings(tmp_path)
+    fake = FakeTMDB()
+    demo = import_movie(db_session, settings, 100, client=fake, demo_owned=True, seed_version="2.0.0")
+    real = Movie(title="Real", slug="real", tmdb_id=999, status="draft", metadata_source="tmdb", demo_owned=False)
+    db_session.add(real)
+    db_session.commit()
+
+    fake.movie_detail_calls.clear()
+    results = refresh_demo_metadata(db_session, settings, client=fake, force=True)
+    db_session.commit()
+    assert [r.entity_id for r in results] == [demo.entity_id]
+    assert fake.movie_detail_calls
+
+
+def test_trailer_selection_and_no_trailer():
+    selected = select_trailer(
+        {
+            "results": [
+                {"site": "YouTube", "type": "Teaser", "key": "tease", "official": True, "iso_639_1": "en"},
+                {"site": "YouTube", "type": "Trailer", "key": "trailer", "official": True, "iso_639_1": "en"},
+            ]
+        },
+        language="en-US",
+    )
+    assert selected is not None
+    assert selected.key == "trailer"
+    assert select_trailer({"results": [{"site": "Vimeo", "type": "Trailer", "key": "x"}]}) is None
+
+
+def test_cleanup_isolates_demo_owned_rows(db_session, tmp_path: Path):
+    settings = _settings(tmp_path)
+    demo = Movie(title="Demo", slug="tmdb-demo", tmdb_id=1, status="draft", metadata_source="tmdb", demo_owned=True)
+    real = Movie(title="Real", slug="real-movie", tmdb_id=2, status="draft", metadata_source="tmdb", demo_owned=False)
+    db_session.add_all([demo, real])
+    db_session.commit()
+    plan = build_cleanup_plan(db_session, settings)
+    assert demo.id in plan.movie_ids
+    assert real.id not in plan.movie_ids
+
+
+def test_public_movies_200_after_model_update(client):
+    response = client.get("/api/movies")
+    assert response.status_code == 200

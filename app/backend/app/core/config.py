@@ -66,6 +66,15 @@ class Settings(BaseSettings):
     media_root: str = "./media"
     # Dedicated artwork tree — never under packages/originals. Served only at /artwork.
     artwork_root: str = "./artwork"
+    # TMDB demo import is opt-in and caches imported metadata/artwork locally so
+    # the public catalog continues to work after import if TMDB is offline.
+    tmdb_enabled: bool = False
+    tmdb_api_read_token: str = ""
+    tmdb_image_base_url: str = "https://image.tmdb.org/t/p/"
+    tmdb_language: str = "en-US"
+    tmdb_fallback_language: str = "en-US"
+    tmdb_request_timeout_seconds: int = 15
+    tmdb_cache_ttl_seconds: int = 86400
     # Legacy placeholder HLS base URL (unused by Phase 7 protected streaming).
     hls_public_base_url: str = "http://127.0.0.1:8000/api/stream"
     upload_max_bytes: int = 50 * 1024 * 1024 * 1024

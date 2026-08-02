@@ -27,7 +27,9 @@ import MediaAssetDetailPage from '@/pages/admin/MediaAssetDetailPage';
 import MediaProcessingJobsPage from '@/pages/admin/MediaProcessingJobsPage';
 import PlaybackSessionsPage from '@/pages/admin/PlaybackSessionsPage';
 import SystemUpdatesPage from '@/pages/admin/SystemUpdatesPage';
+import TmdbToolsPage from '@/pages/admin/TmdbToolsPage';
 import AdminPlaceholderPage from '@/pages/admin/AdminPlaceholderPage';
+import AboutPage from '@/pages/AboutPage';
 
 const queryClient = new QueryClient();
 
@@ -45,6 +47,8 @@ const AppRoutes = () => (
     <Route path="/movie/:id" element={<CustomerRoute><MovieDetailsPage /></CustomerRoute>} />
     <Route path="/series/:id" element={<CustomerRoute><SeriesDetailsPage /></CustomerRoute>} />
     <Route path="/search" element={<CustomerRoute><SearchPage /></CustomerRoute>} />
+    <Route path="/about" element={<CustomerRoute><AboutPage /></CustomerRoute>} />
+    <Route path="/credits" element={<CustomerRoute><AboutPage /></CustomerRoute>} />
     <Route path="/login" element={<LoginPage />} />
     <Route path="/profile" element={<CustomerRoute><ProfilePage /></CustomerRoute>} />
     <Route path="/devices" element={<CustomerRoute><DevicesPage /></CustomerRoute>} />
@@ -79,6 +83,7 @@ const AppRoutes = () => (
       <Route path="episodes/:id/edit" element={<EpisodeFormPage />} />
       <Route path="genres" element={<GenresPage />} />
       <Route path="tools/upload" element={<MediaUploadPage />} />
+      <Route path="tools/tmdb" element={<TmdbToolsPage />} />
       <Route path="media/processing" element={<MediaProcessingJobsPage />} />
       <Route path="media/playback-sessions" element={<PlaybackSessionsPage />} />
       <Route path="media/:assetId" element={<MediaAssetDetailPage />} />

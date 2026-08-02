@@ -229,6 +229,7 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
     { path: '/series', label: t.nav.series, icon: Tv },
     { path: '/children', label: t.nav.children, icon: Baby },
     { path: '/watchlist', label: t.nav.myList, icon: null },
+    { path: '/credits', label: 'Credits', icon: null },
   ];
 
   const langLabel = lang === 'en' ? 'English' : lang === 'fa' ? 'فارسی' : 'پښتو';

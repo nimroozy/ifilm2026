@@ -277,9 +277,21 @@ class MovieOut(ORMModel):
     country: str = ""
     imdb_id: str | None = None
     imdb_rating: float | None = None
+    tmdb_id: int | None = None
+    metadata_source: str = ""
+    demo_owned: bool = False
     poster_url: str = ""
     backdrop_url: str = ""
+    logo_url: str = ""
     trailer_url: str = ""
+    spoken_languages: list[Any] = Field(default_factory=list)
+    trailer_provider: str = ""
+    trailer_key: str = ""
+    trailer_title: str = ""
+    trailer_official: bool = False
+    trailer_language: str = ""
+    trailer_published_at: datetime | None = None
+    has_demo_clip: bool = False
     status: str
     is_featured: bool = False
     is_trending: bool = False
@@ -345,9 +357,21 @@ class SeriesOut(ORMModel):
     country: str = ""
     imdb_id: str | None = None
     imdb_rating: float | None = None
+    tmdb_id: int | None = None
+    metadata_source: str = ""
+    demo_owned: bool = False
     poster_url: str = ""
     backdrop_url: str = ""
+    logo_url: str = ""
     trailer_url: str = ""
+    spoken_languages: list[Any] = Field(default_factory=list)
+    trailer_provider: str = ""
+    trailer_key: str = ""
+    trailer_title: str = ""
+    trailer_official: bool = False
+    trailer_language: str = ""
+    trailer_published_at: datetime | None = None
+    has_demo_clip: bool = False
     status: str
     airing_status: str = "Ongoing"
     is_featured: bool = False
@@ -525,6 +549,10 @@ class EpisodeOut(ORMModel):
     season_id: int
     series_id: int
     episode_number: int
+    tmdb_id: int | None = None
+    metadata_source: str = ""
+    demo_owned: bool = False
+    has_demo_clip: bool = False
     title: str
     description: str = ""
     duration_minutes: int | None = None

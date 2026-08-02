@@ -18,6 +18,8 @@ def test_production_csp_is_restrictive():
     assert "media-src 'self' blob:" in csp
     assert "connect-src 'self' blob:" in csp
     assert "worker-src 'self' blob:" in csp
+    assert "frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com" in csp
+    assert "child-src 'self' https://www.youtube-nocookie.com https://www.youtube.com" in csp
     assert "https://fonts.googleapis.com" in csp
     assert "https://fonts.gstatic.com" in csp
     assert "unsafe-eval" not in csp

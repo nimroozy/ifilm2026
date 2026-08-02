@@ -5,6 +5,7 @@ from __future__ import annotations
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session
 
@@ -84,23 +85,37 @@ def build_cleanup_plan(db: Session, settings: Settings) -> CleanupPlan:
         watch_progress_ids=list(ownership.watch_progress_ids),
     )
 
-    # Discover demo-prefixed catalog when ownership file is partial.
-    if not plan.movie_ids:
-        plan.movie_ids = [
-            m.id for m in db.query(Movie).filter(Movie.slug.like("demo-%")).all()
-        ]
-    if not plan.series_ids:
-        plan.series_ids = [
-            s.id for s in db.query(Series).filter(Series.slug.like("demo-%")).all()
-        ]
-    if plan.series_ids and not plan.season_ids:
-        plan.season_ids = [
-            s.id for s in db.query(Season).filter(Season.series_id.in_(plan.series_ids)).all()
-        ]
-    if plan.season_ids and not plan.episode_ids:
-        plan.episode_ids = [
-            e.id for e in db.query(Episode).filter(Episode.season_id.in_(plan.season_ids)).all()
-        ]
+    # Discover demo-prefixed / TMDB demo-owned catalog when ownership file is partial.
+    discovered_movies = [
+        m.id for m in db.query(Movie).filter(Movie.slug.like("demo-%")).all()
+    ]
+    discovered_movies.extend([m.id for m in db.query(Movie).filter(Movie.demo_owned.is_(True)).all()])
+    plan.movie_ids = sorted(set(plan.movie_ids + discovered_movies))
+
+    discovered_series = [
+        s.id for s in db.query(Series).filter(Series.slug.like("demo-%")).all()
+    ]
+    discovered_series.extend([s.id for s in db.query(Series).filter(Series.demo_owned.is_(True)).all()])
+    plan.series_ids = sorted(set(plan.series_ids + discovered_series))
+
+    discovered_episodes = [e.id for e in db.query(Episode).filter(Episode.demo_owned.is_(True)).all()]
+    plan.episode_ids = sorted(set(plan.episode_ids + discovered_episodes))
+    if plan.series_ids:
+        plan.season_ids = sorted(
+            set(
+                plan.season_ids
+                + [s.id for s in db.query(Season).filter(Season.series_id.in_(plan.series_ids)).all()]
+            )
+        )
+    if plan.season_ids:
+        plan.episode_ids = sorted(
+            set(
+                plan.episode_ids
+                + [e.id for e in db.query(Episode).filter(Episode.season_id.in_(plan.season_ids)).all()]
+            )
+        )
+
+    plan.artwork_files = sorted(set(plan.artwork_files + _discover_demo_artwork_files(db, plan)))
 
     # Only delete subscribers that are demo provider / known fixtures.
     safe_subs: list[str] = []
@@ -123,6 +138,37 @@ def build_cleanup_plan(db: Session, settings: Settings) -> CleanupPlan:
             safe_admins.append(username)
     plan.admin_usernames = safe_admins
     return plan
+
+
+def _artwork_relative_from_url(value: str) -> str:
+    if not value:
+        return ""
+    if value.startswith("/artwork/"):
+        return value[len("/artwork/") :]
+    parsed = urlparse(value)
+    marker = "/artwork/"
+    if marker in parsed.path:
+        return parsed.path.split(marker, 1)[1]
+    return ""
+
+
+def _discover_demo_artwork_files(db: Session, plan: CleanupPlan) -> list[str]:
+    files: list[str] = []
+    for movie in db.query(Movie).filter(Movie.id.in_(plan.movie_ids or [0])).all():
+        for value in (movie.poster_url, movie.backdrop_url, getattr(movie, "logo_url", "")):
+            rel = _artwork_relative_from_url(value or "")
+            if rel and ("demo-" in rel or "tmdb-" in rel):
+                files.append(rel)
+    for series in db.query(Series).filter(Series.id.in_(plan.series_ids or [0])).all():
+        for value in (series.poster_url, series.backdrop_url, getattr(series, "logo_url", "")):
+            rel = _artwork_relative_from_url(value or "")
+            if rel and ("demo-" in rel or "tmdb-" in rel):
+                files.append(rel)
+    for episode in db.query(Episode).filter(Episode.id.in_(plan.episode_ids or [0])).all():
+        rel = _artwork_relative_from_url(episode.thumbnail_url or "")
+        if rel and ("demo-" in rel or "tmdb-" in rel):
+            files.append(rel)
+    return files
 
 
 def execute_cleanup(db: Session, settings: Settings, plan: CleanupPlan) -> None:
@@ -237,7 +283,7 @@ def execute_cleanup(db: Session, settings: Settings, plan: CleanupPlan) -> None:
     art_root = Path(settings.artwork_root)
     for rel in plan.artwork_files:
         path = art_root / rel
-        if path.is_file() and "demo-" in path.name:
+        if path.is_file() and ("demo-" in path.name or "tmdb-" in path.name):
             path.unlink(missing_ok=True)
 
     root = media_root()
