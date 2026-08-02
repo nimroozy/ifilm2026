@@ -82,10 +82,24 @@ if [[ "$INCLUDE_WWW" == "yes" ]] || { [[ "$INCLUDE_WWW" == "auto" ]] && [[ "$(re
 fi
 
 # Fix broken loopback hosts entry that shadows public DNS on this host.
-if grep -qE "^127\.0\.1\.1[[:space:]].*[[:space:]]${PUBLIC_DOMAIN}([[:space:]]|\$)" /etc/hosts; then
-  log "removing 127.0.1.1 ${PUBLIC_DOMAIN} from /etc/hosts"
-  sed -i -E "s/^(127\.0\.1\.1[[:space:]].*)[[:space:]]${PUBLIC_DOMAIN}([[:space:]]|\$)/\1\2/" /etc/hosts
-  sed -i -E "s/^(127\.0\.1\.1[[:space:]]+)$/127.0.1.1/" /etc/hosts
+# cloud-init often writes: 127.0.1.1 <fqdn> <hostname>  (fqdn may equal PUBLIC_DOMAIN)
+if grep -qE "^127\.0\.1\.1[[:space:]]+.*\b${PUBLIC_DOMAIN}\b" /etc/hosts; then
+  log "removing ${PUBLIC_DOMAIN} from 127.0.1.1 /etc/hosts entry"
+  # Keep a short hostname on 127.0.1.1; never map the public domain to loopback.
+  short_host="$(hostname -s 2>/dev/null || echo ifilm)"
+  [[ "$short_host" == "$PUBLIC_DOMAIN" ]] && short_host="ifilm"
+  sed -i -E "s/^127\.0\.1\.1.*/127.0.1.1 ${short_host}/" /etc/hosts
+fi
+# Prevent cloud-init from restoring FQDN→127.0.1.1 on reboot.
+if [[ -f /etc/cloud/cloud.cfg ]]; then
+  if grep -qE '^manage_etc_hosts:' /etc/cloud/cloud.cfg; then
+    sed -i -E 's/^manage_etc_hosts:.*/manage_etc_hosts: false/' /etc/cloud/cloud.cfg
+  else
+    printf '\nmanage_etc_hosts: false\n' >>/etc/cloud/cloud.cfg
+  fi
+fi
+if [[ -f /etc/cloud/templates/hosts.debian.tmpl ]]; then
+  sed -i -E 's/^127\.0\.1\.1.*/127.0.1.1 {{hostname}}/' /etc/cloud/templates/hosts.debian.tmpl || true
 fi
 
 # --- packages ---
