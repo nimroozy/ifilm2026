@@ -31,12 +31,11 @@ export function LangProvider({ children }: { children: React.ReactNode }) {
   const dir = lang === 'en' ? 'ltr' : 'rtl';
   const t = translations[lang];
 
+  // Document lang/dir are applied by DocumentLangSync inside the router so
+  // /admin can stay LTR without fighting public RTL language changes.
   useEffect(() => {
-    document.documentElement.setAttribute('dir', dir);
-    document.documentElement.setAttribute('lang', lang);
-    // Apply dark mode by default for the streaming platform
     document.documentElement.classList.add('dark');
-  }, [dir, lang]);
+  }, []);
 
   return (
     <LangContext.Provider value={{ lang, setLang, t, dir }}>

@@ -29,6 +29,14 @@ export default function AdminLoginPage() {
   });
 
   useEffect(() => {
+    const previousTitle = document.title;
+    document.title = 'iFilm Admin';
+    return () => {
+      document.title = previousTitle;
+    };
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     async function checkExisting() {
       if (!tokenStore.getAdmin()) {
@@ -64,7 +72,9 @@ export default function AdminLoginPage() {
   }
 
   if (checking) {
-    return <div className="min-h-screen bg-background" />;
+    return (
+      <div dir="ltr" lang="en" className="min-h-screen bg-background" data-testid="admin-login-root" />
+    );
   }
 
   if (tokenStore.getAdmin() && !error && form.formState.isSubmitSuccessful) {
@@ -72,10 +82,15 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <Card className="w-full max-w-md bg-card border-border">
+    <div
+      dir="ltr"
+      lang="en"
+      className="flex min-h-screen items-center justify-center overflow-x-hidden bg-background p-4 text-left"
+      data-testid="admin-login-root"
+    >
+      <Card className="w-full max-w-md border-border bg-card">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-serif text-primary">Mobin Play</CardTitle>
+          <CardTitle className="font-serif text-2xl text-primary">iFilm</CardTitle>
           <CardDescription>Admin Panel Sign In</CardDescription>
         </CardHeader>
         <CardContent>
