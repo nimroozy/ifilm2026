@@ -428,6 +428,7 @@ def _seed_movies(
                     duration_seconds=20,
                 )
             except Exception as exc:  # noqa: BLE001 — continue seeding other titles
+                db.rollback()
                 report.deviations.append(f"Media pipeline failed for {slug}: {exc}")
                 logger.exception("Demo media failed for %s", slug)
 
@@ -573,13 +574,13 @@ def _seed_series(
                             ownership=ownership,
                             work_dir=demo_work_dir(settings),
                             label=f"{slug}-s{season_number}e{ep_number}",
+                            # Media assets allow only one owner FK (episode XOR series/season/movie).
                             episode_id=episode.id,
-                            series_id=series.id,
-                            season_id=season.id,
                             duration_seconds=18,
                         )
                         episode_media_done += 1
                     except Exception as exc:  # noqa: BLE001
+                        db.rollback()
                         report.deviations.append(
                             f"Episode media failed for {slug} S{season_number}E{ep_number}: {exc}"
                         )
