@@ -4,12 +4,11 @@ from pathlib import Path
 
 import httpx
 import pytest
-
 from app.core.config import Settings
 from app.models.content import Episode, Movie
 from app.services.catalog import movie_out
-from app.services.demo.cleanup import build_cleanup_plan
 from app.services.demo.artwork import write_rgb_png
+from app.services.demo.cleanup import build_cleanup_plan
 from app.services.tmdb.artwork import ArtworkError, store_artwork_bytes, validate_artwork_url
 from app.services.tmdb.client import TMDBClient, TMDBClientError
 from app.services.tmdb.import_service import import_movie, import_series, refresh_demo_metadata

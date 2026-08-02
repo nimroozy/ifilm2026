@@ -13,7 +13,12 @@ from app.models.content import Movie, Series
 from app.services.catalog import movie_out, series_out
 from app.services.tmdb.artwork import build_image_url, download_artwork
 from app.services.tmdb.client import TMDBClient, TMDBClientError
-from app.services.tmdb.import_service import import_movie, import_series, preview_movie, preview_series
+from app.services.tmdb.import_service import (
+    import_movie,
+    import_series,
+    preview_movie,
+    preview_series,
+)
 from app.services.tmdb.refresh import refresh_real_demo_metadata
 
 router = APIRouter(tags=["tmdb-admin"])

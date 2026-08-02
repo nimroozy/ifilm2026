@@ -171,7 +171,7 @@ def _store_artwork(
     }
     urls: dict[str, str] = {}
     files: list[str] = []
-    for field, (kind, path) in paths.items():
+    for field_name, (kind, path) in paths.items():
         if not path:
             continue
         url = build_image_url(settings, str(path), size="original")
@@ -187,7 +187,7 @@ def _store_artwork(
             # Keep import usable when optional artwork is missing/bad; metadata is
             # the source of truth and already local. Tests cover strict validation separately.
             continue
-        urls[field] = stored.url
+        urls[field_name] = stored.url
         files.append(stored.relative_path)
     return urls, files
 
