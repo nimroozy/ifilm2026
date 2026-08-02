@@ -367,16 +367,20 @@ def test_movies_genre_filter_with_json_columns(client, admin_headers, db_session
     assert created.status_code == 201
     movie_id = created.json()["id"]
     movie = db_session.get(Movie, movie_id)
-    movie.cast = [{"name": "Actor One", "role": "Lead"}]
+    # Non-empty JSON array columns reproduce the Postgres DISTINCT failure mode.
+    movie.cast = ["Actor One", "Actor Two"]
     movie.audio = ["Dari"]
     movie.subtitles = ["English"]
     movie.qualities = ["720p"]
-    movie.dubbed = []
+    movie.dubbed = ["Pashto"]
     db_session.add(movie)
     db_session.commit()
     _workflow_publish_movie(client, admin_headers, db_session, movie_id)
 
-    by_name = client.get("/api/movies", params={"genre": "Action", "page_size": 12, "sort": "views_desc"})
+    by_name = client.get(
+        "/api/movies",
+        params={"genre": "Action", "page_size": 12, "sort": "views_desc"},
+    )
     assert by_name.status_code == 200, by_name.text
     assert any(item["slug"] == "json-cast-film" for item in by_name.json()["data"])
 
