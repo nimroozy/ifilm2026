@@ -163,6 +163,7 @@ def test_postgresql_migration_succeeds(postgres_url):
     assert "upload_sessions" in tables
     assert "system_update_jobs" in tables
     assert "system_update_events" in tables
+    assert "app_settings" in tables
     assert version == "013_app_settings"
 
 
