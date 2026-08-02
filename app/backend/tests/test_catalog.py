@@ -341,3 +341,45 @@ def test_pagination_filtering_search_sorting(client, admin_headers, db_session):
     title_asc = client.get("/api/movies", params={"q": "Sort Film", "sort": "title_asc"})
     titles = [item["title"] for item in title_asc.json()[items_key]]
     assert titles == sorted(titles)
+
+
+def test_movies_genre_filter_with_json_columns(client, admin_headers, db_session):
+    """PostgreSQL rejects DISTINCT over JSON (movies.cast); genre filter must not 500."""
+    genre = client.post(
+        "/api/admin/genres",
+        headers=admin_headers,
+        json={"name": "Action", "slug": "action-json-filter"},
+    ).json()
+    created = client.post(
+        "/api/admin/movies",
+        headers=admin_headers,
+        json={
+            "title": "JSON Cast Film",
+            "slug": "json-cast-film",
+            "release_year": 2024,
+            "description": "Synopsis",
+            "poster_url": "https://placehold.co/300x450",
+            "backdrop_url": "https://placehold.co/1920x800",
+            "genre_ids": [genre["id"]],
+            "status": "draft",
+        },
+    )
+    assert created.status_code == 201
+    movie_id = created.json()["id"]
+    movie = db_session.get(Movie, movie_id)
+    movie.cast = [{"name": "Actor One", "role": "Lead"}]
+    movie.audio = ["Dari"]
+    movie.subtitles = ["English"]
+    movie.qualities = ["720p"]
+    movie.dubbed = []
+    db_session.add(movie)
+    db_session.commit()
+    _workflow_publish_movie(client, admin_headers, db_session, movie_id)
+
+    by_name = client.get("/api/movies", params={"genre": "Action", "page_size": 12, "sort": "views_desc"})
+    assert by_name.status_code == 200, by_name.text
+    assert any(item["slug"] == "json-cast-film" for item in by_name.json()["data"])
+
+    by_slug = client.get("/api/movies", params={"genre": "action-json-filter"})
+    assert by_slug.status_code == 200, by_slug.text
+    assert any(item["slug"] == "json-cast-film" for item in by_slug.json()["data"])
