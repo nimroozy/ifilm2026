@@ -55,8 +55,17 @@ log "domain=${PUBLIC_DOMAIN} email=${CERTBOT_EMAIL} backend=127.0.0.1:${IFILM_HT
 resolve_a() {
   dig +short "$1" A @8.8.8.8 | head -1
 }
-HOST_IP="$(curl -fsS --max-time 10 https://ifconfig.me || curl -fsS --max-time 10 https://api.ipify.org || true)"
-[[ -n "$HOST_IP" ]] || die "could not determine public IP"
+# Prefer IPv4 — Let's Encrypt HTTP-01 and PUBLIC_DOMAIN A records are IPv4.
+HOST_IP="$(
+  curl -4 -fsS --max-time 10 https://ifconfig.me 2>/dev/null \
+    || curl -4 -fsS --max-time 10 https://api.ipify.org 2>/dev/null \
+    || curl -4 -fsS --max-time 10 https://ipv4.icanhazip.com 2>/dev/null \
+    || true
+)"
+HOST_IP="$(printf '%s' "$HOST_IP" | tr -d '[:space:]')"
+[[ -n "$HOST_IP" ]] || die "could not determine public IPv4 address"
+[[ "$HOST_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+  || die "public IP is not IPv4: ${HOST_IP}"
 DNS_IP="$(resolve_a "$PUBLIC_DOMAIN")"
 [[ -n "$DNS_IP" ]] || die "PUBLIC_DOMAIN ${PUBLIC_DOMAIN} has no A record"
 [[ "$DNS_IP" == "$HOST_IP" ]] \
