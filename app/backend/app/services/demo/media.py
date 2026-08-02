@@ -28,18 +28,42 @@ from app.services.streaming.activation import get_active_completed_package
 logger = logging.getLogger(__name__)
 
 
+def _demo_rgb_hex(tag: str) -> str:
+    """Stable 0xRRGGBB color for lavfi `color=` (HSL is not portable across ffmpeg builds)."""
+    # Simple HSV→RGB with fixed S/V so each tag gets a distinct solid color.
+    h = (abs(hash(tag)) % 360) / 60.0
+    s = 0.60
+    v = 0.55
+    c = v * s
+    x = c * (1 - abs(h % 2 - 1))
+    m = v - c
+    sector = int(h) % 6
+    r1, g1, b1 = (
+        (c, x, 0.0),
+        (x, c, 0.0),
+        (0.0, c, x),
+        (0.0, x, c),
+        (x, 0.0, c),
+        (c, 0.0, x),
+    )[sector]
+    r = int(round((r1 + m) * 255))
+    g = int(round((g1 + m) * 255))
+    b = int(round((b1 + m) * 255))
+    return f"0x{r:02X}{g:02X}{b:02X}"
+
+
 def generate_synthetic_mp4(path: Path, *, duration_seconds: int = 20, tag: str = "demo") -> Path:
     """Create a small synthetic H.264/AAC 640x360 clip (no copyrighted media)."""
     path.parent.mkdir(parents=True, exist_ok=True)
     # Unique color/tag per asset to avoid duplicate-checksum rejection across runs.
-    hue = abs(hash(tag)) % 360
+    color = _demo_rgb_hex(tag)
     cmd = [
         "ffmpeg",
         "-y",
         "-f",
         "lavfi",
         "-i",
-        f"color=c=hsl({hue}\\,60%\\,35%):s=640x360:d={duration_seconds}",
+        f"color=c={color}:s=640x360:d={duration_seconds}",
         "-f",
         "lavfi",
         "-i",
