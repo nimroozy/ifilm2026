@@ -11,6 +11,7 @@ from app.core.security import hash_password
 from app.models.user import Subscriber
 from app.services.demo.artwork import write_rgb_png
 from app.services.demo.constants import DEMO_SEED_VERSION, PROVIDER_DEMO
+from app.services.demo.media import _demo_rgb_hex
 from app.services.demo.ownership import DemoOwnership, load_ownership, save_ownership
 from app.services.identity.provider import DemoIdentityProvider, get_identity_provider
 from tests.conftest import TEST_JWT
@@ -42,6 +43,15 @@ def test_demo_png_placeholder(tmp_path: Path):
     data = path.read_bytes()
     assert data[:8] == b"\x89PNG\r\n\x1a\n"
     assert path.stat().st_size > 200
+
+
+def test_demo_rgb_hex_is_lavfi_compatible():
+    color = _demo_rgb_hex("demo-kabul-nights")
+    assert color.startswith("0x")
+    assert len(color) == 8
+    int(color[2:], 16)
+    assert _demo_rgb_hex("demo-kabul-nights") == color
+    assert _demo_rgb_hex("other-tag") != color
 
 
 def test_ownership_roundtrip(tmp_path: Path, monkeypatch):
