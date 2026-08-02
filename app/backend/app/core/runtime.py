@@ -65,6 +65,11 @@ def fixture_auth_allowed(settings: Settings) -> bool:
     return False
 
 
+def demo_local_auth_allowed(settings: Settings) -> bool:
+    """Demo local subscriber auth: explicit opt-in only; never implies live Radius."""
+    return bool(settings.demo_allow_local_auth)
+
+
 @dataclass(frozen=True)
 class ValidationResult:
     ok: bool
@@ -94,6 +99,23 @@ def collect_runtime_errors(settings: Settings) -> list[str]:
             "SUBSCRIBER_IDENTITY_MODE=fixture is only allowed in development/test, or staging "
             "with STAGING_ALLOW_FIXTURE_AUTH=true (never in production)"
         )
+
+    if settings.subscriber_identity_mode == "demo" and not demo_local_auth_allowed(settings):
+        errors.append(
+            "SUBSCRIBER_IDENTITY_MODE=demo requires DEMO_ALLOW_LOCAL_AUTH=true "
+            "(demo-owned local hashes only; does not enable live Radius)"
+        )
+
+    if settings.demo_allow_local_auth and settings.subscriber_identity_mode not in {
+        "demo",
+        "disabled",
+    }:
+        # Allow flag present while mode disabled (pre-seed). Reject unsafe combos with radius/fixture.
+        if settings.subscriber_identity_mode in {"radius", "fixture"}:
+            errors.append(
+                "DEMO_ALLOW_LOCAL_AUTH cannot be combined with SUBSCRIBER_IDENTITY_MODE="
+                f"{settings.subscriber_identity_mode}"
+            )
 
     if settings.staging_allow_fixture_auth and settings.app_env in {"production", "prod"}:
         errors.append("STAGING_ALLOW_FIXTURE_AUTH must not be enabled when APP_ENV is production")

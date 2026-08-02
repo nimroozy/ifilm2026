@@ -17,7 +17,12 @@ from datetime import UTC, date, datetime
 from typing import Protocol
 
 from app.core.config import Settings, get_settings
-from app.core.runtime import RuntimeConfigurationError, fixture_auth_allowed
+from app.core.runtime import (
+    RuntimeConfigurationError,
+    demo_local_auth_allowed,
+    fixture_auth_allowed,
+)
+from app.core.security import verify_password
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +37,7 @@ PROVIDER_FIXTURE = "fixture"
 PROVIDER_RADIUS = "radius"
 PROVIDER_DISABLED = "disabled"
 PROVIDER_LOCAL = "local"
+PROVIDER_DEMO = "demo"
 
 
 @dataclass(frozen=True)
@@ -550,6 +556,187 @@ class DisabledIdentityProvider:
         )
 
 
+class DemoIdentityProvider:
+    """Local hashed-password auth for demo-owned subscribers only.
+
+    Never talks to Radius. Requires DEMO_ALLOW_LOCAL_AUTH=true and
+    SUBSCRIBER_IDENTITY_MODE=demo. Uses DB session factory at call time.
+    """
+
+    def __init__(self, settings: Settings) -> None:
+        if not demo_local_auth_allowed(settings):
+            raise RuntimeConfigurationError(
+                "Demo local subscriber identity requires DEMO_ALLOW_LOCAL_AUTH=true"
+            )
+        self.settings = settings
+
+    def _load_subscriber(self, username_or_subject: str):
+        from app.db.session import SessionLocal
+        from app.models.user import Subscriber
+
+        db = SessionLocal()
+        try:
+            user = (
+                db.query(Subscriber)
+                .filter(Subscriber.username == username_or_subject)
+                .one_or_none()
+            )
+            if user is None:
+                user = (
+                    db.query(Subscriber)
+                    .filter(
+                        Subscriber.identity_provider == PROVIDER_DEMO,
+                        Subscriber.external_subject == username_or_subject,
+                    )
+                    .one_or_none()
+                )
+            if user is None:
+                return None
+            # Detach plain values — do not return a bound ORM instance across sessions.
+            return {
+                "username": user.username,
+                "hashed_password": user.hashed_password,
+                "name": user.name,
+                "branch": user.branch,
+                "package": user.package,
+                "status": user.status,
+                "service_status": user.service_status,
+                "valid_from": user.valid_from,
+                "valid_until": user.valid_until,
+                "max_devices": user.max_devices,
+                "identity_provider": user.identity_provider,
+                "external_subject": user.external_subject,
+            }
+        finally:
+            db.close()
+
+    def authenticate(self, username: str, password: str) -> IdentityAuthResult:
+        row = self._load_subscriber(username)
+        if (
+            row is None
+            or row.get("identity_provider") != PROVIDER_DEMO
+            or not row.get("hashed_password")
+            or not verify_password(password, row["hashed_password"])
+        ):
+            return IdentityAuthResult(
+                success=False,
+                denial_code="invalid_credentials",
+                safe_reason=GENERIC_FAILURE,
+                source=PROVIDER_DEMO,
+            )
+        account_status = str(row.get("status") or "unknown").lower()
+        service_status = str(row.get("service_status") or "unknown").lower()
+        valid_until = row.get("valid_until")
+        now = datetime.now(UTC)
+        denial = None
+        reason = None
+        if account_status == "suspended":
+            denial = ACCOUNT_SUSPENDED
+            reason = "Account is suspended"
+        elif account_status in {"disabled", "inactive"}:
+            denial = ACCOUNT_DISABLED
+            reason = "Account is disabled"
+        elif service_status == "expired" or (
+            valid_until is not None and valid_until < now
+        ):
+            service_status = "expired"
+            denial = SERVICE_EXPIRED
+            reason = "Service entitlement has expired"
+        elif service_status != "active":
+            denial = SERVICE_INACTIVE
+            reason = "Service is not active"
+        return IdentityAuthResult(
+            success=True,
+            external_subject=str(row.get("external_subject") or row["username"]),
+            display_name=str(row.get("name") or row["username"]),
+            account_status=account_status,
+            service_status=service_status,
+            package_name=str(row.get("package") or "Demo"),
+            branch_code=str(row.get("branch") or "Kabul"),
+            valid_from=row.get("valid_from"),
+            valid_until=valid_until,
+            max_devices=int(row["max_devices"]) if row.get("max_devices") is not None else None,
+            denial_code=denial,
+            safe_reason=reason,
+            source=PROVIDER_DEMO,
+        )
+
+    def get_account_status(self, external_subject: str) -> AccountStatusResult:
+        row = self._load_subscriber(external_subject)
+        if row is None or row.get("identity_provider") != PROVIDER_DEMO:
+            return AccountStatusResult(
+                account_status="unknown",
+                service_status="unknown",
+                denial_code="entitlement_missing",
+                safe_reason="Demo account not found",
+                source=PROVIDER_DEMO,
+                available=True,
+            )
+        auth = self._status_from_row(row)
+        return AccountStatusResult(
+            account_status=auth["account_status"],
+            service_status=auth["service_status"],
+            denial_code=auth["denial"],
+            safe_reason=auth["reason"],
+            source=PROVIDER_DEMO,
+            available=True,
+        )
+
+    def get_entitlement(self, external_subject: str) -> EntitlementProviderResult:
+        row = self._load_subscriber(external_subject)
+        if row is None or row.get("identity_provider") != PROVIDER_DEMO:
+            return EntitlementProviderResult(
+                allowed=False,
+                denial_code="entitlement_missing",
+                safe_reason="Demo entitlement not found",
+                source=PROVIDER_DEMO,
+            )
+        auth = self._status_from_row(row)
+        return EntitlementProviderResult(
+            allowed=auth["denial"] is None,
+            account_status=auth["account_status"],
+            service_status=auth["service_status"],
+            package_name=str(row.get("package") or "Demo"),
+            branch_code=str(row.get("branch") or "Kabul"),
+            valid_from=row.get("valid_from"),
+            valid_until=row.get("valid_until"),
+            max_devices=int(row["max_devices"]) if row.get("max_devices") is not None else None,
+            denial_code=auth["denial"],
+            safe_reason=auth["reason"],
+            source=PROVIDER_DEMO,
+            available=True,
+        )
+
+    def _status_from_row(self, row: dict) -> dict:
+        account_status = str(row.get("status") or "unknown").lower()
+        service_status = str(row.get("service_status") or "unknown").lower()
+        valid_until = row.get("valid_until")
+        now = datetime.now(UTC)
+        denial = None
+        reason = None
+        if account_status == "suspended":
+            denial = ACCOUNT_SUSPENDED
+            reason = "Account is suspended"
+        elif account_status in {"disabled", "inactive"}:
+            denial = ACCOUNT_DISABLED
+            reason = "Account is disabled"
+        elif service_status == "expired" or (
+            valid_until is not None and valid_until < now
+        ):
+            service_status = "expired"
+            denial = SERVICE_EXPIRED
+            reason = "Service entitlement has expired"
+        elif service_status != "active":
+            denial = SERVICE_INACTIVE
+            reason = "Service is not active"
+        return {
+            "account_status": account_status,
+            "service_status": service_status,
+            "denial": denial,
+            "reason": reason,
+        }
+
+
 def get_identity_provider(settings: Settings | None = None) -> SubscriberIdentityProvider:
     cfg = settings or get_settings()
     mode = cfg.subscriber_identity_mode
@@ -557,4 +744,6 @@ def get_identity_provider(settings: Settings | None = None) -> SubscriberIdentit
         return FixtureIdentityProvider(cfg)
     if mode == PROVIDER_RADIUS:
         return RadiusIdentityProvider(cfg)
+    if mode == PROVIDER_DEMO:
+        return DemoIdentityProvider(cfg)
     return DisabledIdentityProvider()

@@ -163,7 +163,8 @@ def test_postgresql_migration_succeeds(postgres_url):
     assert "upload_sessions" in tables
     assert "system_update_jobs" in tables
     assert "system_update_events" in tables
-    assert version == "012_system_update_notes"
+    assert "app_settings" in tables
+    assert version == "013_app_settings"
 
 
 def test_postgresql_migration_from_previous_revision(postgres_url):
@@ -196,7 +197,7 @@ def test_postgresql_migration_from_previous_revision(postgres_url):
     assert movie_slug == "ordinary-film"
     assert series_slug == "ordinary-show"
     assert null_imdb >= 1
-    assert version == "012_system_update_notes"
+    assert version == "013_app_settings"
 
 
 def test_002_to_head_duplicate_and_messy_titles(postgres_url):
@@ -962,6 +963,6 @@ def test_alembic_heads_single(postgres_url):
     result = _run_alembic(postgres_url, "heads")
     assert result.returncode == 0, result.stdout + result.stderr
     lines = [ln for ln in (result.stdout + result.stderr).splitlines() if ln.strip()]
-    head_lines = [ln for ln in lines if "012_system_update_notes" in ln]
+    head_lines = [ln for ln in lines if "013_app_settings" in ln]
     assert head_lines, result.stdout + result.stderr
-    assert sum(1 for ln in lines if ln.strip().startswith("012_system_update_notes")) >= 1
+    assert sum(1 for ln in lines if ln.strip().startswith("013_app_settings")) >= 1

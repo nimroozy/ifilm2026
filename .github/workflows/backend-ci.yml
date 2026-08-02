@@ -113,7 +113,7 @@ jobs:
       - name: Alembic heads
         run: |
           alembic heads | tee /tmp/alembic-heads.txt
-          grep -q '012_system_update_notes' /tmp/alembic-heads.txt
+          grep -q '013_app_settings' /tmp/alembic-heads.txt
 
       - name: Alembic upgrade on empty PostgreSQL database
         run: |

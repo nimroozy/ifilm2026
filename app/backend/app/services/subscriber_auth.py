@@ -29,7 +29,7 @@ from app.services.entitlements import (
     persist_snapshot,
 )
 from app.services.identity import GENERIC_FAILURE, get_identity_provider
-from app.services.identity.provider import PROVIDER_FIXTURE, PROVIDER_RADIUS
+from app.services.identity.provider import PROVIDER_DEMO, PROVIDER_FIXTURE, PROVIDER_RADIUS
 
 
 @dataclass
@@ -125,7 +125,9 @@ def upsert_subscriber_from_identity(
         db.add(user)
         db.flush()
     else:
-        user.hashed_password = None  # never store provider passwords
+        # Demo local auth keeps Argon2 hashes; Radius/fixture must never persist passwords.
+        if provider_name != PROVIDER_DEMO:
+            user.hashed_password = None
         user.name = identity.display_name or user.name or username
         user.identity_provider = provider_name
         user.external_subject = external

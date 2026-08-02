@@ -1,0 +1,446 @@
+"""Demo seed constants. Demo-owned rows are tracked in ownership JSON + app_settings."""
+
+from __future__ import annotations
+
+from typing import TypedDict
+
+
+class AdminFixture(TypedDict):
+    username: str
+    email: str
+    full_name: str
+    role_name: str
+    permissions: list[str]
+
+
+class SubscriberFixture(TypedDict):
+    username: str
+    name: str
+    status: str
+    service_status: str
+    package: str
+    branch: str
+    max_devices: int
+    valid_days: int
+    expired: bool
+
+
+class MovieFixture(TypedDict):
+    title: str
+    original_title: str
+    slug: str
+    description: str
+    short_description: str
+    release_year: int
+    country: str
+    duration_minutes: int
+    genres: list[str]
+    language: str
+    status_path: str
+    is_featured: bool
+    is_trending: bool
+    with_media: bool
+    color: str
+
+
+class SeriesFixture(TypedDict):
+    title: str
+    original_title: str
+    slug: str
+    description: str
+    short_description: str
+    release_year: int
+    country: str
+    language: str
+    genres: list[str]
+    mode: str
+    color: str
+    with_episode_media: bool
+
+
+DEMO_SEED_VERSION = "1.0.0"
+DEMO_OWNERSHIP_FILENAME = "ownership.json"
+DEMO_DIRNAME = ".demo"
+
+# AppSetting keys
+SETTING_DEMO_INSTALLED = "DEMO_DATA_INSTALLED"
+SETTING_DEMO_VERSION = "DEMO_SEED_VERSION"
+SETTING_DEMO_COMMIT = "DEMO_SEED_COMMIT_SHA"
+SETTING_DEMO_INSTALLED_AT = "DEMO_SEED_INSTALLED_AT"
+
+PROVIDER_DEMO = "demo"
+
+ADMIN_FIXTURES: tuple[AdminFixture, ...] = (
+    {
+        "username": "catalog_manager",
+        "email": "catalog_manager@ifilm.demo",
+        "full_name": "Demo Catalog Manager",
+        "role_name": "Catalog Manager",
+        "permissions": [
+            "dashboard",
+            "movies",
+            "movies.read",
+            "movies.manage",
+            "series",
+            "series.read",
+            "series.manage",
+            "genres",
+            "genres.read",
+            "genres.manage",
+            "catalog.read",
+            "catalog.edit",
+            "upload",
+            "upload.read",
+            "upload.manage",
+            "processing",
+            "processing.read",
+            "processing.manage",
+        ],
+    },
+    {
+        "username": "reviewer",
+        "email": "reviewer@ifilm.demo",
+        "full_name": "Demo Reviewer",
+        "role_name": "Reviewer",
+        "permissions": [
+            "dashboard",
+            "movies",
+            "movies.read",
+            "series",
+            "series.read",
+            "genres",
+            "genres.read",
+            "catalog.read",
+            "catalog.review",
+            "catalog.approve",
+            "processing",
+            "processing.read",
+            "streaming",
+            "streaming.read",
+        ],
+    },
+    {
+        "username": "publisher",
+        "email": "publisher@ifilm.demo",
+        "full_name": "Demo Publisher",
+        "role_name": "Publisher",
+        "permissions": [
+            "dashboard",
+            "movies",
+            "movies.read",
+            "series",
+            "series.read",
+            "genres",
+            "genres.read",
+            "catalog.read",
+            "catalog.publish",
+            "catalog.archive",
+            "processing",
+            "processing.read",
+            "streaming",
+            "streaming.read",
+            "streaming.manage",
+        ],
+    },
+)
+
+GENRE_NAMES = [
+    "Action",
+    "Drama",
+    "Comedy",
+    "Documentary",
+    "Family",
+    "Thriller",
+    "Romance",
+    "Animation",
+    "Dari",
+    "Pashto",
+]
+
+MOVIE_FIXTURES: list[MovieFixture] = [
+    {
+        "title": "Kabul Nights",
+        "original_title": "شب‌های کابل",
+        "slug": "demo-kabul-nights",
+        "description": "A radio host reconnects a fractured city through late-night stories.",
+        "short_description": "Nighttime stories bind a city together.",
+        "release_year": 2023,
+        "country": "Afghanistan",
+        "duration_minutes": 112,
+        "genres": ["Drama", "Dari"],
+        "language": "Dari",
+        "status_path": "published",
+        "is_featured": True,
+        "is_trending": True,
+        "with_media": True,
+        "color": "1a3a5c",
+    },
+    {
+        "title": "The Last Caravan",
+        "original_title": "آخرین کاروان",
+        "slug": "demo-the-last-caravan",
+        "description": "A merchant family crosses the Hindu Kush with one chance to trade in peace.",
+        "short_description": "A caravan races winter across the mountains.",
+        "release_year": 2024,
+        "country": "Afghanistan",
+        "duration_minutes": 128,
+        "genres": ["Drama", "Action"],
+        "language": "Dari",
+        "status_path": "published",
+        "is_featured": True,
+        "is_trending": False,
+        "with_media": True,
+        "color": "4a1942",
+    },
+    {
+        "title": "Nimruz Wind",
+        "original_title": "باد نیمروز",
+        "slug": "demo-nimruz-wind",
+        "description": "A young engineer maps desert wind for a village that refuses to leave.",
+        "short_description": "Wind power and stubborn hope in Nimruz.",
+        "release_year": 2022,
+        "country": "Afghanistan",
+        "duration_minutes": 98,
+        "genres": ["Documentary", "Dari"],
+        "language": "Dari",
+        "status_path": "published",
+        "is_featured": False,
+        "is_trending": True,
+        "with_media": True,
+        "color": "b7791f",
+    },
+    {
+        "title": "Kandahar Road",
+        "original_title": "جاده قندهار",
+        "slug": "demo-kandahar-road",
+        "description": "Two estranged brothers share one truck and one dangerous highway home.",
+        "short_description": "Brothers on a road that tests loyalty.",
+        "release_year": 2021,
+        "country": "Afghanistan",
+        "duration_minutes": 105,
+        "genres": ["Thriller", "Action"],
+        "language": "Pashto",
+        "status_path": "published",
+        "is_featured": False,
+        "is_trending": True,
+        "with_media": True,
+        "color": "276749",
+    },
+    {
+        "title": "Ghazni Stories",
+        "original_title": "داستان‌های غزنی",
+        "slug": "demo-ghazni-stories",
+        "description": "Linked vignettes from a school courtyard across three seasons.",
+        "short_description": "Classroom vignettes from Ghazni.",
+        "release_year": 2020,
+        "country": "Afghanistan",
+        "duration_minutes": 91,
+        "genres": ["Drama", "Family"],
+        "language": "Dari",
+        "status_path": "in_review",
+        "is_featured": False,
+        "is_trending": False,
+        "with_media": False,
+        "color": "2c5282",
+    },
+    {
+        "title": "Helmand River",
+        "original_title": "رود هلمند",
+        "slug": "demo-helmand-river",
+        "description": "A fishing community negotiates drought, memory, and a new dam.",
+        "short_description": "A river community faces change.",
+        "release_year": 2019,
+        "country": "Afghanistan",
+        "duration_minutes": 118,
+        "genres": ["Drama", "Documentary"],
+        "language": "Pashto",
+        "status_path": "approved",
+        "is_featured": False,
+        "is_trending": False,
+        "with_media": False,
+        "color": "2b6cb0",
+    },
+    {
+        "title": "The Silent Tower",
+        "original_title": "برج خاموش",
+        "slug": "demo-the-silent-tower",
+        "description": "An archivist guards an abandoned minaret that still answers at night.",
+        "short_description": "A minaret keeps unexpected secrets.",
+        "release_year": 2024,
+        "country": "Afghanistan",
+        "duration_minutes": 102,
+        "genres": ["Thriller", "Romance"],
+        "language": "Dari",
+        "status_path": "scheduled",
+        "is_featured": False,
+        "is_trending": False,
+        "with_media": False,
+        "color": "553c9a",
+    },
+    {
+        "title": "Desert Signal",
+        "original_title": "سیگنال صحرا",
+        "slug": "demo-desert-signal",
+        "description": "Amateur radio operators chase a mysterious beacon across the dunes.",
+        "short_description": "A desert beacon draws unlikely allies.",
+        "release_year": 2023,
+        "country": "Afghanistan",
+        "duration_minutes": 96,
+        "genres": ["Action", "Thriller"],
+        "language": "Dari",
+        "status_path": "unpublished",
+        "is_featured": False,
+        "is_trending": False,
+        "with_media": False,
+        "color": "c05621",
+    },
+    {
+        "title": "City of Dust",
+        "original_title": "شهر خاک",
+        "slug": "demo-city-of-dust",
+        "description": "A street photographer documents rebuilding after a sandstorm season.",
+        "short_description": "Portraits after the sandstorms.",
+        "release_year": 2018,
+        "country": "Afghanistan",
+        "duration_minutes": 89,
+        "genres": ["Documentary", "Dari"],
+        "language": "Dari",
+        "status_path": "archived",
+        "is_featured": False,
+        "is_trending": False,
+        "with_media": False,
+        "color": "744210",
+    },
+    {
+        "title": "The Long Winter",
+        "original_title": "زمستان بلند",
+        "slug": "demo-the-long-winter",
+        "description": "A teacher keeps a mountain school open through the hardest months.",
+        "short_description": "A mountain school endures winter.",
+        "release_year": 2022,
+        "country": "Afghanistan",
+        "duration_minutes": 110,
+        "genres": ["Family", "Drama"],
+        "language": "Dari",
+        "status_path": "draft",
+        "is_featured": False,
+        "is_trending": False,
+        "with_media": False,
+        "color": "2a4365",
+    },
+    {
+        "title": "Border Lights",
+        "original_title": "چراغ‌های مرز",
+        "slug": "demo-border-lights",
+        "description": "Truck drivers share jokes and grief at a night border crossing.",
+        "short_description": "Night shifts at the border.",
+        "release_year": 2021,
+        "country": "Afghanistan",
+        "duration_minutes": 101,
+        "genres": ["Comedy", "Drama"],
+        "language": "Pashto",
+        "status_path": "published",
+        "is_featured": True,
+        "is_trending": False,
+        "with_media": False,
+        "color": "285e61",
+    },
+    {
+        "title": "A New Dawn",
+        "original_title": "سپیده‌ای نو",
+        "slug": "demo-a-new-dawn",
+        "description": "An animation about children planting a garden on a rooftop in spring.",
+        "short_description": "A rooftop garden comes to life.",
+        "release_year": 2025,
+        "country": "Afghanistan",
+        "duration_minutes": 78,
+        "genres": ["Animation", "Family"],
+        "language": "Dari",
+        "status_path": "published",
+        "is_featured": False,
+        "is_trending": True,
+        "with_media": False,
+        "color": "d69e2e",
+    },
+]
+
+SERIES_FIXTURES: list[SeriesFixture] = [
+    {
+        "title": "Mountain Echo",
+        "original_title": "پژواک کوه",
+        "slug": "demo-series-mountain-echo",
+        "description": "A fully published demo series about a valley radio network.",
+        "short_description": "Valley radio connects distant villages.",
+        "release_year": 2023,
+        "country": "Afghanistan",
+        "language": "Dari",
+        "genres": ["Drama", "Dari"],
+        "mode": "fully_published",
+        "color": "234e52",
+        "with_episode_media": True,
+    },
+    {
+        "title": "Draft Chronicles",
+        "original_title": "گاه‌شمار پیش‌نویس",
+        "slug": "demo-series-draft-chronicles",
+        "description": "A draft-only demo series reserved for editorial review.",
+        "short_description": "Editorial draft series (not public).",
+        "release_year": 2024,
+        "country": "Afghanistan",
+        "language": "Dari",
+        "genres": ["Documentary"],
+        "mode": "draft",
+        "color": "4a5568",
+        "with_episode_media": False,
+    },
+    {
+        "title": "Partial Horizon",
+        "original_title": "افق ناتمام",
+        "slug": "demo-series-partial-horizon",
+        "description": "A partially published demo series with mixed episode states.",
+        "short_description": "Some episodes live; others wait.",
+        "release_year": 2024,
+        "country": "Afghanistan",
+        "language": "Pashto",
+        "genres": ["Thriller", "Pashto"],
+        "mode": "partial",
+        "color": "9b2c2c",
+        "with_episode_media": True,
+    },
+]
+
+SUBSCRIBER_FIXTURES: tuple[SubscriberFixture, ...] = (
+    {
+        "username": "demo_active",
+        "name": "Demo Active Subscriber",
+        "status": "active",
+        "service_status": "active",
+        "package": "Demo Premium",
+        "branch": "Kabul",
+        "max_devices": 3,
+        "valid_days": 90,
+        "expired": False,
+    },
+    {
+        "username": "demo_expired",
+        "name": "Demo Expired Subscriber",
+        "status": "active",
+        "service_status": "expired",
+        "package": "Demo Basic",
+        "branch": "Kabul",
+        "max_devices": 1,
+        "valid_days": -30,
+        "expired": True,
+    },
+    {
+        "username": "demo_suspended",
+        "name": "Demo Suspended Subscriber",
+        "status": "suspended",
+        "service_status": "inactive",
+        "package": "Demo Basic",
+        "branch": "Herat",
+        "max_devices": 1,
+        "valid_days": 90,
+        "expired": False,
+    },
+)
