@@ -284,11 +284,14 @@ def filter_catalog_query(
     if trending is not None:
         query = query.filter(model.is_trending.is_(trending))
     if genre:
+        # Use EXISTS (.any) instead of JOIN + DISTINCT. DISTINCT over JSON columns
+        # (e.g. movies.cast) fails on PostgreSQL: "could not identify an equality
+        # operator for type json".
+        genre_match = or_(Genre.slug == genre, Genre.name.ilike(genre))
         if model is Movie:
-            query = query.join(Movie.genre_links).filter(or_(Genre.slug == genre, Genre.name.ilike(genre)))
+            query = query.filter(Movie.genre_links.any(genre_match))
         elif model is Series:
-            query = query.join(Series.genre_links).filter(or_(Genre.slug == genre, Genre.name.ilike(genre)))
-        query = query.distinct()
+            query = query.filter(Series.genre_links.any(genre_match))
     return query
 
 
