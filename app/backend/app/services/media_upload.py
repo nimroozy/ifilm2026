@@ -349,7 +349,10 @@ async def stream_upload_to_session(
                 chunk = await file.read(CHUNK_SIZE)
                 if not chunk:
                     break
-                next_total = session.bytes_received + written + len(chunk)
+                # Always measure from the request start offset + bytes written in
+                # this request. Do not add session.bytes_received here — mid-upload
+                # progress flushes update that field and would double-count.
+                next_total = upload_offset + written + len(chunk)
                 if next_total > settings.upload_max_bytes:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST, detail="File too large"
@@ -364,7 +367,7 @@ async def stream_upload_to_session(
                     probe.extend(chunk[:need])
                 await out.write(chunk)
                 written += len(chunk)
-                if (session.bytes_received + written) % (8 * CHUNK_SIZE) == 0:
+                if (upload_offset + written) % (8 * CHUNK_SIZE) == 0:
                     session.bytes_received = upload_offset + written
                     db.add(session)
                     db.commit()

@@ -549,6 +549,26 @@ def test_large_file_streaming(client, admin_headers):
     assert meta["checksum_sha256"] == hashlib.sha256(payload).hexdigest()
 
 
+def test_upload_crosses_mid_progress_flush_boundary(client, admin_headers):
+    """Regression: mid-upload progress commits must not double-count bytes.
+
+    Progress flushes every 8 MiB. Uploads larger than that previously failed with
+    ``Uploaded size exceeds declared size_bytes`` after the first flush.
+    """
+    # 8 MiB + 256 KiB of payload body after a valid ftyp/mdat header.
+    body = b"x" * ((8 * 1024 * 1024) + (256 * 1024))
+    payload = minimal_mp4(body)
+    created = _create_session(
+        client, admin_headers, filename="over-8mb.mp4", size=len(payload)
+    )
+    assert created.status_code == 201
+    session_id = created.json()["session"]["id"]
+    uploaded = _put(client, admin_headers, session_id, payload, offset=0, complete=True)
+    assert uploaded.status_code == 200, uploaded.text
+    assert uploaded.json()["status"] == "completed"
+    assert uploaded.json()["bytes_received"] == len(payload)
+
+
 def test_storage_layout_and_path_generation():
     root = ensure_media_layout()
     for name in ("originals", "posters", "backdrops", "trailers", "subtitles", "temp"):

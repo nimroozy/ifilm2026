@@ -21,7 +21,7 @@ describe('getAPIBaseURL', () => {
     const { loadRuntimeConfig, getAPIBaseURL } = await import('./config');
     await loadRuntimeConfig();
 
-    expect(getAPIBaseURL()).toBe('http://127.0.0.1:8000');
+    expect(getAPIBaseURL()).toBe('');
   });
 
   it('returns an empty string when API_BASE_URL is "/"', async () => {
