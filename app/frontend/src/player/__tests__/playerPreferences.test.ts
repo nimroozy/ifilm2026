@@ -13,10 +13,11 @@ describe('AirPlay / PiP capability detection', () => {
   });
 
   it('does not treat Chromium Remote Playback as AirPlay', () => {
-    const video = document.createElement('video') as HTMLVideoElement & {
-      remote?: { prompt: () => Promise<void> };
-    };
-    video.remote = { prompt: async () => undefined };
+    const video = document.createElement('video');
+    Object.defineProperty(video, 'remote', {
+      configurable: true,
+      value: { prompt: async () => undefined },
+    });
     expect(isAirPlaySupported(video)).toBe(false);
   });
 
