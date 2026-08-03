@@ -1859,6 +1859,7 @@ export function mapEpisodeDto(dto: EpisodeDto) {
     metadataSource: dto.metadata_source || '',
     demoOwned: dto.demo_owned ?? false,
     hasDemoClip: dto.has_demo_clip ?? false,
+    hlsPath: dto.hls_path ?? null,
   };
 }
 

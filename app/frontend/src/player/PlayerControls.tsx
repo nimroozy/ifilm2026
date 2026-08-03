@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { QualitySelector } from './QualitySelector';
 import { AudioTrackSelector, SubtitleSelector } from './AudioTrackSelector';
-import type { AudioTrackInfo, QualityLevel } from './types';
+import type { AudioTrackInfo, QualityLevel, SubtitleTrackInfo } from './types';
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
@@ -40,6 +40,9 @@ export function PlayerControls({
   currentLevel,
   manualQualitySupported,
   audioTracks,
+  audioTrackId,
+  subtitleTracks = [],
+  subtitleTrackId = -1,
   playbackRate,
   isFs,
   pipSupported = true,
@@ -53,6 +56,7 @@ export function PlayerControls({
   onToggleMute,
   onQuality,
   onAudio,
+  onSubtitle,
   onRate,
   onFullscreen,
   onPiP,
@@ -72,6 +76,9 @@ export function PlayerControls({
   currentLevel: number;
   manualQualitySupported: boolean;
   audioTracks: AudioTrackInfo[];
+  audioTrackId?: number;
+  subtitleTracks?: SubtitleTrackInfo[];
+  subtitleTrackId?: number;
   playbackRate: number;
   isFs: boolean;
   pipSupported?: boolean;
@@ -85,6 +92,7 @@ export function PlayerControls({
   onToggleMute: () => void;
   onQuality: (level: number) => void;
   onAudio: (id: number) => void;
+  onSubtitle?: (id: number) => void;
   onRate: (rate: number) => void;
   onFullscreen: () => void;
   onPiP: () => void;
@@ -232,8 +240,12 @@ export function PlayerControls({
               : 'Quality selection is managed by the browser on this device'
           }
         />
-        <AudioTrackSelector tracks={audioTracks} onChange={onAudio} />
-        <SubtitleSelector />
+        <AudioTrackSelector tracks={audioTracks} value={audioTrackId} onChange={onAudio} />
+        <SubtitleSelector
+          tracks={subtitleTracks}
+          value={subtitleTrackId}
+          onChange={(id) => onSubtitle?.(id)}
+        />
 
         <select
           className="h-8 rounded-md bg-black/40 border border-white/20 text-xs px-2"

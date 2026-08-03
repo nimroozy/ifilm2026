@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { X } from 'lucide-react';
+import { Play, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -23,7 +23,8 @@ import {
   togglePictureInPicture,
 } from './FullscreenController';
 import { isAirPlaySupported, isPiPSupported, showAirPlayPicker } from './castAirPlay';
-import type { PlayerTarget, SafePlayerError } from './types';
+import { StatsOverlay } from './StatsOverlay';
+import type { PlayerStatsSnapshot, PlayerTarget, SafePlayerError } from './types';
 
 export function VideoPlayer({
   target,
@@ -57,12 +58,18 @@ export function VideoPlayer({
   const {
     videoRef,
     ready,
+    buffering,
     levels,
     currentLevel,
     setQuality,
     audioTracks,
+    audioTrackId,
     setAudioTrack,
+    subtitleTracks,
+    subtitleTrackId,
+    setSubtitleTrack,
     manualQualitySupported,
+    getStats,
   } = useHlsPlayer({
     masterUrl: session?.masterPlaylistUrl ?? null,
     onGone,
@@ -86,6 +93,8 @@ export function VideoPlayer({
   const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
   const [airPlaySupported, setAirPlaySupported] = useState(false);
   const [upNextSeconds, setUpNextSeconds] = useState<number | null>(null);
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [stats, setStats] = useState<PlayerStatsSnapshot | null>(null);
   const pipSupported = isPiPSupported();
 
   useEffect(() => {
@@ -201,6 +210,11 @@ export function VideoPlayer({
     if (video) void togglePictureInPicture(video);
   }, [videoRef]);
 
+  const toggleCaptions = useCallback(() => {
+    if (subtitleTrackId >= 0) setSubtitleTrack(-1);
+    else if (subtitleTracks[0]) setSubtitleTrack(subtitleTracks[0].id);
+  }, [subtitleTrackId, subtitleTracks, setSubtitleTrack]);
+
   const keyboardHandlers = useMemo(
     () => ({
       togglePlay,
@@ -209,17 +223,62 @@ export function VideoPlayer({
       toggleMute,
       toggleFullscreen,
       togglePiP,
+      toggleCaptions,
+      escape: () => {
+        if (statsOpen) {
+          setStatsOpen(false);
+          return;
+        }
+        if (upNextSeconds != null) {
+          setUpNextSeconds(null);
+          onAutoplayNextChange?.(false);
+          return;
+        }
+        if (isFullscreen()) void exitFullscreen();
+      },
     }),
-    [togglePlay, seekBy, volumeBy, toggleMute, toggleFullscreen, togglePiP]
+    [
+      togglePlay,
+      seekBy,
+      volumeBy,
+      toggleMute,
+      toggleFullscreen,
+      togglePiP,
+      toggleCaptions,
+      statsOpen,
+      upNextSeconds,
+      onAutoplayNextChange,
+    ]
   );
   useKeyboardController(Boolean(session) && !fatal && !error, keyboardHandlers);
+
+  useEffect(() => {
+    if (!statsOpen) return;
+    const id = window.setInterval(() => {
+      setStats(getStats());
+    }, 500);
+    setStats(getStats());
+    return () => window.clearInterval(id);
+  }, [statsOpen, getStats, currentTime, currentLevel]);
+
+  // Ctrl+Shift+D toggles diagnostics (no token leakage)
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.shiftKey && (event.key === 'd' || event.key === 'D')) {
+        event.preventDefault();
+        setStatsOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const displayError = fatal || error;
 
   return (
     <div
       ref={setRootEl}
-      className="fixed inset-0 z-50 flex flex-col bg-black text-white"
+      className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-black text-white overscroll-none"
       data-testid="video-player"
       onPointerMove={() => setShowControls(true)}
       onClick={() => setShowControls(true)}
@@ -239,7 +298,16 @@ export function VideoPlayer({
           <X className="h-6 w-6" />
         </Button>
         <h1 className="text-sm font-medium truncate max-w-[70%]">{title || 'Playback'}</h1>
-        <span className="w-10" />
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-white/70 hover:bg-white/10 text-xs"
+          onClick={() => setStatsOpen((v) => !v)}
+          aria-pressed={statsOpen}
+          data-testid="toggle-stats"
+        >
+          Stats
+        </Button>
       </div>
 
       <div className="relative flex-1 flex items-center justify-center">
@@ -250,15 +318,52 @@ export function VideoPlayer({
           controls={false}
           aria-label={title || 'Video'}
           data-testid="player-video"
+          onDoubleClick={(e) => {
+            e.preventDefault();
+            const rect = e.currentTarget.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            if (x < rect.width / 2) seekBy(-10);
+            else seekBy(10);
+          }}
         />
 
         {(loading || (!ready && session && !displayError)) && (
           <PlayerLoadingState label={loading ? 'Starting secure session…' : 'Loading stream…'} />
         )}
 
+        {buffering && ready && !displayError ? (
+          <div
+            className="pointer-events-none absolute inset-0 flex items-center justify-center"
+            data-testid="buffering-indicator"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="h-12 w-12 animate-spin rounded-full border-2 border-white/30 border-t-primary" />
+          </div>
+        ) : null}
+
+        {session && !displayError && !playing && ready ? (
+          <button
+            type="button"
+            className="absolute inset-0 z-10 flex items-center justify-center bg-black/20"
+            onClick={(e) => {
+              e.stopPropagation();
+              togglePlay();
+            }}
+            aria-label="Play"
+            data-testid="center-play"
+          >
+            <span className="flex h-16 w-16 items-center justify-center rounded-full bg-black/60 text-white shadow-lg ring-1 ring-white/20">
+              <Play className="h-8 w-8 fill-white" />
+            </span>
+          </button>
+        ) : null}
+
         {displayError ? (
           <PlaybackError error={displayError} onRetry={() => { setFatal(null); void retry(); }} onBack={onBack} />
         ) : null}
+
+        <StatsOverlay open={statsOpen} stats={stats} onClose={() => setStatsOpen(false)} />
 
         {session && !displayError ? (
           <PlayerControls
@@ -273,6 +378,9 @@ export function VideoPlayer({
             currentLevel={currentLevel}
             manualQualitySupported={manualQualitySupported}
             audioTracks={audioTracks}
+            audioTrackId={audioTrackId}
+            subtitleTracks={subtitleTracks}
+            subtitleTrackId={subtitleTrackId}
             playbackRate={playbackRate}
             isFs={fs}
             pipSupported={pipSupported}
@@ -296,6 +404,7 @@ export function VideoPlayer({
             onToggleMute={toggleMute}
             onQuality={setQuality}
             onAudio={setAudioTrack}
+            onSubtitle={setSubtitleTrack}
             onRate={(rate) => {
               const video = videoRef.current;
               if (video) video.playbackRate = rate;

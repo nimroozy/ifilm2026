@@ -207,7 +207,9 @@ export default function MediaLinkingCard({
         {loading && assets.length === 0 ? <LoadingBlock rows={3} /> : null}
         {error ? <ErrorState message={error} onRetry={load} /> : null}
         {!loading && !error && assets.length === 0 ? (
-          <EmptyState message="No linked media. Upload a new file or link an existing unassigned video asset." />
+          <EmptyState
+            message={`No media is linked to this ${ownerType}. Use Upload and Link or Link Existing Media.`}
+          />
         ) : null}
 
         <ul className="space-y-3">

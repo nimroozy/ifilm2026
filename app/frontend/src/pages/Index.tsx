@@ -31,9 +31,15 @@ function HomeLoading() {
 }
 
 function HomeError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const safe =
+    message.includes('status code') || message.toLowerCase().includes('network')
+      ? 'Unable to load the catalog right now. Check your connection and try again.'
+      : message;
   return (
     <div className="min-h-[50vh] flex flex-col items-center justify-center gap-4 px-4" data-testid="home-error">
-      <p className="text-muted-foreground text-center">{message}</p>
+      <p className="text-muted-foreground text-center" role="alert">
+        {safe}
+      </p>
       <Button onClick={onRetry}>Retry</Button>
     </div>
   );
@@ -180,7 +186,7 @@ function ContentRow({
   return (
     <section className="py-4 md:py-6">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <h2 className="text-lg md:text-xl font-serif font-bold text-foreground mb-3">{title}</h2>
+        <h2 className="text-lg md:text-xl font-display font-bold text-foreground mb-3">{title}</h2>
       </div>
       <div className="relative group">
         <button
@@ -193,27 +199,37 @@ function ContentRow({
           ref={scrollRef}
           className="flex gap-3 overflow-x-auto hide-scrollbar px-4 sm:px-6 lg:px-8 scroll-smooth"
         >
-          {items.map((item) => (
+          {items.map((item) => {
+            const contentType = type === 'series' || item.type === 'series' ? 'Series' : 'Movie';
+            return (
             <div
-              key={item.id}
+              key={`${contentType}-${item.id}`}
+              role="link"
+              tabIndex={0}
               onClick={() => navigate(type === 'series' ? `/series/${item.id}` : `/movie/${item.id}`)}
-              className="flex-shrink-0 w-[140px] md:w-[180px] cursor-pointer group/card"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  navigate(type === 'series' ? `/series/${item.id}` : `/movie/${item.id}`);
+                }
+              }}
+              className="flex-shrink-0 w-[140px] md:w-[180px] cursor-pointer group/card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg"
             >
               <div className="relative aspect-[2/3] rounded-lg overflow-hidden bg-muted mb-2">
                 <img
                   src={item.poster}
                   alt={item.title}
-                  className="w-full h-full object-cover transition-transform duration-300 group-hover/card:scale-105"
+                  loading="lazy"
+                  decoding="async"
+                  sizes="(max-width: 768px) 140px, 180px"
+                  className="w-full h-full object-cover transition-transform duration-normal group-hover/card:scale-105"
                 />
-                <div className="absolute inset-0 bg-black/0 group-hover/card:bg-black/40 transition-all flex items-center justify-center opacity-0 group-hover/card:opacity-100">
-                  <Play className="h-10 w-10 text-white fill-white" />
-                </div>
-                <div className="absolute top-2 left-2 right-2 flex justify-between">
-                  <Badge className="bg-primary/90 text-primary-foreground text-[10px] px-1.5 py-0.5">
-                    {'qualities' in item && item.qualities?.[0] ? item.qualities[0] : '720p'}
+                <div className="absolute top-2 left-2 right-2 flex flex-wrap justify-between gap-1">
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5">
+                    {contentType}
                   </Badge>
                   {hasDemoClip(item) && (
-                    <Badge className="bg-emerald-500 text-white text-[10px] px-1.5 py-0.5">
+                    <Badge className="bg-emerald-600/90 text-white text-[10px] px-1.5 py-0.5" data-testid="demo-clip-badge">
                       Demo Clip
                     </Badge>
                   )}
@@ -234,7 +250,8 @@ function ContentRow({
                 </span>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
         <button
           onClick={() => scroll('right')}
