@@ -10,6 +10,7 @@ import { fetchHomeCatalog, type CatalogMovie, type CatalogSeries } from '@/lib/c
 import { api, ApiError, tokenStore, type WatchProgressDto } from '@/lib/api';
 import { isMockMode } from '@/lib/dataMode';
 import { canPlayFullMovie, fullMovieUnavailableLabel, hasDemoClip } from '@/lib/catalogPresentation';
+import { trailerEmbedUrl } from '@/lib/trailers';
 
 type HomeData = Awaited<ReturnType<typeof fetchHomeCatalog>>;
 
@@ -52,51 +53,63 @@ function HeroBanner({ featured }: { featured: CatalogMovie[] }) {
     );
   }
 
+  const playable = canPlayFullMovie(movie);
+  const demo = hasDemoClip(movie);
+  const trailerHref = trailerEmbedUrl(movie) || null;
+
   return (
-    <section className="relative h-[70vh] md:h-[85vh] w-full overflow-hidden -mt-16 md:-mt-20">
-      <div className="absolute inset-0 bg-gradient-to-br from-[hsl(28,24%,8%)] via-[hsl(30,20%,12%)] to-[hsl(28,24%,6%)]">
-        <img src={movie.backdrop} alt={movie.title} className="w-full h-full object-cover opacity-60" loading="eager" />
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-background/20" />
-        <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/40 to-transparent" />
+    <section
+      className="relative h-[70vh] md:h-[85vh] w-full overflow-hidden -mt-16 md:-mt-20"
+      aria-label="Featured title"
+    >
+      <div className="absolute inset-0 bg-[hsl(222,28%,6%)]">
+        <img
+          src={movie.backdrop}
+          alt=""
+          className="h-full w-full object-cover opacity-55"
+          loading="eager"
+          decoding="async"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/55 to-background/15" />
+        <div className="absolute inset-0 bg-gradient-to-r from-background/95 via-background/45 to-transparent" />
       </div>
 
-      <div className="relative h-full flex items-end pb-16 md:pb-24">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-4xl">
+      <div className="relative flex h-full items-end pb-16 md:pb-24">
+        <div className="container mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
           <div className="space-y-4 animate-fade-in">
-            <h1 className="text-3xl md:text-5xl lg:text-6xl font-serif font-bold text-foreground leading-tight drop-shadow-lg">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">iFilm</p>
+            <h1 className="max-w-[18ch] font-display text-3xl font-bold leading-tight text-foreground drop-shadow-lg md:text-5xl lg:text-6xl">
               {movie.title}
             </h1>
             <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-              <Badge variant="outline" className="border-primary/50 text-primary">{movie.ageRating}</Badge>
-              <span>{movie.year}</span>
-              <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" />{movie.duration} {t.common.min}</span>
-              <span className="flex items-center gap-1"><Star className="h-3.5 w-3.5 text-primary fill-primary" />{movie.rating}</span>
-              {movie.genres.slice(0, 3).map((g) => (
-                <Badge key={g} variant="secondary" className="text-xs">
-                  {g}
+              {movie.ageRating ? (
+                <Badge variant="outline" className="border-primary/50 text-primary">
+                  {movie.ageRating}
                 </Badge>
-              ))}
-            </div>
-            <p className="text-sm md:text-base text-foreground/80 max-w-2xl line-clamp-3">{movie.description}</p>
-            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span>
-                {t.movie.audio}: {movie.audio.join(', ')}
+              ) : null}
+              <span>{movie.year}</span>
+              <span className="flex items-center gap-1">
+                <Clock className="h-3.5 w-3.5" />
+                {movie.duration} {t.common.min}
               </span>
-              <span className="mx-1">•</span>
-              <span>
-                {t.movie.subtitles}: {movie.subtitles.join(', ')}
+              <span className="flex items-center gap-1">
+                <Star className="h-3.5 w-3.5 fill-primary text-primary" />
+                {movie.rating}
               </span>
             </div>
+            <p className="max-w-2xl text-sm text-foreground/85 md:text-base line-clamp-3 md:line-clamp-4">
+              {movie.description}
+            </p>
             <div className="flex flex-wrap items-center gap-3 pt-2">
-              {canPlayFullMovie(movie) || hasDemoClip(movie) ? (
+              {playable || demo ? (
                 <Button
                   size="lg"
                   onClick={() => navigate(`/player/movie/${movie.id}`)}
-                  className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 font-semibold shadow-lg"
-                  aria-label={hasDemoClip(movie) ? `Play demo clip for ${movie.title}` : `Play ${movie.title}`}
+                  className="gap-2 font-semibold shadow-lg"
+                  aria-label={demo ? `Play demo clip for ${movie.title}` : `Play ${movie.title}`}
                 >
                   <Play className="h-5 w-5 fill-current" />
-                  {hasDemoClip(movie) ? 'Play Demo Clip' : t.hero.play}
+                  {demo && !playable ? 'Play Demo Clip' : t.hero.play}
                 </Button>
               ) : (
                 <Badge variant="secondary" className="px-3 py-2 text-sm">
@@ -112,17 +125,30 @@ function HeroBanner({ featured }: { featured: CatalogMovie[] }) {
                 <Info className="h-5 w-5" />
                 {t.hero.moreInfo}
               </Button>
+              {trailerHref ? (
+                <Button size="lg" variant="outline" asChild className="gap-2 bg-background/40 backdrop-blur">
+                  <a href={trailerHref} target="_blank" rel="noopener noreferrer">
+                    Trailer
+                  </a>
+                </Button>
+              ) : null}
             </div>
           </div>
         </div>
       </div>
 
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2">
-        {featured.map((_, i) => (
+      <div className="absolute bottom-6 left-1/2 flex -translate-x-1/2 gap-2" role="tablist" aria-label="Featured titles">
+        {featured.map((item, i) => (
           <button
-            key={i}
+            key={item.id}
+            type="button"
+            role="tab"
+            aria-selected={i === current}
+            aria-label={`Show ${item.title}`}
             onClick={() => setCurrent(i)}
-            className={`w-2 h-2 rounded-full transition-all ${i === current ? 'bg-primary w-6' : 'bg-foreground/30'}`}
+            className={`h-2 rounded-full transition-all focus-visible:ring-2 focus-visible:ring-ring ${
+              i === current ? 'w-6 bg-primary' : 'w-2 bg-foreground/30 hover:bg-foreground/50'
+            }`}
           />
         ))}
       </div>
