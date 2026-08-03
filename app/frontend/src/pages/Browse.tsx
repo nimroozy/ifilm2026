@@ -735,7 +735,11 @@ export function SeriesDetailsPage() {
               showEpisodes.map((ep) => (
                 <div
                   key={ep.id}
-                  onClick={() => navigate(`/player/episode/${ep.id}`)}
+                  onClick={() =>
+                    navigate(
+                      `/player/episode/${ep.id}?series=${encodeURIComponent(String(show.id))}&season=${selectedSeason}`
+                    )
+                  }
                   className="flex gap-4 p-3 rounded-lg bg-card hover:bg-card/80 cursor-pointer transition-colors"
                 >
                   <div className="relative w-[120px] md:w-[160px] flex-shrink-0">

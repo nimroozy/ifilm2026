@@ -1,5 +1,7 @@
 import {
   Cast,
+  ChevronLeft,
+  ChevronRight,
   Maximize,
   Minimize,
   Pause,
@@ -42,6 +44,8 @@ export function PlayerControls({
   isFs,
   pipSupported = true,
   airPlaySupported = false,
+  hasPreviousEpisode = false,
+  hasNextEpisode = false,
   onTogglePlay,
   onSeek,
   onSeekBy,
@@ -54,6 +58,8 @@ export function PlayerControls({
   onPiP,
   onAirPlay,
   onStartOver,
+  onPreviousEpisode,
+  onNextEpisode,
 }: {
   visible: boolean;
   playing: boolean;
@@ -70,6 +76,8 @@ export function PlayerControls({
   isFs: boolean;
   pipSupported?: boolean;
   airPlaySupported?: boolean;
+  hasPreviousEpisode?: boolean;
+  hasNextEpisode?: boolean;
   onTogglePlay: () => void;
   onSeek: (t: number) => void;
   onSeekBy?: (delta: number) => void;
@@ -82,6 +90,8 @@ export function PlayerControls({
   onPiP: () => void;
   onAirPlay?: () => void;
   onStartOver?: () => void;
+  onPreviousEpisode?: () => void;
+  onNextEpisode?: () => void;
 }) {
   const progressPct = duration > 0 ? (currentTime / duration) * 100 : 0;
   const bufferedPct = duration > 0 ? (buffered / duration) * 100 : 0;
@@ -126,6 +136,19 @@ export function PlayerControls({
           {playing ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5 fill-white" />}
         </Button>
 
+        {hasPreviousEpisode ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-white hover:bg-white/10 h-10 w-10"
+            onClick={onPreviousEpisode}
+            aria-label="Previous episode"
+            data-testid="previous-episode"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
+        ) : null}
+
         <Button
           variant="ghost"
           size="icon"
@@ -146,6 +169,19 @@ export function PlayerControls({
         >
           <SkipForward className="h-5 w-5" />
         </Button>
+
+        {hasNextEpisode ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-white hover:bg-white/10 h-10 w-10"
+            onClick={onNextEpisode}
+            aria-label="Next episode"
+            data-testid="next-episode"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </Button>
+        ) : null}
 
         {onStartOver ? (
           <Button

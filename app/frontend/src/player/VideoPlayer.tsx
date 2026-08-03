@@ -29,10 +29,22 @@ export function VideoPlayer({
   target,
   title,
   onBack,
+  previousEpisodeId = null,
+  nextEpisodeId = null,
+  autoplayNext = true,
+  onAutoplayNextChange,
+  onPreviousEpisode,
+  onNextEpisode,
 }: {
   target: PlayerTarget;
   title?: string;
   onBack?: () => void;
+  previousEpisodeId?: number | null;
+  nextEpisodeId?: number | null;
+  autoplayNext?: boolean;
+  onAutoplayNextChange?: (value: boolean) => void;
+  onPreviousEpisode?: () => void;
+  onNextEpisode?: () => void;
 }) {
   const { session, loading, error, setError, refreshAfterGone, retry } = usePlaybackSession(target);
   const [fatal, setFatal] = useState<SafePlayerError | null>(null);
@@ -73,6 +85,7 @@ export function VideoPlayer({
   const [fs, setFs] = useState(false);
   const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
   const [airPlaySupported, setAirPlaySupported] = useState(false);
+  const [upNextSeconds, setUpNextSeconds] = useState<number | null>(null);
   const pipSupported = isPiPSupported();
 
   useEffect(() => {
@@ -114,6 +127,31 @@ export function VideoPlayer({
   useEffect(() => {
     setAirPlaySupported(isAirPlaySupported(videoRef.current));
   }, [videoRef, ready, session]);
+
+  useEffect(() => {
+    setUpNextSeconds(null);
+  }, [target]);
+
+  useEffect(() => {
+    if (!autoplayNext || !onNextEpisode || !nextEpisodeId || !duration || duration < 15) {
+      setUpNextSeconds(null);
+      return;
+    }
+    const remaining = duration - currentTime;
+    if (remaining <= 10 && remaining > 0.25 && playing) {
+      setUpNextSeconds(Math.max(1, Math.ceil(remaining)));
+    } else {
+      setUpNextSeconds(null);
+    }
+  }, [autoplayNext, onNextEpisode, nextEpisodeId, duration, currentTime, playing]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !autoplayNext || !onNextEpisode || !nextEpisodeId) return;
+    const onEnded = () => onNextEpisode();
+    video.addEventListener('ended', onEnded);
+    return () => video.removeEventListener('ended', onEnded);
+  }, [videoRef, autoplayNext, onNextEpisode, nextEpisodeId, target]);
 
   const togglePlay = useCallback(() => {
     const video = videoRef.current;
@@ -239,6 +277,8 @@ export function VideoPlayer({
             isFs={fs}
             pipSupported={pipSupported}
             airPlaySupported={airPlaySupported}
+            hasPreviousEpisode={Boolean(onPreviousEpisode)}
+            hasNextEpisode={Boolean(onNextEpisode)}
             onTogglePlay={togglePlay}
             onSeek={(t) => {
               const video = videoRef.current;
@@ -265,7 +305,46 @@ export function VideoPlayer({
             onPiP={togglePiP}
             onAirPlay={() => showAirPlayPicker(videoRef.current)}
             onStartOver={startOver}
+            onPreviousEpisode={onPreviousEpisode}
+            onNextEpisode={onNextEpisode}
           />
+        ) : null}
+
+        {upNextSeconds != null && nextEpisodeId != null ? (
+          <div
+            className="absolute bottom-24 end-4 z-30 max-w-xs rounded-lg border border-white/20 bg-black/80 p-4 text-sm shadow-lg"
+            data-testid="up-next-overlay"
+            role="status"
+            aria-live="polite"
+          >
+            <p className="font-medium">Next episode in {upNextSeconds}s</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button size="sm" onClick={() => onNextEpisode?.()}>
+                Play now
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-white/30 bg-transparent"
+                onClick={() => {
+                  setUpNextSeconds(null);
+                  onAutoplayNextChange?.(false);
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+            {onAutoplayNextChange ? (
+              <label className="mt-3 flex items-center gap-2 text-xs text-white/70">
+                <input
+                  type="checkbox"
+                  checked={autoplayNext}
+                  onChange={(e) => onAutoplayNextChange(e.target.checked)}
+                />
+                Autoplay next episode
+              </label>
+            ) : null}
+          </div>
         ) : null}
       </div>
 
