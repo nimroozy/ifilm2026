@@ -2,10 +2,11 @@
 
 ## AirPlay
 
-- Control is shown **only** when WebKit `HTMLMediaElement.webkitShowPlaybackTargetPicker` or the Remote Playback API `remote.prompt()` is available on the video element.
+- Control is shown **only** when WebKit `HTMLMediaElement.webkitShowPlaybackTargetPicker` is available on the video element.
+- Chromium `HTMLMediaElement.remote.prompt` (Remote Playback API) is **not** treated as AirPlay and must not show the AirPlay control.
 - Chromium desktop typically does **not** support AirPlay; the control stays hidden there (no fake support).
 - Protected HLS sessions continue to use opaque playback tokens; AirPlay uses the same in-page media element session when the browser/OS routes it.
-- **Verification:** Not claimed verified on real Safari/iPhone/Apple TV in this milestone unless hardware testing is recorded separately.
+- **Verification status: Implemented, hardware verification pending** (no claim of real AirPlay playback success without Safari/Apple hardware).
 
 ## Google Cast
 

@@ -1,16 +1,12 @@
-/** WebKit AirPlay / remote playback helpers. Never fake support. */
+/** WebKit AirPlay helpers. Never fake support or conflate with Chromium Remote Playback / Cast. */
 
 export function isAirPlaySupported(video?: HTMLVideoElement | null): boolean {
   if (typeof window === 'undefined') return false;
   const candidate = video as (HTMLVideoElement & {
     webkitShowPlaybackTargetPicker?: () => void;
   }) | null;
-  if (candidate && typeof candidate.webkitShowPlaybackTargetPicker === 'function') {
-    return true;
-  }
-  // Remote Playback API (partial Chromium / future)
-  const remote = candidate?.remote as { prompt?: () => Promise<void> } | undefined;
-  return typeof remote?.prompt === 'function';
+  // AirPlay UI is WebKit-only. Chromium `video.remote.prompt` is Remote Playback, not AirPlay.
+  return typeof candidate?.webkitShowPlaybackTargetPicker === 'function';
 }
 
 export function showAirPlayPicker(video: HTMLVideoElement | null | undefined): boolean {
@@ -20,11 +16,6 @@ export function showAirPlayPicker(video: HTMLVideoElement | null | undefined): b
   };
   if (typeof webkit.webkitShowPlaybackTargetPicker === 'function') {
     webkit.webkitShowPlaybackTargetPicker();
-    return true;
-  }
-  const remote = video.remote as { prompt?: () => Promise<void> } | undefined;
-  if (typeof remote?.prompt === 'function') {
-    void remote.prompt();
     return true;
   }
   return false;

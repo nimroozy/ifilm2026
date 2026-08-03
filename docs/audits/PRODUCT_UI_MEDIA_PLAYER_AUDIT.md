@@ -21,7 +21,7 @@ PR: https://github.com/nimroozy/ifilm2026/pull/29
 | H2 | Publishing failures without remediation | **Resolved** |
 | H3 | Play vs Demo Clip labeling | **Resolved** on details/home |
 | H4 | Placeholder admin nav links | **Resolved** |
-| H5 | Player next-episode / skip / AirPlay | **Resolved** (AirPlay capability-gated; hardware verification pending) |
+| H5 | Player next-episode / skip / AirPlay | **Resolved** (AirPlay WebKit-only gate; Chromium Remote Playback not treated as AirPlay; hardware verification pending) |
 | H6 | Subtitle selector stub | **Resolved** — frontend interface detects HLS/native tracks; ingestion deferred |
 | H7 | Incomplete children/misleading surfaces | **Resolved** — `/children` is a Family/Animation filtered route (`ChildrenPage`), not generic Movies |
 | H8 | Series episode playability gates | **Resolved** |

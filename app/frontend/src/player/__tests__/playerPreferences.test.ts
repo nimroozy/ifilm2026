@@ -7,8 +7,16 @@ import {
 } from '../preferences';
 
 describe('AirPlay / PiP capability detection', () => {
-  it('does not claim AirPlay without WebKit or Remote Playback APIs', () => {
+  it('does not claim AirPlay without WebKit playback-target APIs', () => {
     const video = document.createElement('video');
+    expect(isAirPlaySupported(video)).toBe(false);
+  });
+
+  it('does not treat Chromium Remote Playback as AirPlay', () => {
+    const video = document.createElement('video') as HTMLVideoElement & {
+      remote?: { prompt: () => Promise<void> };
+    };
+    video.remote = { prompt: async () => undefined };
     expect(isAirPlaySupported(video)).toBe(false);
   });
 
