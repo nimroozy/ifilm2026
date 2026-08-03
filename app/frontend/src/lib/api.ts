@@ -1487,7 +1487,7 @@ export const adminApi = {
     const complete = options?.complete ?? true;
     const { data } = await adminHttp.put<UploadSessionDto>(`/admin/media/sessions/${sessionId}`, form, {
       headers: {
-        'Content-Type': 'multipart/form-data',
+        // Let the browser/axios set multipart boundary — do not force Content-Type.
         'Upload-Offset': String(offset),
         'Upload-Complete': complete ? 'true' : 'false',
       },

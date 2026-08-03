@@ -18,12 +18,13 @@ async function initializeApp() {
 
   try {
     await loadRuntimeConfig();
-    console.log('Runtime configuration loaded successfully');
   } catch (error) {
-    console.warn(
-      'Failed to load runtime configuration, using defaults:',
-      error
-    );
+    if (import.meta.env.DEV) {
+      console.warn(
+        'Failed to load runtime configuration, using defaults:',
+        error
+      );
+    }
   }
 
   // Render the app
