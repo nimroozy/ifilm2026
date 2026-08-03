@@ -522,9 +522,11 @@ def test_concurrent_duplicate_checksum_finalization(client, admin_headers, monke
                 assert created.status_code == 201
                 sessions.append(created.json()["session"]["id"])
 
-            def _finalize(session_id: str):
+            upload_body = payload
+
+            def _finalize(session_id: str, body: bytes = upload_body):
                 try:
-                    return _put(client, admin_headers, session_id, payload, offset=0, complete=True)
+                    return _put(client, admin_headers, session_id, body, offset=0, complete=True)
                 except IndexError as exc:
                     # Transient SQLite/threaded TestClient failure — signal retry.
                     return exc
