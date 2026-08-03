@@ -23,14 +23,14 @@ PR: https://github.com/nimroozy/ifilm2026/pull/29
 | H4 | Placeholder admin nav links | **Resolved** |
 | H5 | Player next-episode / skip / AirPlay | **Resolved** (AirPlay capability-gated; hardware verification pending) |
 | H6 | Subtitle selector stub | **Resolved** — frontend interface detects HLS/native tracks; ingestion deferred |
-| H7 | Incomplete children/misleading surfaces | **Partial** — `/children` still routes to Movies; deferred rename |
+| H7 | Incomplete children/misleading surfaces | **Resolved** — `/children` is a Family/Animation filtered route (`ChildrenPage`), not generic Movies |
 | H8 | Series episode playability gates | **Resolved** |
 
 ## MEDIUM / LOW
 
 | ID | Status |
 |----|--------|
-| M1 Dashboard operational depth | Partial — catalog counts + ops notes |
+| M1 Dashboard operational depth | **Deferred** — catalog counts only; full ops metrics (failed jobs, packages, worker health) tracked as a separate issue; no fake charts |
 | M5 Design tokens | Resolved — Outfit/Fraunces cinema identity |
 | Cast | Deferred — disabled control; secure receiver required |
 | Stats overlay | Resolved — Ctrl+Shift+D / Stats button; no URLs/tokens |
@@ -64,6 +64,14 @@ PR: https://github.com/nimroozy/ifilm2026/pull/29
 - Full watchlist API (B4)
 - Full subtitle ingestion pipeline
 - Major recommendation engine
+- Full operational dashboard metrics (M1) — separate issue; do not expand this PR
+
+## Children route (H7)
+
+- Intended behavior: Family / Animation catalog (aligned with home `familyMovies`).
+- `/children` renders `ChildrenPage` (`MoviesPage` with `audience="children"`).
+- Loads Family + Animation genre queries and merges by id; title uses `t.nav.children`.
+- Regression coverage in `catalogDemoUi.test.tsx`.
 
 ## Architecture preserved
 

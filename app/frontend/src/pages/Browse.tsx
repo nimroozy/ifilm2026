@@ -69,8 +69,20 @@ function DemoClipBadge({ item }: { item: unknown }) {
   );
 }
 
+const CHILDREN_GENRES = ['Family', 'Animation'] as const;
+
+function mergeMoviesById(pages: Array<{ items: CatalogMovie[] }>): CatalogMovie[] {
+  const byId = new Map<number, CatalogMovie>();
+  for (const page of pages) {
+    for (const movie of page.items) {
+      byId.set(movie.id, movie);
+    }
+  }
+  return [...byId.values()];
+}
+
 // ============ MOVIES PAGE ============
-export function MoviesPage() {
+export function MoviesPage({ audience = 'all' }: { audience?: 'all' | 'children' } = {}) {
   const { t } = useLang();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
@@ -81,29 +93,56 @@ export function MoviesPage() {
   const [genreOptions, setGenreOptions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const isChildren = audience === 'children';
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [page, genres] = await Promise.all([
-        fetchMovies({
-          q: search || undefined,
-          genre: genre === 'all' ? undefined : genre,
-          sort: sortParam(sort),
-          page_size: 100,
-        }),
-        fetchGenres(),
-      ]);
-      setItems(page.items);
-      setGenreOptions(genres.map((g) => g.name));
+      if (isChildren) {
+        const selectedGenre = genre === 'all' ? null : genre;
+        const genreFetches =
+          selectedGenre && (CHILDREN_GENRES as readonly string[]).includes(selectedGenre)
+            ? [
+                fetchMovies({
+                  q: search || undefined,
+                  genre: selectedGenre,
+                  sort: sortParam(sort),
+                  page_size: 100,
+                }),
+              ]
+            : CHILDREN_GENRES.map((childGenre) =>
+                fetchMovies({
+                  q: search || undefined,
+                  genre: childGenre,
+                  sort: sortParam(sort),
+                  page_size: 100,
+                })
+              );
+        const [genres, ...pages] = await Promise.all([fetchGenres(), ...genreFetches]);
+        const available = new Set(genres.map((g) => g.name));
+        setItems(mergeMoviesById(pages));
+        setGenreOptions(CHILDREN_GENRES.filter((g) => available.has(g)));
+      } else {
+        const [page, genres] = await Promise.all([
+          fetchMovies({
+            q: search || undefined,
+            genre: genre === 'all' ? undefined : genre,
+            sort: sortParam(sort),
+            page_size: 100,
+          }),
+          fetchGenres(),
+        ]);
+        setItems(page.items);
+        setGenreOptions(genres.map((g) => g.name));
+      }
     } catch (err) {
       setItems([]);
       setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Failed to load movies');
     } finally {
       setLoading(false);
     }
-  }, [search, genre, sort]);
+  }, [search, genre, sort, isChildren]);
 
   useEffect(() => {
     const timer = window.setTimeout(load, 200);
@@ -111,9 +150,11 @@ export function MoviesPage() {
   }, [load]);
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen" data-testid={isChildren ? 'children-page' : 'movies-page'}>
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
-        <h1 className="text-2xl md:text-3xl font-serif font-bold text-foreground mb-6">{t.nav.movies}</h1>
+        <h1 className="text-2xl md:text-3xl font-serif font-bold text-foreground mb-6">
+          {isChildren ? t.nav.children : t.nav.movies}
+        </h1>
         <div className="flex flex-wrap items-center gap-3 mb-6">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -227,6 +268,11 @@ export function MoviesPage() {
       </div>
     </div>
   );
+}
+
+/** Family / Animation catalog — distinct from the generic Movies browse page. */
+export function ChildrenPage() {
+  return <MoviesPage audience="children" />;
 }
 
 // ============ SERIES PAGE ============
