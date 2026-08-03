@@ -38,16 +38,28 @@ DEMO_PUBLIC_BASE_URL="${DEMO_PUBLIC_BASE_URL:-https://${PUBLIC_DOMAIN:-ifilm.af}
 
 cd "$COMPOSE_DIR"
 
+echo "==> Recreate API so TMDB_* from ${IFILM_ENV_FILE} are loaded into the container"
+# Compose env_file is applied at create-time; editing ifilm.env alone is not enough.
+export IFILM_HTTP_BIND="${IFILM_HTTP_BIND:-127.0.0.1}"
+export IFILM_HTTP_PORT="${IFILM_HTTP_PORT:-8080}"
+docker compose --env-file "$IFILM_ENV_FILE" -f "$COMPOSE_FILE" up -d --force-recreate backend-api
+sleep 3
+
 echo "==> Ensure migrations at head"
 docker compose --env-file "$IFILM_ENV_FILE" -f "$COMPOSE_FILE" exec -T backend-api \
   sh -c 'set -a; . /run/ifilm/runtime.env; set +a; alembic upgrade head'
 
 echo "==> Running python -m scripts.seed_real_demo"
+# Pass TMDB token explicitly: /run/ifilm/runtime.env may omit TMDB_* keys.
 docker compose --env-file "$IFILM_ENV_FILE" -f "$COMPOSE_FILE" exec -T \
   -e DEMO_SEED_ALLOW_PROD=true \
   -e DEMO_PUBLIC_BASE_URL="$DEMO_PUBLIC_BASE_URL" \
   -e DEMO_CREDENTIALS_PATH="$CONTAINER_CRED_FILE" \
   -e TMDB_ENABLED=true \
+  -e TMDB_API_READ_TOKEN="$TMDB_API_READ_TOKEN" \
+  -e TMDB_IMAGE_BASE_URL="${TMDB_IMAGE_BASE_URL:-https://image.tmdb.org/t/p/}" \
+  -e TMDB_LANGUAGE="${TMDB_LANGUAGE:-en-US}" \
+  -e TMDB_FALLBACK_LANGUAGE="${TMDB_FALLBACK_LANGUAGE:-en-US}" \
   backend-api \
   sh -c 'set -a; . /run/ifilm/runtime.env; set +a; python -m scripts.seed_real_demo --json-report'
 
