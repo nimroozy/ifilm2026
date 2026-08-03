@@ -1510,13 +1510,37 @@ export const adminApi = {
     return data;
   },
 
-  async listMediaAssets(params?: { page?: number; page_size?: number; status?: string }) {
+  async listMediaAssets(params?: {
+    page?: number;
+    page_size?: number;
+    status?: string;
+    movie_id?: number;
+    episode_id?: number;
+    unassigned?: boolean;
+    category?: string;
+    q?: string;
+    video_only?: boolean;
+    linkable_only?: boolean;
+  }) {
     const { data } = await adminHttp.get<Envelope<MediaAssetDto>>('/admin/media/assets', { params });
     return unwrapList(data);
   },
 
   async getMediaAsset(assetId: string) {
     const { data } = await adminHttp.get<MediaAssetDto>(`/admin/media/assets/${assetId}`);
+    return data;
+  },
+
+  async linkMediaAsset(assetId: string, payload: { owner_type: 'movie' | 'episode'; owner_id: number }) {
+    const { data } = await adminHttp.post<MediaAssetDto>(`/admin/media/assets/${assetId}/link`, payload);
+    return data;
+  },
+
+  async detachMediaAsset(assetId: string, payload?: { force_unpublish?: boolean }) {
+    const { data } = await adminHttp.post<MediaAssetDto>(
+      `/admin/media/assets/${assetId}/detach`,
+      payload ?? {}
+    );
     return data;
   },
 

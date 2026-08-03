@@ -1,9 +1,13 @@
 import {
+  Cast,
   Maximize,
   Minimize,
   Pause,
   PictureInPicture2,
   Play,
+  RotateCcw,
+  SkipBack,
+  SkipForward,
   Volume2,
   VolumeX,
 } from 'lucide-react';
@@ -36,8 +40,11 @@ export function PlayerControls({
   audioTracks,
   playbackRate,
   isFs,
+  pipSupported = true,
+  airPlaySupported = false,
   onTogglePlay,
   onSeek,
+  onSeekBy,
   onVolume,
   onToggleMute,
   onQuality,
@@ -45,6 +52,8 @@ export function PlayerControls({
   onRate,
   onFullscreen,
   onPiP,
+  onAirPlay,
+  onStartOver,
 }: {
   visible: boolean;
   playing: boolean;
@@ -59,8 +68,11 @@ export function PlayerControls({
   audioTracks: AudioTrackInfo[];
   playbackRate: number;
   isFs: boolean;
+  pipSupported?: boolean;
+  airPlaySupported?: boolean;
   onTogglePlay: () => void;
   onSeek: (t: number) => void;
+  onSeekBy?: (delta: number) => void;
   onVolume: (v: number) => void;
   onToggleMute: () => void;
   onQuality: (level: number) => void;
@@ -68,13 +80,15 @@ export function PlayerControls({
   onRate: (rate: number) => void;
   onFullscreen: () => void;
   onPiP: () => void;
+  onAirPlay?: () => void;
+  onStartOver?: () => void;
 }) {
   const progressPct = duration > 0 ? (currentTime / duration) * 100 : 0;
   const bufferedPct = duration > 0 ? (buffered / duration) * 100 : 0;
 
   return (
     <div
-      className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-10 transition-opacity ${
+      className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-10 transition-opacity duration-normal ${
         visible ? 'opacity-100' : 'opacity-0 pointer-events-none'
       }`}
       data-testid="player-controls"
@@ -101,7 +115,7 @@ export function PlayerControls({
         />
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 text-white">
+      <div className="flex flex-wrap items-center gap-1.5 text-white sm:gap-2">
         <Button
           variant="ghost"
           size="icon"
@@ -111,6 +125,40 @@ export function PlayerControls({
         >
           {playing ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5 fill-white" />}
         </Button>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="text-white hover:bg-white/10 h-10 w-10"
+          onClick={() => onSeekBy?.(-10)}
+          aria-label="Skip back 10 seconds"
+          data-testid="skip-back"
+        >
+          <SkipBack className="h-5 w-5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="text-white hover:bg-white/10 h-10 w-10"
+          onClick={() => onSeekBy?.(10)}
+          aria-label="Skip forward 10 seconds"
+          data-testid="skip-forward"
+        >
+          <SkipForward className="h-5 w-5" />
+        </Button>
+
+        {onStartOver ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-white hover:bg-white/10 h-10 w-10"
+            onClick={onStartOver}
+            aria-label="Start over"
+            data-testid="start-over"
+          >
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+        ) : null}
 
         <Button
           variant="ghost"
@@ -164,15 +212,43 @@ export function PlayerControls({
           ))}
         </select>
 
+        {airPlaySupported && onAirPlay ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-white hover:bg-white/10 h-10 w-10"
+            onClick={onAirPlay}
+            aria-label="AirPlay"
+            data-testid="airplay-button"
+          >
+            <span className="text-[10px] font-semibold tracking-wide">AP</span>
+          </Button>
+        ) : null}
+
         <Button
           variant="ghost"
           size="icon"
-          className="text-white hover:bg-white/10 h-10 w-10"
-          onClick={onPiP}
-          aria-label="Picture in picture"
+          className="text-white/40 hover:bg-white/10 h-10 w-10 cursor-not-allowed"
+          disabled
+          aria-label="Google Cast unavailable"
+          title="Google Cast requires a protected receiver and is not enabled in this release"
+          data-testid="cast-button-disabled"
         >
-          <PictureInPicture2 className="h-5 w-5" />
+          <Cast className="h-5 w-5" />
         </Button>
+
+        {pipSupported ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-white hover:bg-white/10 h-10 w-10"
+            onClick={onPiP}
+            aria-label="Picture in picture"
+            data-testid="pip-button"
+          >
+            <PictureInPicture2 className="h-5 w-5" />
+          </Button>
+        ) : null}
 
         <Button
           variant="ghost"

@@ -1,6 +1,6 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -8,87 +8,101 @@
 
 @layer base {
   :root {
-    --background: 42 80% 97%;
-    --foreground: 28 24% 16%;
-    --card: 44 100% 99%;
-    --card-foreground: 28 24% 16%;
-    --popover: 44 100% 99%;
-    --popover-foreground: 28 24% 16%;
-    --primary: 42 96% 54%;
-    --primary-foreground: 28 30% 14%;
-    --secondary: 40 60% 91%;
-    --secondary-foreground: 28 24% 18%;
-    --muted: 40 42% 89%;
-    --muted-foreground: 30 12% 42%;
-    --accent: 34 92% 86%;
-    --accent-foreground: 24 34% 22%;
-    --destructive: 0 76% 54%;
+    /* iFilm light: cool paper, cinema amber accent — not cream/terracotta template */
+    --background: 210 20% 98%;
+    --foreground: 222 28% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 28% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 28% 12%;
+    --primary: 38 92% 48%;
+    --primary-foreground: 222 40% 8%;
+    --secondary: 210 16% 93%;
+    --secondary-foreground: 222 24% 18%;
+    --muted: 210 14% 94%;
+    --muted-foreground: 215 12% 40%;
+    --accent: 198 42% 92%;
+    --accent-foreground: 210 40% 18%;
+    --destructive: 0 72% 50%;
     --destructive-foreground: 0 0% 100%;
-    --border: 36 42% 78%;
-    --input: 36 42% 78%;
-    --ring: 42 96% 54%;
-    --radius: 0.875rem;
+    --success: 152 55% 36%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 48%;
+    --warning-foreground: 222 40% 8%;
+    --border: 214 18% 86%;
+    --input: 214 18% 86%;
+    --ring: 38 92% 48%;
+    --radius: 0.625rem;
     --spacing: 0.25rem;
-    --tracking-normal: -0.01em;
-    --font-sans: 'Inter', 'Helvetica Neue', Arial, sans-serif;
-    --font-serif: 'DM Serif Display', Georgia, serif;
-    --font-mono: 'JetBrains Mono', Menlo, monospace;
-    --shadow-2xs: 0 1px 2px 0 hsl(42 96% 54% / 0.04);
-    --shadow-xs: 0 2px 4px 0 hsl(42 96% 54% / 0.06);
-    --shadow-sm: 0 4px 10px 0 hsl(38 88% 50% / 0.08);
-    --shadow: 0 8px 18px 0 hsl(38 88% 50% / 0.10);
-    --shadow-md: 0 12px 24px 0 hsl(38 88% 50% / 0.12);
-    --shadow-lg: 0 18px 34px 0 hsl(38 88% 50% / 0.16);
-    --shadow-xl: 0 24px 46px 0 hsl(38 88% 50% / 0.20);
-    --shadow-2xl: 0 30px 60px 0 hsl(38 88% 50% / 0.24);
-    --sidebar-background: 42 72% 95%;
-    --sidebar-foreground: 28 24% 16%;
-    --sidebar-primary: 42 96% 54%;
-    --sidebar-primary-foreground: 28 30% 14%;
-    --sidebar-accent: 40 60% 91%;
-    --sidebar-accent-foreground: 28 24% 18%;
-    --sidebar-border: 36 42% 78%;
-    --sidebar-ring: 42 96% 54%;
-    --chart-1: 42 96% 54%;
-    --chart-2: 34 86% 58%;
-    --chart-3: 22 70% 56%;
-    --chart-4: 48 60% 68%;
-    --chart-5: 30 34% 72%;
+    --tracking-normal: -0.011em;
+    --content-max: 72rem;
+    --duration-fast: 120ms;
+    --duration-normal: 220ms;
+    --duration-slow: 400ms;
+    --font-sans: 'Outfit', 'Segoe UI', sans-serif;
+    --font-serif: 'Fraunces', 'Times New Roman', serif;
+    --font-display: 'Fraunces', 'Times New Roman', serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+    --shadow-2xs: 0 1px 2px 0 hsl(222 28% 12% / 0.04);
+    --shadow-xs: 0 1px 3px 0 hsl(222 28% 12% / 0.06);
+    --shadow-sm: 0 2px 8px 0 hsl(222 28% 12% / 0.08);
+    --shadow: 0 6px 16px 0 hsl(222 28% 12% / 0.10);
+    --shadow-md: 0 10px 24px 0 hsl(222 28% 12% / 0.12);
+    --shadow-lg: 0 16px 36px 0 hsl(222 28% 12% / 0.14);
+    --shadow-xl: 0 22px 48px 0 hsl(222 28% 12% / 0.16);
+    --shadow-2xl: 0 28px 64px 0 hsl(222 28% 12% / 0.20);
+    --sidebar-background: 210 20% 97%;
+    --sidebar-foreground: 222 28% 12%;
+    --sidebar-primary: 38 92% 48%;
+    --sidebar-primary-foreground: 222 40% 8%;
+    --sidebar-accent: 210 16% 93%;
+    --sidebar-accent-foreground: 222 24% 18%;
+    --sidebar-border: 214 18% 86%;
+    --sidebar-ring: 38 92% 48%;
+    --chart-1: 38 92% 48%;
+    --chart-2: 198 62% 42%;
+    --chart-3: 152 45% 38%;
+    --chart-4: 222 18% 46%;
+    --chart-5: 15 70% 48%;
   }
 
   .dark {
-    --background: 28 24% 10%;
-    --foreground: 44 72% 92%;
-    --card: 30 24% 12%;
-    --card-foreground: 44 72% 92%;
-    --popover: 30 24% 12%;
-    --popover-foreground: 44 72% 92%;
-    --primary: 42 92% 60%;
-    --primary-foreground: 28 24% 10%;
-    --secondary: 30 18% 18%;
-    --secondary-foreground: 42 46% 88%;
-    --muted: 28 14% 16%;
-    --muted-foreground: 34 12% 66%;
-    --accent: 24 34% 22%;
-    --accent-foreground: 42 92% 82%;
-    --destructive: 0 72% 58%;
+    --background: 222 28% 7%;
+    --foreground: 210 20% 96%;
+    --card: 222 24% 10%;
+    --card-foreground: 210 20% 96%;
+    --popover: 222 24% 10%;
+    --popover-foreground: 210 20% 96%;
+    --primary: 38 94% 55%;
+    --primary-foreground: 222 40% 8%;
+    --secondary: 222 18% 16%;
+    --secondary-foreground: 210 16% 90%;
+    --muted: 222 16% 14%;
+    --muted-foreground: 215 12% 64%;
+    --accent: 198 28% 18%;
+    --accent-foreground: 198 70% 82%;
+    --destructive: 0 70% 52%;
     --destructive-foreground: 0 0% 100%;
-    --border: 28 12% 22%;
-    --input: 28 12% 22%;
-    --ring: 42 92% 60%;
-    --sidebar-background: 28 24% 11%;
-    --sidebar-foreground: 44 72% 92%;
-    --sidebar-primary: 42 92% 60%;
-    --sidebar-primary-foreground: 28 24% 10%;
-    --sidebar-accent: 30 18% 18%;
-    --sidebar-accent-foreground: 42 46% 88%;
-    --sidebar-border: 28 12% 22%;
-    --sidebar-ring: 42 92% 60%;
-    --chart-1: 42 92% 60%;
-    --chart-2: 34 82% 62%;
-    --chart-3: 22 68% 60%;
-    --chart-4: 48 44% 70%;
-    --chart-5: 30 20% 74%;
+    --success: 152 50% 42%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 94% 55%;
+    --warning-foreground: 222 40% 8%;
+    --border: 222 14% 18%;
+    --input: 222 14% 18%;
+    --ring: 38 94% 55%;
+    --sidebar-background: 222 26% 8%;
+    --sidebar-foreground: 210 20% 96%;
+    --sidebar-primary: 38 94% 55%;
+    --sidebar-primary-foreground: 222 40% 8%;
+    --sidebar-accent: 222 18% 14%;
+    --sidebar-accent-foreground: 210 16% 90%;
+    --sidebar-border: 222 14% 18%;
+    --sidebar-ring: 38 94% 55%;
+    --chart-1: 38 94% 55%;
+    --chart-2: 198 62% 52%;
+    --chart-3: 152 48% 48%;
+    --chart-4: 215 16% 58%;
+    --chart-5: 15 72% 56%;
   }
 }
 
@@ -103,7 +117,22 @@
   }
 
   h1, h2, h3, h4 {
-    @apply font-serif tracking-tight;
+    @apply font-display tracking-tight;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 
@@ -123,16 +152,16 @@
 }
 
 .dark ::-webkit-scrollbar-track {
-  background: hsl(28 24% 10%);
+  background: hsl(222 28% 7%);
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: hsl(28 12% 22%);
+  background: hsl(222 14% 22%);
   border-radius: 4px;
 }
 
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: hsl(42 92% 60%);
+  background: hsl(38 94% 55%);
 }
 
 /* Hide scrollbar for content rows */
@@ -142,4 +171,27 @@
 .hide-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* Skeleton shimmer */
+@keyframes ifilm-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.ifilm-skeleton {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 0%,
+    hsl(var(--muted-foreground) / 0.12) 50%,
+    hsl(var(--muted)) 100%
+  );
+  background-size: 200% 100%;
+  animation: ifilm-shimmer 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ifilm-skeleton {
+    animation: none;
+  }
 }

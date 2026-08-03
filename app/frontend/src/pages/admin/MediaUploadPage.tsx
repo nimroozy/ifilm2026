@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Upload as UploadIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +26,17 @@ function formatBytes(value: number): string {
 
 export default function MediaUploadPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const ownerType = searchParams.get('owner_type');
+  const ownerIdRaw = searchParams.get('owner_id');
+  const ownerId = ownerIdRaw ? Number(ownerIdRaw) : null;
+  const ownerPreselect = useMemo(() => {
+    if ((ownerType === 'movie' || ownerType === 'episode') && ownerId && Number.isFinite(ownerId) && ownerId > 0) {
+      return { ownerType, ownerId } as const;
+    }
+    return null;
+  }, [ownerType, ownerId]);
+
   const [file, setFile] = useState<File | null>(null);
   const [category, setCategory] = useState<MediaCategory>('originals');
   const [busy, setBusy] = useState(false);
@@ -67,8 +78,19 @@ export default function MediaUploadPage() {
         mime_type: file.type || 'application/octet-stream',
         size_bytes: file.size,
         category,
+        movie_id: ownerPreselect?.ownerType === 'movie' ? ownerPreselect.ownerId : null,
+        episode_id: ownerPreselect?.ownerType === 'episode' ? ownerPreselect.ownerId : null,
       });
       const completed = await adminApi.uploadMediaSessionFile(created.session.id, file, setProgress);
+      if (ownerPreselect) {
+        navigate(
+          ownerPreselect.ownerType === 'movie'
+            ? `/admin/movies/${ownerPreselect.ownerId}/edit`
+            : `/admin/episodes/${ownerPreselect.ownerId}/edit`,
+          { replace: true }
+        );
+        return;
+      }
       navigate(`/admin/media/${completed.media_asset_id}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Upload failed');
@@ -83,10 +105,20 @@ export default function MediaUploadPage() {
         <div>
           <h1 className="text-2xl font-serif font-bold text-foreground">Media Upload</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Stream files into local MEDIA_ROOT storage. Encoding and CDN are deferred.
+            Stream files into local MEDIA_ROOT storage. Encoding runs through the processing pipeline.
           </p>
         </div>
       </div>
+
+      {ownerPreselect ? (
+        <Alert data-testid="upload-owner-preselect">
+          <AlertTitle>Linking to {ownerPreselect.ownerType}</AlertTitle>
+          <AlertDescription>
+            This upload will be associated with {ownerPreselect.ownerType} #{ownerPreselect.ownerId}. After upload you
+            will return to the edit page.
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       <form onSubmit={onSubmit} className="space-y-4 max-w-xl border border-border rounded-lg p-4 bg-card">
         <div className="space-y-2">
@@ -118,72 +150,53 @@ export default function MediaUploadPage() {
             </SelectContent>
           </Select>
         </div>
+        {error && (
+          <Alert variant="destructive">
+            <AlertTitle>Upload error</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
         {busy && (
-          <div className="space-y-1" data-testid="upload-progress">
-            <div className="h-2 rounded bg-muted overflow-hidden">
+          <div className="space-y-1" aria-live="polite">
+            <div className="h-2 overflow-hidden rounded bg-muted">
               <div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }} />
             </div>
             <p className="text-xs text-muted-foreground">{progress}%</p>
           </div>
         )}
-        {error && (
-          <Alert variant="destructive" data-testid="upload-error">
-            <AlertTitle>Upload error</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-        <Button type="submit" disabled={busy || !file} className="gap-2" data-testid="start-upload">
-          <UploadIcon className="h-4 w-4" />
-          {busy ? 'Uploading…' : 'Start upload'}
+        <Button type="submit" disabled={busy || !file} data-testid="media-upload-submit">
+          <UploadIcon className="me-2 h-4 w-4" />
+          {busy ? 'Uploading…' : ownerPreselect ? 'Upload and Link' : 'Start Upload'}
         </Button>
       </form>
 
       <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Recent assets</h2>
-          <Button variant="outline" size="sm" onClick={() => void loadAssets()}>
-            Refresh
-          </Button>
-        </div>
-        {loadingList && <LoadingBlock rows={4} />}
-        {listError && <ErrorState message={listError} onRetry={() => void loadAssets()} />}
-        {!loadingList && !listError && assets.length === 0 && (
-          <EmptyState message="No media assets uploaded yet." />
-        )}
-        {!loadingList && !listError && assets.length > 0 && (
-          <div className="overflow-x-auto border border-border rounded-lg">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-left">
-                <tr>
-                  <th className="p-3 font-medium">File</th>
-                  <th className="p-3 font-medium">Category</th>
-                  <th className="p-3 font-medium">Size</th>
-                  <th className="p-3 font-medium">Status</th>
-                  <th className="p-3 font-medium">Checksum</th>
-                </tr>
-              </thead>
-              <tbody>
-                {assets.map((asset) => (
-                  <tr key={asset.id} className="border-t border-border">
-                    <td className="p-3">
-                      <Link className="text-primary hover:underline" to={`/admin/media/${asset.id}`}>
-                        {asset.original_filename}
-                      </Link>
-                    </td>
-                    <td className="p-3">{asset.category}</td>
-                    <td className="p-3">{formatBytes(asset.size_bytes)}</td>
-                    <td className="p-3">
-                      <StatusBadge status={asset.upload_status} />
-                    </td>
-                    <td className="p-3 font-mono text-xs truncate max-w-[12rem]">
-                      {asset.checksum_sha256 || '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <h2 className="text-lg font-semibold">Recent assets</h2>
+        {loadingList ? <LoadingBlock /> : null}
+        {listError ? <ErrorState message={listError} onRetry={loadAssets} /> : null}
+        {!loadingList && !listError && assets.length === 0 ? (
+          <EmptyState message="No media assets yet." />
+        ) : null}
+        <ul className="space-y-2">
+          {assets.map((asset) => (
+            <li key={asset.id} className="flex items-center justify-between gap-3 rounded border border-border p-3">
+              <div className="min-w-0">
+                <p className="truncate font-medium">{asset.original_filename}</p>
+                <p className="text-xs text-muted-foreground">
+                  {formatBytes(asset.size_bytes)}
+                  {asset.movie_id ? ` · movie #${asset.movie_id}` : ''}
+                  {asset.episode_id ? ` · episode #${asset.episode_id}` : ''}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <StatusBadge status={asset.upload_status} />
+                <Button variant="outline" size="sm" asChild>
+                  <Link to={`/admin/media/${asset.id}`}>Open</Link>
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
       </section>
     </div>
   );

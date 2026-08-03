@@ -97,3 +97,16 @@ class UploadSessionOut(ORMModel):
 class UploadSessionCreateOut(BaseModel):
     session: UploadSessionOut
     media_asset: MediaAssetOut
+
+
+class MediaAssetLinkRequest(BaseModel):
+    """Attach an existing unassigned asset to a movie or episode."""
+
+    owner_type: str = Field(pattern="^(movie|episode)$")
+    owner_id: int = Field(gt=0)
+
+
+class MediaAssetDetachRequest(BaseModel):
+    """Detach ownership. Optionally unpublish when detach would leave published content unplayable."""
+
+    force_unpublish: bool = False

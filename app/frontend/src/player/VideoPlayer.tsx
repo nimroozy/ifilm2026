@@ -22,6 +22,7 @@ import {
   requestFullscreen,
   togglePictureInPicture,
 } from './FullscreenController';
+import { isAirPlaySupported, isPiPSupported, showAirPlayPicker } from './castAirPlay';
 import type { PlayerTarget, SafePlayerError } from './types';
 
 export function VideoPlayer({
@@ -71,6 +72,8 @@ export function VideoPlayer({
   const [showControls, setShowControls] = useState(true);
   const [fs, setFs] = useState(false);
   const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
+  const [airPlaySupported, setAirPlaySupported] = useState(false);
+  const pipSupported = isPiPSupported();
 
   useEffect(() => {
     const video = videoRef.current;
@@ -107,6 +110,10 @@ export function VideoPlayer({
     document.addEventListener('fullscreenchange', onFs);
     return () => document.removeEventListener('fullscreenchange', onFs);
   }, []);
+
+  useEffect(() => {
+    setAirPlaySupported(isAirPlaySupported(videoRef.current));
+  }, [videoRef, ready, session]);
 
   const togglePlay = useCallback(() => {
     const video = videoRef.current;
@@ -151,6 +158,11 @@ export function VideoPlayer({
     else void requestFullscreen(rootEl);
   }, [rootEl]);
 
+  const togglePiP = useCallback(() => {
+    const video = videoRef.current;
+    if (video) void togglePictureInPicture(video);
+  }, [videoRef]);
+
   const keyboardHandlers = useMemo(
     () => ({
       togglePlay,
@@ -158,8 +170,9 @@ export function VideoPlayer({
       volumeBy,
       toggleMute,
       toggleFullscreen,
+      togglePiP,
     }),
-    [togglePlay, seekBy, volumeBy, toggleMute, toggleFullscreen]
+    [togglePlay, seekBy, volumeBy, toggleMute, toggleFullscreen, togglePiP]
   );
   useKeyboardController(Boolean(session) && !fatal && !error, keyboardHandlers);
 
@@ -224,11 +237,14 @@ export function VideoPlayer({
             audioTracks={audioTracks}
             playbackRate={playbackRate}
             isFs={fs}
+            pipSupported={pipSupported}
+            airPlaySupported={airPlaySupported}
             onTogglePlay={togglePlay}
             onSeek={(t) => {
               const video = videoRef.current;
               if (video) video.currentTime = t;
             }}
+            onSeekBy={seekBy}
             onVolume={(v) => {
               const video = videoRef.current;
               if (!video) return;
@@ -246,10 +262,9 @@ export function VideoPlayer({
               setPlaybackRate(rate);
             }}
             onFullscreen={toggleFullscreen}
-            onPiP={() => {
-              const video = videoRef.current;
-              if (video) void togglePictureInPicture(video);
-            }}
+            onPiP={togglePiP}
+            onAirPlay={() => showAirPlayPicker(videoRef.current)}
+            onStartOver={startOver}
           />
         ) : null}
       </div>

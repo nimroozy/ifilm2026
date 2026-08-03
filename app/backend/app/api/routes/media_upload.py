@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Header, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile, status
 
 from app.core.config import get_settings
 from app.core.deps import DbSession, require_permissions
@@ -13,11 +13,14 @@ from app.models.admin import AdminUser
 from app.models.media_assets import MediaAsset
 from app.schemas.common import Envelope, paginated
 from app.schemas.media_upload import (
+    MediaAssetDetachRequest,
+    MediaAssetLinkRequest,
     MediaAssetOut,
     UploadSessionCreate,
     UploadSessionCreateOut,
     UploadSessionOut,
 )
+from app.services import media_linking
 from app.services import media_upload as upload_service
 
 router = APIRouter(tags=["media-upload"])
@@ -145,12 +148,32 @@ def list_media_assets(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     status_filter: str | None = Query(None, alias="status"),
+    movie_id: int | None = Query(None, ge=1),
+    episode_id: int | None = Query(None, ge=1),
+    unassigned: bool | None = Query(None),
+    category: str | None = Query(None),
+    q: str | None = Query(None, max_length=256),
+    video_only: bool = Query(False),
+    linkable_only: bool = Query(False),
 ):
     settings = get_settings()
     require_feature("enable_uploads", settings)
-    query = db.query(MediaAsset)
-    if status_filter:
-        query = query.filter(MediaAsset.upload_status == status_filter)
+    if movie_id is not None and episode_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide only one of movie_id or episode_id",
+        )
+    query = media_linking.list_assets_query(
+        db,
+        status_filter=status_filter,
+        movie_id=movie_id,
+        episode_id=episode_id,
+        unassigned=unassigned,
+        category=category,
+        q=q,
+        video_only=video_only,
+        linkable_only=linkable_only,
+    )
     total = query.count()
     items = (
         query.order_by(MediaAsset.created_at.desc())
@@ -164,3 +187,47 @@ def list_media_assets(
         page=page,
         page_size=page_size,
     )
+
+
+@router.post(
+    "/admin/media/assets/{asset_id}/link",
+    response_model=MediaAssetOut,
+)
+def link_media_asset(
+    asset_id: str,
+    payload: MediaAssetLinkRequest,
+    db: DbSession,
+    admin: Annotated[AdminUser, Depends(require_permissions("upload.manage"))],
+):
+    settings = get_settings()
+    require_feature("enable_uploads", settings)
+    asset = media_linking.attach_asset(
+        db,
+        asset_id=asset_id,
+        owner_type=payload.owner_type,  # type: ignore[arg-type]
+        owner_id=payload.owner_id,
+        admin_id=admin.id,
+    )
+    return MediaAssetOut.model_validate(asset)
+
+
+@router.post(
+    "/admin/media/assets/{asset_id}/detach",
+    response_model=MediaAssetOut,
+)
+def detach_media_asset(
+    asset_id: str,
+    db: DbSession,
+    admin: Annotated[AdminUser, Depends(require_permissions("upload.manage"))],
+    payload: MediaAssetDetachRequest | None = None,
+):
+    settings = get_settings()
+    require_feature("enable_uploads", settings)
+    body = payload or MediaAssetDetachRequest()
+    asset = media_linking.detach_asset(
+        db,
+        asset_id=asset_id,
+        admin_id=admin.id,
+        force_unpublish=body.force_unpublish,
+    )
+    return MediaAssetOut.model_validate(asset)
