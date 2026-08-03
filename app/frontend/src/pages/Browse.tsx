@@ -81,6 +81,15 @@ function mergeMoviesById(pages: Array<{ items: CatalogMovie[] }>): CatalogMovie[
   return [...byId.values()];
 }
 
+function sortMergedMovies(movies: CatalogMovie[], sort: string): CatalogMovie[] {
+  const copy = [...movies];
+  if (sort === 'rating') return copy.sort((a, b) => b.rating - a.rating);
+  if (sort === 'popular') return copy.sort((a, b) => b.views - a.views);
+  if (sort === 'title') return copy.sort((a, b) => a.title.localeCompare(b.title));
+  // newest
+  return copy.sort((a, b) => b.year - a.year || b.id - a.id);
+}
+
 // ============ MOVIES PAGE ============
 export function MoviesPage({ audience = 'all' }: { audience?: 'all' | 'children' } = {}) {
   const { t } = useLang();
@@ -121,7 +130,7 @@ export function MoviesPage({ audience = 'all' }: { audience?: 'all' | 'children'
               );
         const [genres, ...pages] = await Promise.all([fetchGenres(), ...genreFetches]);
         const available = new Set(genres.map((g) => g.name));
-        setItems(mergeMoviesById(pages));
+        setItems(sortMergedMovies(mergeMoviesById(pages), sort));
         setGenreOptions(CHILDREN_GENRES.filter((g) => available.has(g)));
       } else {
         const [page, genres] = await Promise.all([
@@ -849,9 +858,6 @@ export function SeriesDetailsPage() {
 }
 
 // ============ VIDEO PLAYER PAGE ============
-// Real adaptive HLS player lives in pages/PlayerPage.tsx (Phase 8).
-export { default as PlayerPage } from '@/pages/PlayerPage';
-
 // ============ SEARCH PAGE ============
 export function SearchPage() {
   const { t } = useLang();

@@ -40,10 +40,6 @@ def _owners_set(asset: MediaAsset) -> list[tuple[str, int]]:
     return out
 
 
-def _is_unassigned(asset: MediaAsset) -> bool:
-    return not _owners_set(asset)
-
-
 def _get_asset_for_update(db: Session, asset_id: str) -> MediaAsset:
     asset = (
         db.query(MediaAsset)
@@ -56,15 +52,21 @@ def _get_asset_for_update(db: Session, asset_id: str) -> MediaAsset:
     return asset
 
 
-def _require_movie(db: Session, movie_id: int) -> Movie:
-    movie = db.query(Movie).filter(Movie.id == movie_id).first()
+def _require_movie(db: Session, movie_id: int, *, for_update: bool = False) -> Movie:
+    query = db.query(Movie).filter(Movie.id == movie_id)
+    if for_update:
+        query = query.with_for_update()
+    movie = query.first()
     if movie is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Movie not found")
     return movie
 
 
-def _require_episode(db: Session, episode_id: int) -> Episode:
-    episode = db.query(Episode).filter(Episode.id == episode_id).first()
+def _require_episode(db: Session, episode_id: int, *, for_update: bool = False) -> Episode:
+    query = db.query(Episode).filter(Episode.id == episode_id)
+    if for_update:
+        query = query.with_for_update()
+    episode = query.first()
     if episode is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Episode not found")
     return episode
@@ -150,8 +152,13 @@ def detach_asset(
     asset_id: str,
     admin_id: int | None,
     force_unpublish: bool = False,
+    allow_force_unpublish: bool = False,
 ) -> MediaAsset:
-    """Remove ownership association only. Never deletes media or packages."""
+    """Remove ownership association only. Never deletes media or packages.
+
+    ``force_unpublish`` requires ``allow_force_unpublish`` (caller must have
+    verified ``catalog.publish``) so upload-only admins cannot unpublish.
+    """
     asset = _get_asset_for_update(db, asset_id)
     owners = _owners_set(asset)
     if not owners:
@@ -163,9 +170,9 @@ def detach_asset(
     movie: Movie | None = None
     episode: Episode | None = None
     if asset.movie_id is not None:
-        movie = _require_movie(db, asset.movie_id)
+        movie = _require_movie(db, asset.movie_id, for_update=True)
     elif asset.episode_id is not None:
-        episode = _require_episode(db, asset.episode_id)
+        episode = _require_episode(db, asset.episode_id, for_update=True)
     else:
         # series/season-only assets: allow detach without publish gate
         pass
@@ -184,6 +191,7 @@ def detach_asset(
             if asset.movie_id is not None
             else MediaAsset.episode_id == asset.episode_id
         )
+        # Lock siblings so concurrent detaches cannot both pass the playability check.
         other_assets = (
             db.query(MediaAsset)
             .filter(
@@ -191,6 +199,7 @@ def detach_asset(
                 owner_filter,
                 MediaAsset.upload_status.notin_(list(UNUSABLE_UPLOAD)),
             )
+            .with_for_update()
             .all()
         )
         remaining_playable = any(
@@ -198,9 +207,15 @@ def detach_asset(
         )
         if not remaining_playable:
             if force_unpublish:
+                if not allow_force_unpublish:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="catalog.publish permission required to force unpublish on detach",
+                    )
                 published_entity.status = "unpublished"
-                if hasattr(published_entity, "unpublished_at"):
-                    published_entity.unpublished_at = utcnow()
+                published_entity.unpublished_at = utcnow()
+                if hasattr(published_entity, "unpublished_by"):
+                    published_entity.unpublished_by = admin_id
                 db.add(published_entity)
                 _audit(
                     "content_unpublished_for_detach",

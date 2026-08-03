@@ -30,7 +30,7 @@ export function VideoPlayer({
   target,
   title,
   onBack,
-  previousEpisodeId = null,
+  previousEpisodeId: _previousEpisodeId = null,
   nextEpisodeId = null,
   autoplayNext = true,
   onAutoplayNextChange,
@@ -47,7 +47,7 @@ export function VideoPlayer({
   onPreviousEpisode?: () => void;
   onNextEpisode?: () => void;
 }) {
-  const { session, loading, error, setError, refreshAfterGone, retry } = usePlaybackSession(target);
+  const { session, loading, error, refreshAfterGone, retry } = usePlaybackSession(target);
   const [fatal, setFatal] = useState<SafePlayerError | null>(null);
 
   const onGone = useCallback(async () => {
@@ -125,7 +125,8 @@ export function VideoPlayer({
     if (!showControls || !playing) return;
     const id = window.setTimeout(() => setShowControls(false), 3200);
     return () => window.clearTimeout(id);
-  }, [showControls, playing, currentTime]);
+    // Intentionally omit currentTime — timeupdate must not reset the hide timer.
+  }, [showControls, playing]);
 
   useEffect(() => {
     const onFs = () => setFs(isFullscreen());
@@ -134,7 +135,12 @@ export function VideoPlayer({
   }, []);
 
   useEffect(() => {
-    setAirPlaySupported(isAirPlaySupported(videoRef.current));
+    const video = videoRef.current;
+    if (video) {
+      // WebKit AirPlay with custom controls requires the non-standard attribute.
+      video.setAttribute('x-webkit-airplay', 'allow');
+    }
+    setAirPlaySupported(isAirPlaySupported(video));
   }, [videoRef, ready, session]);
 
   useEffect(() => {
@@ -259,7 +265,7 @@ export function VideoPlayer({
     }, 500);
     setStats(getStats());
     return () => window.clearInterval(id);
-  }, [statsOpen, getStats, currentTime, currentLevel]);
+  }, [statsOpen, getStats]);
 
   // Ctrl+Shift+D toggles diagnostics (no token leakage)
   useEffect(() => {
@@ -284,8 +290,8 @@ export function VideoPlayer({
       onClick={() => setShowControls(true)}
     >
       <div
-        className={`absolute top-0 inset-x-0 z-20 flex items-center justify-between p-3 bg-gradient-to-b from-black/70 to-transparent transition-opacity ${
-          showControls ? 'opacity-100' : 'opacity-0'
+        className={`absolute top-0 inset-x-0 z-30 flex items-center justify-between p-3 bg-gradient-to-b from-black/70 to-transparent transition-opacity ${
+          showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
       >
         <Button
@@ -343,20 +349,23 @@ export function VideoPlayer({
         ) : null}
 
         {session && !displayError && !playing && ready ? (
-          <button
-            type="button"
-            className="absolute inset-0 z-10 flex items-center justify-center bg-black/20"
-            onClick={(e) => {
-              e.stopPropagation();
-              togglePlay();
-            }}
-            aria-label="Play"
-            data-testid="center-play"
+          <div
+            className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-black/20"
+            data-testid="center-play-layer"
           >
-            <span className="flex h-16 w-16 items-center justify-center rounded-full bg-black/60 text-white shadow-lg ring-1 ring-white/20">
+            <button
+              type="button"
+              className="pointer-events-auto flex h-16 w-16 items-center justify-center rounded-full bg-black/60 text-white shadow-lg ring-1 ring-white/20"
+              onClick={(e) => {
+                e.stopPropagation();
+                togglePlay();
+              }}
+              aria-label="Play"
+              data-testid="center-play"
+            >
               <Play className="h-8 w-8 fill-white" />
-            </span>
-          </button>
+            </button>
+          </div>
         ) : null}
 
         {displayError ? (

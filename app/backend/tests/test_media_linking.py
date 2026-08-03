@@ -203,6 +203,28 @@ def test_detach_published_blocked_without_force(client, admin_headers, db_sessio
     assert forced.json()["movie_id"] is None
 
 
+def test_force_unpublish_requires_catalog_publish(client, db_session):
+    """upload.manage alone must not unpublish via detach."""
+    token = _make_admin(db_session, username="upload-only", permissions=["upload.manage"])
+    movie = db_session.query(Movie).first()
+    movie.status = "published"
+    movie.published_at = utcnow()
+    db_session.add(movie)
+    db_session.commit()
+    asset = _asset(db_session, movie_id=movie.id)
+
+    denied = client.post(
+        f"/api/admin/media/assets/{asset.id}/detach",
+        headers=_headers(token),
+        json={"force_unpublish": True},
+    )
+    assert denied.status_code == 403
+    db_session.refresh(movie)
+    assert movie.status == "published"
+    db_session.refresh(asset)
+    assert asset.movie_id == movie.id
+
+
 def test_link_episode(client, admin_headers, db_session):
     from app.models.content import Episode, Season, Series
 

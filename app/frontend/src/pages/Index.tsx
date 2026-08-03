@@ -343,11 +343,19 @@ function ContinueWatchingRow() {
         {items.map((item) => (
           <div
             key={item.id}
+            role="link"
+            tabIndex={0}
             onClick={() => {
               if ('media_asset_id' in item) {
                 if (item.available && item.player_path) navigate(item.player_path);
               } else {
                 navigate(item.type === 'series' ? `/series/${item.contentId}` : `/player/movie/${item.contentId}`);
+              }
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                (event.currentTarget as HTMLDivElement).click();
               }
             }}
             className="flex-shrink-0 w-[200px] md:w-[280px] cursor-pointer group/card"

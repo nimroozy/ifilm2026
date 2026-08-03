@@ -43,8 +43,8 @@ export function StatsOverlay({
     <div
       className="absolute start-3 top-14 z-40 max-w-xs rounded-md border border-white/20 bg-black/85 p-3 font-mono text-[11px] text-white/90 shadow-lg backdrop-blur"
       data-testid="player-stats-overlay"
-      role="status"
-      aria-live="polite"
+      role="region"
+      aria-label="Playback diagnostics"
     >
       <div className="mb-2 flex items-center justify-between gap-3">
         <p className="text-xs font-sans font-semibold tracking-wide text-white">Playback diagnostics</p>

@@ -7,7 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile, status
 
 from app.core.config import get_settings
-from app.core.deps import DbSession, require_permissions
+from app.core.deps import PERMISSION_ALIASES, DbSession, admin_permissions, require_permissions
 from app.core.features import require_feature
 from app.models.admin import AdminUser
 from app.models.media_assets import MediaAsset
@@ -224,10 +224,20 @@ def detach_media_asset(
     settings = get_settings()
     require_feature("enable_uploads", settings)
     body = payload or MediaAssetDetachRequest()
+    allow_force = False
+    if body.force_unpublish:
+        publish_aliases = PERMISSION_ALIASES.get("catalog.publish", frozenset({"catalog.publish"}))
+        allow_force = not admin_permissions(admin).isdisjoint(publish_aliases)
+        if not allow_force:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="catalog.publish permission required to force unpublish on detach",
+            )
     asset = media_linking.detach_asset(
         db,
         asset_id=asset_id,
         admin_id=admin.id,
         force_unpublish=body.force_unpublish,
+        allow_force_unpublish=allow_force,
     )
     return MediaAssetOut.model_validate(asset)

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Monitor, Smartphone, Tablet, Tv, Trash2, Clock, Play, Star, X, AlertCircle, CheckCircle } from 'lucide-react';
+import { User, Monitor, Smartphone, Tablet, Tv, Trash2, Clock, Play, X, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';

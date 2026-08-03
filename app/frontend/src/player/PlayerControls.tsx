@@ -106,7 +106,7 @@ export function PlayerControls({
 
   return (
     <div
-      className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-10 transition-opacity duration-normal ${
+      className={`absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-10 transition-opacity duration-normal ${
         visible ? 'opacity-100' : 'opacity-0 pointer-events-none'
       }`}
       data-testid="player-controls"

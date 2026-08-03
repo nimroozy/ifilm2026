@@ -1,8 +1,9 @@
 # iFilm Product UI / Media Linking / Player Audit
 
-Date: 2026-08-03 (updated)  
+Date: 2026-08-03 (final release audit)  
 Branch: `cursor/professional-ui-media-player-4873`  
-PR: https://github.com/nimroozy/ifilm2026/pull/29
+PR: https://github.com/nimroozy/ifilm2026/pull/29  
+Candidate: `v1.0.15-rc.5` (audit fixes may supersede on branch head)
 
 ## BLOCKER
 
@@ -45,7 +46,9 @@ PR: https://github.com/nimroozy/ifilm2026/pull/29
 
 ## AirPlay / Cast
 
-- AirPlay: show only when `webkitShowPlaybackTargetPicker` or Remote Playback `prompt` exists.
+- AirPlay: show only when WebKit `HTMLMediaElement.webkitShowPlaybackTargetPicker` exists.
+- Chromium `video.remote.prompt` (Remote Playback) is not treated as AirPlay.
+- Custom controls set `x-webkit-airplay="allow"` on the media element.
 - Unit coverage for capability detection.
 - **Real verification status: Implemented, hardware verification pending**
 - Google Cast: disabled; deferred until secure protected-session receiver exists.
@@ -80,3 +83,15 @@ PR: https://github.com/nimroozy/ifilm2026/pull/29
 - Single-owner `media_assets` constraint
 - Admin LTR; public RTL
 - Opaque playback tokens; no path/token leakage in UI/stats
+
+## Final release audit (pre-merge)
+
+Audit-only fixes applied (no new features):
+
+- Player: center-play no longer blocks controls; control auto-hide timer not reset by `timeupdate`; stats overlay not `aria-live`; top chrome `pointer-events-none` when hidden
+- Children catalog: client re-sort after Family/Animation merge
+- Detach: `force_unpublish` requires `catalog.publish`; entity + sibling row locks for concurrent detach
+- Dead code / unused imports removed; AirPlay docs aligned with WebKit-only gate
+- Concurrent checksum test fails hard on double-success (retries only IndexError flakes)
+
+Remaining deferred (not blockers): full ops dashboard metrics (M1), Cast receiver, watchlist API (B4), subtitle ingestion, Safari/AirPlay hardware verification

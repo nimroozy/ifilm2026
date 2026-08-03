@@ -539,6 +539,8 @@ def test_concurrent_duplicate_checksum_finalization(client, admin_headers, monke
                 continue
 
             statuses = sorted(result.status_code for result in results)
+            # A double-success is a real race failure — never retry that outcome.
+            assert statuses.count(200) <= 1, f"both uploads completed: {statuses}"
             if 200 in statuses and 409 in statuses and statuses.count(200) == 1:
                 completed = [
                     client.get(f"/api/admin/media/sessions/{sid}", headers=admin_headers).json()[

@@ -358,14 +358,12 @@ export function useHlsPlayer({ masterUrl, onGone, onFatal }: UseHlsPlayerOptions
 
   const setAudioTrack = useCallback((id: number) => {
     const hls = hlsRef.current;
-    const video = videoRef.current;
     if (hls) {
       hls.audioTrack = id;
       const track = hls.audioTracks[id];
       writeAudioPreference(track?.lang || track?.name || String(id));
     }
     setAudioTrackId(id);
-    void video;
   }, []);
 
   const setSubtitleTrack = useCallback((id: number) => {
@@ -463,6 +461,5 @@ export function useHlsPlayer({ masterUrl, onGone, onFatal }: UseHlsPlayerOptions
     manualQualitySupported,
     getStats,
     destroyEngine,
-    _hlsRef: hlsRef,
   };
 }
