@@ -38,7 +38,7 @@ export default function AdminPage() {
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
       <div className="p-4 border-b border-border">
-        <h2 className="text-xl font-serif font-bold text-primary">Mobin Play</h2>
+        <h2 className="text-xl font-display font-bold text-primary">iFilm</h2>
         <p className="text-xs text-muted-foreground mt-1">Admin Panel</p>
       </div>
       <div className="p-3 border-b border-border">

@@ -40,6 +40,25 @@ export interface AudioTrackInfo {
   lang?: string;
 }
 
+export interface SubtitleTrackInfo {
+  id: number;
+  name: string;
+  lang?: string;
+}
+
+export interface PlayerStatsSnapshot {
+  currentResolution: string;
+  currentRendition: string;
+  estimatedBandwidthMbps: number | null;
+  bufferedSeconds: number | null;
+  droppedFrames: number | null;
+  currentTime: number;
+  duration: number;
+  playbackRate: number;
+  videoCodec: string | null;
+  audioCodec: string | null;
+}
+
 /** In-memory session handle — never persist. */
 export interface LivePlaybackSession {
   id: string;

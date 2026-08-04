@@ -1,9 +1,15 @@
 import {
+  Cast,
+  ChevronLeft,
+  ChevronRight,
   Maximize,
   Minimize,
   Pause,
   PictureInPicture2,
   Play,
+  RotateCcw,
+  SkipBack,
+  SkipForward,
   Volume2,
   VolumeX,
 } from 'lucide-react';
@@ -11,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { QualitySelector } from './QualitySelector';
 import { AudioTrackSelector, SubtitleSelector } from './AudioTrackSelector';
-import type { AudioTrackInfo, QualityLevel } from './types';
+import type { AudioTrackInfo, QualityLevel, SubtitleTrackInfo } from './types';
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
@@ -34,17 +40,30 @@ export function PlayerControls({
   currentLevel,
   manualQualitySupported,
   audioTracks,
+  audioTrackId,
+  subtitleTracks = [],
+  subtitleTrackId = -1,
   playbackRate,
   isFs,
+  pipSupported = true,
+  airPlaySupported = false,
+  hasPreviousEpisode = false,
+  hasNextEpisode = false,
   onTogglePlay,
   onSeek,
+  onSeekBy,
   onVolume,
   onToggleMute,
   onQuality,
   onAudio,
+  onSubtitle,
   onRate,
   onFullscreen,
   onPiP,
+  onAirPlay,
+  onStartOver,
+  onPreviousEpisode,
+  onNextEpisode,
 }: {
   visible: boolean;
   playing: boolean;
@@ -57,24 +76,37 @@ export function PlayerControls({
   currentLevel: number;
   manualQualitySupported: boolean;
   audioTracks: AudioTrackInfo[];
+  audioTrackId?: number;
+  subtitleTracks?: SubtitleTrackInfo[];
+  subtitleTrackId?: number;
   playbackRate: number;
   isFs: boolean;
+  pipSupported?: boolean;
+  airPlaySupported?: boolean;
+  hasPreviousEpisode?: boolean;
+  hasNextEpisode?: boolean;
   onTogglePlay: () => void;
   onSeek: (t: number) => void;
+  onSeekBy?: (delta: number) => void;
   onVolume: (v: number) => void;
   onToggleMute: () => void;
   onQuality: (level: number) => void;
   onAudio: (id: number) => void;
+  onSubtitle?: (id: number) => void;
   onRate: (rate: number) => void;
   onFullscreen: () => void;
   onPiP: () => void;
+  onAirPlay?: () => void;
+  onStartOver?: () => void;
+  onPreviousEpisode?: () => void;
+  onNextEpisode?: () => void;
 }) {
   const progressPct = duration > 0 ? (currentTime / duration) * 100 : 0;
   const bufferedPct = duration > 0 ? (buffered / duration) * 100 : 0;
 
   return (
     <div
-      className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-10 transition-opacity ${
+      className={`absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-10 transition-opacity duration-normal ${
         visible ? 'opacity-100' : 'opacity-0 pointer-events-none'
       }`}
       data-testid="player-controls"
@@ -101,7 +133,7 @@ export function PlayerControls({
         />
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 text-white">
+      <div className="flex flex-wrap items-center gap-1.5 text-white sm:gap-2">
         <Button
           variant="ghost"
           size="icon"
@@ -111,6 +143,66 @@ export function PlayerControls({
         >
           {playing ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5 fill-white" />}
         </Button>
+
+        {hasPreviousEpisode ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-white hover:bg-white/10 h-10 w-10"
+            onClick={onPreviousEpisode}
+            aria-label="Previous episode"
+            data-testid="previous-episode"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
+        ) : null}
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="text-white hover:bg-white/10 h-10 w-10"
+          onClick={() => onSeekBy?.(-10)}
+          aria-label="Skip back 10 seconds"
+          data-testid="skip-back"
+        >
+          <SkipBack className="h-5 w-5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="text-white hover:bg-white/10 h-10 w-10"
+          onClick={() => onSeekBy?.(10)}
+          aria-label="Skip forward 10 seconds"
+          data-testid="skip-forward"
+        >
+          <SkipForward className="h-5 w-5" />
+        </Button>
+
+        {hasNextEpisode ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-white hover:bg-white/10 h-10 w-10"
+            onClick={onNextEpisode}
+            aria-label="Next episode"
+            data-testid="next-episode"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </Button>
+        ) : null}
+
+        {onStartOver ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-white hover:bg-white/10 h-10 w-10"
+            onClick={onStartOver}
+            aria-label="Start over"
+            data-testid="start-over"
+          >
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+        ) : null}
 
         <Button
           variant="ghost"
@@ -148,8 +240,12 @@ export function PlayerControls({
               : 'Quality selection is managed by the browser on this device'
           }
         />
-        <AudioTrackSelector tracks={audioTracks} onChange={onAudio} />
-        <SubtitleSelector />
+        <AudioTrackSelector tracks={audioTracks} value={audioTrackId} onChange={onAudio} />
+        <SubtitleSelector
+          tracks={subtitleTracks}
+          value={subtitleTrackId}
+          onChange={(id) => onSubtitle?.(id)}
+        />
 
         <select
           className="h-8 rounded-md bg-black/40 border border-white/20 text-xs px-2"
@@ -164,15 +260,43 @@ export function PlayerControls({
           ))}
         </select>
 
+        {airPlaySupported && onAirPlay ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-white hover:bg-white/10 h-10 w-10"
+            onClick={onAirPlay}
+            aria-label="AirPlay"
+            data-testid="airplay-button"
+          >
+            <span className="text-[10px] font-semibold tracking-wide">AP</span>
+          </Button>
+        ) : null}
+
         <Button
           variant="ghost"
           size="icon"
-          className="text-white hover:bg-white/10 h-10 w-10"
-          onClick={onPiP}
-          aria-label="Picture in picture"
+          className="text-white/40 hover:bg-white/10 h-10 w-10 cursor-not-allowed"
+          disabled
+          aria-label="Google Cast unavailable"
+          title="Google Cast requires a protected receiver and is not enabled in this release"
+          data-testid="cast-button-disabled"
         >
-          <PictureInPicture2 className="h-5 w-5" />
+          <Cast className="h-5 w-5" />
         </Button>
+
+        {pipSupported ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-white hover:bg-white/10 h-10 w-10"
+            onClick={onPiP}
+            aria-label="Picture in picture"
+            data-testid="pip-button"
+          >
+            <PictureInPicture2 className="h-5 w-5" />
+          </Button>
+        ) : null}
 
         <Button
           variant="ghost"

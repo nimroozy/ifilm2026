@@ -6,6 +6,9 @@ export interface KeyboardHandlers {
   volumeBy: (delta: number) => void;
   toggleMute: () => void;
   toggleFullscreen: () => void;
+  togglePiP?: () => void;
+  toggleCaptions?: () => void;
+  escape?: () => void;
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -23,6 +26,12 @@ export function useKeyboardController(enabled: boolean, handlers: KeyboardHandle
       if (key === ' ' || key === 'k' || key === 'K') {
         event.preventDefault();
         handlers.togglePlay();
+      } else if (key === 'j' || key === 'J') {
+        event.preventDefault();
+        handlers.seekBy(-10);
+      } else if (key === 'l' || key === 'L') {
+        event.preventDefault();
+        handlers.seekBy(10);
       } else if (key === 'ArrowLeft') {
         event.preventDefault();
         handlers.seekBy(-10);
@@ -41,6 +50,14 @@ export function useKeyboardController(enabled: boolean, handlers: KeyboardHandle
       } else if (key === 'f' || key === 'F') {
         event.preventDefault();
         handlers.toggleFullscreen();
+      } else if ((key === 'p' || key === 'P') && handlers.togglePiP) {
+        event.preventDefault();
+        handlers.togglePiP();
+      } else if ((key === 'c' || key === 'C') && handlers.toggleCaptions) {
+        event.preventDefault();
+        handlers.toggleCaptions();
+      } else if (key === 'Escape' && handlers.escape) {
+        handlers.escape();
       }
     };
     window.addEventListener('keydown', onKey);

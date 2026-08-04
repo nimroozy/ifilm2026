@@ -12,6 +12,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { adminApi, ApiError, type CatalogStatus } from '@/lib/api';
 import { ErrorState, LoadingBlock } from './adminShared';
 import PublishingPanel from './PublishingPanel';
+import MediaLinkingCard from './MediaLinkingCard';
 
 const schema = z.object({
   episode_number: z.coerce.number().int().min(0).max(10000),
@@ -36,6 +37,7 @@ export default function EpisodeFormPage() {
   const [error, setError] = useState<string | null>(null);
   const [seasonId, setSeasonId] = useState<number | null>(null);
   const [currentStatus, setCurrentStatus] = useState<CatalogStatus | string>('draft');
+  const [mediaRefreshToken, setMediaRefreshToken] = useState(0);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -114,6 +116,14 @@ export default function EpisodeFormPage() {
         entityId={episodeId}
         currentStatus={currentStatus}
         onChanged={setCurrentStatus}
+        refreshToken={mediaRefreshToken}
+      />
+
+      <MediaLinkingCard
+        ownerType="episode"
+        ownerId={episodeId}
+        contentStatus={String(currentStatus)}
+        onChanged={() => setMediaRefreshToken((n) => n + 1)}
       />
 
       <Card className="bg-card border-border">

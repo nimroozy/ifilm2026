@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { X } from 'lucide-react';
+import { Play, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -22,18 +22,32 @@ import {
   requestFullscreen,
   togglePictureInPicture,
 } from './FullscreenController';
-import type { PlayerTarget, SafePlayerError } from './types';
+import { isAirPlaySupported, isPiPSupported, showAirPlayPicker } from './castAirPlay';
+import { StatsOverlay } from './StatsOverlay';
+import type { PlayerStatsSnapshot, PlayerTarget, SafePlayerError } from './types';
 
 export function VideoPlayer({
   target,
   title,
   onBack,
+  previousEpisodeId: _previousEpisodeId = null,
+  nextEpisodeId = null,
+  autoplayNext = true,
+  onAutoplayNextChange,
+  onPreviousEpisode,
+  onNextEpisode,
 }: {
   target: PlayerTarget;
   title?: string;
   onBack?: () => void;
+  previousEpisodeId?: number | null;
+  nextEpisodeId?: number | null;
+  autoplayNext?: boolean;
+  onAutoplayNextChange?: (value: boolean) => void;
+  onPreviousEpisode?: () => void;
+  onNextEpisode?: () => void;
 }) {
-  const { session, loading, error, setError, refreshAfterGone, retry } = usePlaybackSession(target);
+  const { session, loading, error, refreshAfterGone, retry } = usePlaybackSession(target);
   const [fatal, setFatal] = useState<SafePlayerError | null>(null);
 
   const onGone = useCallback(async () => {
@@ -44,12 +58,18 @@ export function VideoPlayer({
   const {
     videoRef,
     ready,
+    buffering,
     levels,
     currentLevel,
     setQuality,
     audioTracks,
+    audioTrackId,
     setAudioTrack,
+    subtitleTracks,
+    subtitleTrackId,
+    setSubtitleTrack,
     manualQualitySupported,
+    getStats,
   } = useHlsPlayer({
     masterUrl: session?.masterPlaylistUrl ?? null,
     onGone,
@@ -71,6 +91,11 @@ export function VideoPlayer({
   const [showControls, setShowControls] = useState(true);
   const [fs, setFs] = useState(false);
   const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
+  const [airPlaySupported, setAirPlaySupported] = useState(false);
+  const [upNextSeconds, setUpNextSeconds] = useState<number | null>(null);
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [stats, setStats] = useState<PlayerStatsSnapshot | null>(null);
+  const pipSupported = isPiPSupported();
 
   useEffect(() => {
     const video = videoRef.current;
@@ -100,13 +125,48 @@ export function VideoPlayer({
     if (!showControls || !playing) return;
     const id = window.setTimeout(() => setShowControls(false), 3200);
     return () => window.clearTimeout(id);
-  }, [showControls, playing, currentTime]);
+    // Intentionally omit currentTime — timeupdate must not reset the hide timer.
+  }, [showControls, playing]);
 
   useEffect(() => {
     const onFs = () => setFs(isFullscreen());
     document.addEventListener('fullscreenchange', onFs);
     return () => document.removeEventListener('fullscreenchange', onFs);
   }, []);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video) {
+      // WebKit AirPlay with custom controls requires the non-standard attribute.
+      video.setAttribute('x-webkit-airplay', 'allow');
+    }
+    setAirPlaySupported(isAirPlaySupported(video));
+  }, [videoRef, ready, session]);
+
+  useEffect(() => {
+    setUpNextSeconds(null);
+  }, [target]);
+
+  useEffect(() => {
+    if (!autoplayNext || !onNextEpisode || !nextEpisodeId || !duration || duration < 15) {
+      setUpNextSeconds(null);
+      return;
+    }
+    const remaining = duration - currentTime;
+    if (remaining <= 10 && remaining > 0.25 && playing) {
+      setUpNextSeconds(Math.max(1, Math.ceil(remaining)));
+    } else {
+      setUpNextSeconds(null);
+    }
+  }, [autoplayNext, onNextEpisode, nextEpisodeId, duration, currentTime, playing]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !autoplayNext || !onNextEpisode || !nextEpisodeId) return;
+    const onEnded = () => onNextEpisode();
+    video.addEventListener('ended', onEnded);
+    return () => video.removeEventListener('ended', onEnded);
+  }, [videoRef, autoplayNext, onNextEpisode, nextEpisodeId, target]);
 
   const togglePlay = useCallback(() => {
     const video = videoRef.current;
@@ -151,6 +211,16 @@ export function VideoPlayer({
     else void requestFullscreen(rootEl);
   }, [rootEl]);
 
+  const togglePiP = useCallback(() => {
+    const video = videoRef.current;
+    if (video) void togglePictureInPicture(video);
+  }, [videoRef]);
+
+  const toggleCaptions = useCallback(() => {
+    if (subtitleTrackId >= 0) setSubtitleTrack(-1);
+    else if (subtitleTracks[0]) setSubtitleTrack(subtitleTracks[0].id);
+  }, [subtitleTrackId, subtitleTracks, setSubtitleTrack]);
+
   const keyboardHandlers = useMemo(
     () => ({
       togglePlay,
@@ -158,24 +228,70 @@ export function VideoPlayer({
       volumeBy,
       toggleMute,
       toggleFullscreen,
+      togglePiP,
+      toggleCaptions,
+      escape: () => {
+        if (statsOpen) {
+          setStatsOpen(false);
+          return;
+        }
+        if (upNextSeconds != null) {
+          setUpNextSeconds(null);
+          onAutoplayNextChange?.(false);
+          return;
+        }
+        if (isFullscreen()) void exitFullscreen();
+      },
     }),
-    [togglePlay, seekBy, volumeBy, toggleMute, toggleFullscreen]
+    [
+      togglePlay,
+      seekBy,
+      volumeBy,
+      toggleMute,
+      toggleFullscreen,
+      togglePiP,
+      toggleCaptions,
+      statsOpen,
+      upNextSeconds,
+      onAutoplayNextChange,
+    ]
   );
   useKeyboardController(Boolean(session) && !fatal && !error, keyboardHandlers);
+
+  useEffect(() => {
+    if (!statsOpen) return;
+    const id = window.setInterval(() => {
+      setStats(getStats());
+    }, 500);
+    setStats(getStats());
+    return () => window.clearInterval(id);
+  }, [statsOpen, getStats]);
+
+  // Ctrl+Shift+D toggles diagnostics (no token leakage)
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.shiftKey && (event.key === 'd' || event.key === 'D')) {
+        event.preventDefault();
+        setStatsOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const displayError = fatal || error;
 
   return (
     <div
       ref={setRootEl}
-      className="fixed inset-0 z-50 flex flex-col bg-black text-white"
+      className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-black text-white overscroll-none"
       data-testid="video-player"
       onPointerMove={() => setShowControls(true)}
       onClick={() => setShowControls(true)}
     >
       <div
-        className={`absolute top-0 inset-x-0 z-20 flex items-center justify-between p-3 bg-gradient-to-b from-black/70 to-transparent transition-opacity ${
-          showControls ? 'opacity-100' : 'opacity-0'
+        className={`absolute top-0 inset-x-0 z-30 flex items-center justify-between p-3 bg-gradient-to-b from-black/70 to-transparent transition-opacity ${
+          showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
       >
         <Button
@@ -188,7 +304,16 @@ export function VideoPlayer({
           <X className="h-6 w-6" />
         </Button>
         <h1 className="text-sm font-medium truncate max-w-[70%]">{title || 'Playback'}</h1>
-        <span className="w-10" />
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-white/70 hover:bg-white/10 text-xs"
+          onClick={() => setStatsOpen((v) => !v)}
+          aria-pressed={statsOpen}
+          data-testid="toggle-stats"
+        >
+          Stats
+        </Button>
       </div>
 
       <div className="relative flex-1 flex items-center justify-center">
@@ -199,15 +324,55 @@ export function VideoPlayer({
           controls={false}
           aria-label={title || 'Video'}
           data-testid="player-video"
+          onDoubleClick={(e) => {
+            e.preventDefault();
+            const rect = e.currentTarget.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            if (x < rect.width / 2) seekBy(-10);
+            else seekBy(10);
+          }}
         />
 
         {(loading || (!ready && session && !displayError)) && (
           <PlayerLoadingState label={loading ? 'Starting secure session…' : 'Loading stream…'} />
         )}
 
+        {buffering && ready && !displayError ? (
+          <div
+            className="pointer-events-none absolute inset-0 flex items-center justify-center"
+            data-testid="buffering-indicator"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="h-12 w-12 animate-spin rounded-full border-2 border-white/30 border-t-primary" />
+          </div>
+        ) : null}
+
+        {session && !displayError && !playing && ready ? (
+          <div
+            className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-black/20"
+            data-testid="center-play-layer"
+          >
+            <button
+              type="button"
+              className="pointer-events-auto flex h-16 w-16 items-center justify-center rounded-full bg-black/60 text-white shadow-lg ring-1 ring-white/20"
+              onClick={(e) => {
+                e.stopPropagation();
+                togglePlay();
+              }}
+              aria-label="Play"
+              data-testid="center-play"
+            >
+              <Play className="h-8 w-8 fill-white" />
+            </button>
+          </div>
+        ) : null}
+
         {displayError ? (
           <PlaybackError error={displayError} onRetry={() => { setFatal(null); void retry(); }} onBack={onBack} />
         ) : null}
+
+        <StatsOverlay open={statsOpen} stats={stats} onClose={() => setStatsOpen(false)} />
 
         {session && !displayError ? (
           <PlayerControls
@@ -222,13 +387,21 @@ export function VideoPlayer({
             currentLevel={currentLevel}
             manualQualitySupported={manualQualitySupported}
             audioTracks={audioTracks}
+            audioTrackId={audioTrackId}
+            subtitleTracks={subtitleTracks}
+            subtitleTrackId={subtitleTrackId}
             playbackRate={playbackRate}
             isFs={fs}
+            pipSupported={pipSupported}
+            airPlaySupported={airPlaySupported}
+            hasPreviousEpisode={Boolean(onPreviousEpisode)}
+            hasNextEpisode={Boolean(onNextEpisode)}
             onTogglePlay={togglePlay}
             onSeek={(t) => {
               const video = videoRef.current;
               if (video) video.currentTime = t;
             }}
+            onSeekBy={seekBy}
             onVolume={(v) => {
               const video = videoRef.current;
               if (!video) return;
@@ -240,17 +413,56 @@ export function VideoPlayer({
             onToggleMute={toggleMute}
             onQuality={setQuality}
             onAudio={setAudioTrack}
+            onSubtitle={setSubtitleTrack}
             onRate={(rate) => {
               const video = videoRef.current;
               if (video) video.playbackRate = rate;
               setPlaybackRate(rate);
             }}
             onFullscreen={toggleFullscreen}
-            onPiP={() => {
-              const video = videoRef.current;
-              if (video) void togglePictureInPicture(video);
-            }}
+            onPiP={togglePiP}
+            onAirPlay={() => showAirPlayPicker(videoRef.current)}
+            onStartOver={startOver}
+            onPreviousEpisode={onPreviousEpisode}
+            onNextEpisode={onNextEpisode}
           />
+        ) : null}
+
+        {upNextSeconds != null && nextEpisodeId != null ? (
+          <div
+            className="absolute bottom-24 end-4 z-30 max-w-xs rounded-lg border border-white/20 bg-black/80 p-4 text-sm shadow-lg"
+            data-testid="up-next-overlay"
+            role="status"
+            aria-live="polite"
+          >
+            <p className="font-medium">Next episode in {upNextSeconds}s</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button size="sm" onClick={() => onNextEpisode?.()}>
+                Play now
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-white/30 bg-transparent"
+                onClick={() => {
+                  setUpNextSeconds(null);
+                  onAutoplayNextChange?.(false);
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+            {onAutoplayNextChange ? (
+              <label className="mt-3 flex items-center gap-2 text-xs text-white/70">
+                <input
+                  type="checkbox"
+                  checked={autoplayNext}
+                  onChange={(e) => onAutoplayNextChange(e.target.checked)}
+                />
+                Autoplay next episode
+              </label>
+            ) : null}
+          </div>
         ) : null}
       </div>
 

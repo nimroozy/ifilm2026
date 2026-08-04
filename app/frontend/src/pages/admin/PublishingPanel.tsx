@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, Clock, PackageCheck, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -34,6 +35,8 @@ interface PublishingPanelProps {
   entityId: number;
   currentStatus: CatalogStatus | string;
   onChanged: (status: CatalogStatus) => void;
+  /** Increment to force a readiness reload after media link/detach. */
+  refreshToken?: number;
 }
 
 const actionLabels: Record<WorkflowAction, string> = {
@@ -60,6 +63,7 @@ export default function PublishingPanel({
   entityId,
   currentStatus,
   onChanged,
+  refreshToken = 0,
 }: PublishingPanelProps) {
   const [readiness, setReadiness] = useState<PublicationReadinessDto | null>(null);
   const [history, setHistory] = useState<PublicationHistoryEventDto[]>([]);
@@ -88,7 +92,7 @@ export default function PublishingPanel({
 
   useEffect(() => {
     load();
-  }, [load]);
+  }, [load, refreshToken]);
 
   const isAllowed = (action: WorkflowAction) =>
     Boolean(readiness?.allowed_actions.includes(action));
@@ -229,6 +233,27 @@ export default function PublishingPanel({
                   </li>
                 ))}
               </ul>
+              {(entityType === 'movie' || entityType === 'episode') &&
+              readiness.issues.some((i) =>
+                ['no_media_asset', 'no_active_hls_package', 'media_asset_unusable'].includes(i.code)
+              ) ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button type="button" size="sm" variant="secondary" asChild>
+                    <Link
+                      to={`/admin/tools/upload?owner_type=${entityType}&owner_id=${entityId}`}
+                      data-testid="readiness-upload-link"
+                    >
+                      Upload and Link
+                    </Link>
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" asChild>
+                    <a href="#media-linking-title">Open Media card</a>
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" asChild>
+                    <Link to="/admin/media/processing">View Processing</Link>
+                  </Button>
+                </div>
+              ) : null}
             </AlertDescription>
           </Alert>
         )}

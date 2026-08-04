@@ -22,9 +22,23 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ["'Inter'", "'Helvetica Neue'", 'Arial', 'sans-serif'],
-        serif: ["'DM Serif Display'", 'Georgia', 'serif'],
-        mono: ["'JetBrains Mono'", 'Menlo', 'monospace'],
+        sans: ["'Outfit'", "'Segoe UI'", 'sans-serif'],
+        serif: ["'Fraunces'", "'Times New Roman'", 'serif'],
+        display: ["'Fraunces'", "'Times New Roman'", 'serif'],
+        mono: ["'IBM Plex Mono'", 'ui-monospace', 'monospace'],
+      },
+      screens: {
+        xs: '390px',
+        tablet: '768px',
+        desktop: '1440px',
+      },
+      maxWidth: {
+        content: 'var(--content-max)',
+      },
+      transitionDuration: {
+        fast: 'var(--duration-fast)',
+        normal: 'var(--duration-normal)',
+        slow: 'var(--duration-slow)',
       },
       colors: {
         border: 'hsl(var(--border))',

@@ -13,6 +13,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { adminApi, ApiError, type CatalogStatus, type GenreDto } from '@/lib/api';
 import { csvToList, ErrorState, listToCsv, LoadingBlock, POSTER_FALLBACK } from './adminShared';
 import PublishingPanel from './PublishingPanel';
+import MediaLinkingCard from './MediaLinkingCard';
 
 export const movieFormSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -85,6 +86,7 @@ export default function MovieFormPage() {
   const [error, setError] = useState<string | null>(null);
   const [previewBroken, setPreviewBroken] = useState(false);
   const [currentStatus, setCurrentStatus] = useState<CatalogStatus | string>('draft');
+  const [mediaRefreshToken, setMediaRefreshToken] = useState(0);
 
   const form = useForm<MovieFormValues>({
     resolver: zodResolver(movieFormSchema),
@@ -226,6 +228,16 @@ export default function MovieFormPage() {
           entityId={Number(id)}
           currentStatus={currentStatus}
           onChanged={setCurrentStatus}
+          refreshToken={mediaRefreshToken}
+        />
+      )}
+
+      {isEdit && id && (
+        <MediaLinkingCard
+          ownerType="movie"
+          ownerId={Number(id)}
+          contentStatus={String(currentStatus)}
+          onChanged={() => setMediaRefreshToken((n) => n + 1)}
         />
       )}
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Monitor, Smartphone, Tablet, Tv, Trash2, Clock, Play, Star, X, AlertCircle, CheckCircle } from 'lucide-react';
+import { User, Monitor, Smartphone, Tablet, Tv, Trash2, Clock, Play, X, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useLang, useAuth } from '@/components/CustomerLayout';
-import { devices, episodes, watchHistory, movies, series } from '@/data/mockData';
+import { devices, episodes, watchHistory } from '@/data/mockData';
 import { api, ApiError, tokenStore, type DeviceDto, type WatchProgressDto } from '@/lib/api';
 import { isMockMode } from '@/lib/dataMode';
 
@@ -73,7 +73,7 @@ export function LoginPage() {
     <div className="min-h-screen flex items-center justify-center px-4">
       <Card className="w-full max-w-md bg-card border-border">
         <CardHeader className="text-center">
-          <h1 className="text-3xl font-serif font-bold text-primary mb-2">Mobin Play</h1>
+          <h1 className="mb-2 font-display text-3xl font-bold text-primary">iFilm</h1>
           <CardTitle className="text-xl text-foreground">{t.login.title}</CardTitle>
           <p className="text-sm text-muted-foreground mt-2">{t.login.note}</p>
         </CardHeader>
@@ -177,8 +177,8 @@ export function ProfilePage() {
           <div className="md:col-span-2 space-y-4">
             {[
               { label: t.profile.devices, path: '/devices', count: deviceCount },
-              { label: t.profile.watchlist, path: '/watchlist', count: mockMode ? '12 items' : 'Open' },
-              { label: t.profile.history, path: '/history', count: mockMode ? '24 watched' : 'Open' },
+              { label: t.profile.watchlist, path: '/watchlist', count: 'Coming soon' },
+              { label: t.profile.history, path: '/history', count: 'Open' },
             ].map(item => (
               <Card key={item.path} className="bg-card border-border hover:bg-card/80 cursor-pointer transition-colors" onClick={() => navigate(item.path)}>
                 <CardContent className="flex items-center justify-between py-4">
@@ -190,23 +190,11 @@ export function ProfilePage() {
 
             <Card className="bg-card border-border">
               <CardHeader><CardTitle className="text-base">{t.profile.settings}</CardTitle></CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Language</span>
-                  <Badge variant="outline">فارسی</Badge>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Subtitle</span>
-                  <Badge variant="outline">English</Badge>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Quality</span>
-                  <Badge variant="outline">Auto</Badge>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Auto-play</span>
-                  <Badge variant="outline">On</Badge>
-                </div>
+              <CardContent className="space-y-3 text-sm text-muted-foreground">
+                <p>
+                  Playback preferences such as quality, captions, and autoplay next episode are stored on this device
+                  inside the player.
+                </p>
               </CardContent>
             </Card>
           </div>
@@ -365,43 +353,23 @@ export function DevicesPage() {
 export function WatchlistPage() {
   const { t } = useLang();
   const navigate = useNavigate();
-  const [watchlist, setWatchlist] = useState(() => [...movies.slice(0, 5), ...series.slice(0, 3)]);
 
   return (
     <div className="min-h-screen">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
-        <h1 className="text-2xl md:text-3xl font-serif font-bold text-foreground mb-6">{t.profile.watchlist}</h1>
-
-        {watchlist.length === 0 ? (
-          <div className="text-center py-20 text-muted-foreground">
-            <p className="text-lg">Your watchlist is empty</p>
-            <Button className="mt-4" onClick={() => navigate('/movies')}>Browse Movies</Button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-            {watchlist.map((item: any) => (
-              <div key={`${item.type}-${item.id}`} className="group relative">
-                <div onClick={() => navigate(item.type === 'series' ? `/series/${item.id}` : `/movie/${item.id}`)} className="cursor-pointer">
-                  <div className="relative aspect-[2/3] rounded-lg overflow-hidden bg-muted mb-2">
-                    <img src={item.poster} alt={item.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
-                      <Play className="h-10 w-10 text-white fill-white" />
-                    </div>
-                  </div>
-                  <h3 className="text-sm font-medium text-foreground truncate">{item.title}</h3>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute top-2 right-2 h-7 w-7 bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={() => setWatchlist(prev => prev.filter(w => w.id !== item.id || w.type !== item.type))}
-                >
-                  <X className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
+        <h1 className="mb-6 font-display text-2xl font-bold text-foreground md:text-3xl">
+          {t.profile.watchlist}
+        </h1>
+        <Card className="border-border bg-card" data-testid="watchlist-deferred-page">
+          <CardContent className="space-y-4 py-10 text-center">
+            <p className="text-lg text-foreground">Watchlist sync is coming soon</p>
+            <p className="mx-auto max-w-md text-sm text-muted-foreground">
+              A watchlist table exists in the database, but customer APIs are not exposed yet. Mock watchlists have been
+              removed so production does not show fake titles.
+            </p>
+            <Button onClick={() => navigate('/movies')}>Browse movies</Button>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { LangProvider } from '@/components/CustomerLayout';
-import { MovieDetailsPage, MoviesPage } from '../Browse';
+import { ChildrenPage, MovieDetailsPage, MoviesPage } from '../Browse';
 
 const fetchMovie = vi.fn();
 const fetchMovies = vi.fn();
@@ -119,5 +119,54 @@ describe('demo catalog movie UI', () => {
 
     expect(await screen.findByText('TMDB Demo Title')).toBeInTheDocument();
     expect(screen.getByTestId('demo-clip-badge')).toHaveTextContent('Demo Clip');
+  });
+
+  it('children route loads Family/Animation catalog, not generic Movies', async () => {
+    fetchGenres.mockResolvedValue([{ id: 1, name: 'Family' }, { id: 2, name: 'Animation' }, { id: 3, name: 'Action' }]);
+    fetchMovies.mockImplementation(async (opts?: { genre?: string }) => {
+      if (opts?.genre === 'Family') {
+        return {
+          items: [movie({ id: 1, title: 'Family Title', genres: ['Family'] })],
+          total: 1,
+          page: 1,
+          page_size: 100,
+        };
+      }
+      if (opts?.genre === 'Animation') {
+        return {
+          items: [movie({ id: 2, title: 'Animation Title', genres: ['Animation'] })],
+          total: 1,
+          page: 1,
+          page_size: 100,
+        };
+      }
+      return {
+        items: [movie({ id: 99, title: 'Unfiltered Action', genres: ['Action'] })],
+        total: 1,
+        page: 1,
+        page_size: 100,
+      };
+    });
+
+    render(
+      <LangProvider>
+        <MemoryRouter initialEntries={['/children']}>
+          <Routes>
+            <Route path="/children" element={<ChildrenPage />} />
+          </Routes>
+        </MemoryRouter>
+      </LangProvider>
+    );
+
+    expect(await screen.findByTestId('children-page')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/Children|کودکان|ماشومان/);
+    expect(await screen.findByText('Family Title')).toBeInTheDocument();
+    expect(screen.getByText('Animation Title')).toBeInTheDocument();
+    expect(screen.queryByText('Unfiltered Action')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('movies-page')).not.toBeInTheDocument();
+
+    const genres = fetchMovies.mock.calls.map((call) => (call[0] as { genre?: string } | undefined)?.genre);
+    expect(genres).toEqual(expect.arrayContaining(['Family', 'Animation']));
+    expect(genres).not.toContain(undefined);
   });
 });

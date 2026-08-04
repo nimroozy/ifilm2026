@@ -63,11 +63,21 @@ export default function DashboardPage() {
       </div>
       <Card className="bg-card border-border">
         <CardHeader>
-          <CardTitle className="text-base">Notes</CardTitle>
+          <CardTitle className="text-base">Operations</CardTitle>
         </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          Upload, encoding, CDN, and Radius integrations are disabled in this milestone. Use the catalog
-          sections to manage movies, series, seasons, episodes, and genres.
+        <CardContent className="space-y-2 text-sm text-muted-foreground" data-testid="dashboard-ops-deferred">
+          <p>
+            Use Catalog for metadata, Media → Upload/Processing for packaging, and Publishing readiness on each
+            movie/episode edit page before publish.
+          </p>
+          <p>
+            Live Radius remains disabled. CDN and DRM are deferred. Link media from the Media card on movie and
+            episode edit pages.
+          </p>
+          <p>
+            Full operational metrics (failed uploads/probes/encodes, active packages, worker health) are deferred to a
+            separate issue. This dashboard shows catalog counts from the live admin API only — no decorative charts.
+          </p>
         </CardContent>
       </Card>
     </div>

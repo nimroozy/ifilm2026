@@ -17,7 +17,14 @@ export function hasDemoClip(item: unknown): boolean {
 }
 
 export function canPlayFullMovie(item: unknown): boolean {
-  return !isDemoCatalogItem(item);
+  if (isDemoCatalogItem(item)) return false;
+  const hlsPath = field<string | null>(item, 'hlsPath');
+  if (typeof hlsPath === 'string' && hlsPath.trim().length > 0) return true;
+  // Explicit playability flags from API when present
+  if (field<boolean>(item, 'playable') === true) return true;
+  if (field<boolean>(item, 'hasPlayablePackage') === true) return true;
+  // Without a known playable package, do not claim full playback.
+  return false;
 }
 
 export function fullMovieUnavailableLabel(): string {

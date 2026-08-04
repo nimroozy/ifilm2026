@@ -4,9 +4,7 @@ import {
   Play,
   Star,
   Clock,
-  Heart,
   Plus,
-  Share2,
   Grid,
   List,
   Search as SearchIcon,
@@ -19,7 +17,6 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useLang } from '@/components/CustomerLayout';
-import { movies as mockMovies } from '@/data/mockData';
 import {
   fetchGenres,
   fetchMovie,
@@ -72,8 +69,29 @@ function DemoClipBadge({ item }: { item: unknown }) {
   );
 }
 
+const CHILDREN_GENRES = ['Family', 'Animation'] as const;
+
+function mergeMoviesById(pages: Array<{ items: CatalogMovie[] }>): CatalogMovie[] {
+  const byId = new Map<number, CatalogMovie>();
+  for (const page of pages) {
+    for (const movie of page.items) {
+      byId.set(movie.id, movie);
+    }
+  }
+  return [...byId.values()];
+}
+
+function sortMergedMovies(movies: CatalogMovie[], sort: string): CatalogMovie[] {
+  const copy = [...movies];
+  if (sort === 'rating') return copy.sort((a, b) => b.rating - a.rating);
+  if (sort === 'popular') return copy.sort((a, b) => b.views - a.views);
+  if (sort === 'title') return copy.sort((a, b) => a.title.localeCompare(b.title));
+  // newest
+  return copy.sort((a, b) => b.year - a.year || b.id - a.id);
+}
+
 // ============ MOVIES PAGE ============
-export function MoviesPage() {
+export function MoviesPage({ audience = 'all' }: { audience?: 'all' | 'children' } = {}) {
   const { t } = useLang();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
@@ -84,29 +102,56 @@ export function MoviesPage() {
   const [genreOptions, setGenreOptions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const isChildren = audience === 'children';
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [page, genres] = await Promise.all([
-        fetchMovies({
-          q: search || undefined,
-          genre: genre === 'all' ? undefined : genre,
-          sort: sortParam(sort),
-          page_size: 100,
-        }),
-        fetchGenres(),
-      ]);
-      setItems(page.items);
-      setGenreOptions(genres.map((g) => g.name));
+      if (isChildren) {
+        const selectedGenre = genre === 'all' ? null : genre;
+        const genreFetches =
+          selectedGenre && (CHILDREN_GENRES as readonly string[]).includes(selectedGenre)
+            ? [
+                fetchMovies({
+                  q: search || undefined,
+                  genre: selectedGenre,
+                  sort: sortParam(sort),
+                  page_size: 100,
+                }),
+              ]
+            : CHILDREN_GENRES.map((childGenre) =>
+                fetchMovies({
+                  q: search || undefined,
+                  genre: childGenre,
+                  sort: sortParam(sort),
+                  page_size: 100,
+                })
+              );
+        const [genres, ...pages] = await Promise.all([fetchGenres(), ...genreFetches]);
+        const available = new Set(genres.map((g) => g.name));
+        setItems(sortMergedMovies(mergeMoviesById(pages), sort));
+        setGenreOptions(CHILDREN_GENRES.filter((g) => available.has(g)));
+      } else {
+        const [page, genres] = await Promise.all([
+          fetchMovies({
+            q: search || undefined,
+            genre: genre === 'all' ? undefined : genre,
+            sort: sortParam(sort),
+            page_size: 100,
+          }),
+          fetchGenres(),
+        ]);
+        setItems(page.items);
+        setGenreOptions(genres.map((g) => g.name));
+      }
     } catch (err) {
       setItems([]);
       setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Failed to load movies');
     } finally {
       setLoading(false);
     }
-  }, [search, genre, sort]);
+  }, [search, genre, sort, isChildren]);
 
   useEffect(() => {
     const timer = window.setTimeout(load, 200);
@@ -114,9 +159,11 @@ export function MoviesPage() {
   }, [load]);
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen" data-testid={isChildren ? 'children-page' : 'movies-page'}>
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
-        <h1 className="text-2xl md:text-3xl font-serif font-bold text-foreground mb-6">{t.nav.movies}</h1>
+        <h1 className="text-2xl md:text-3xl font-serif font-bold text-foreground mb-6">
+          {isChildren ? t.nav.children : t.nav.movies}
+        </h1>
         <div className="flex flex-wrap items-center gap-3 mb-6">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -230,6 +277,11 @@ export function MoviesPage() {
       </div>
     </div>
   );
+}
+
+/** Family / Animation catalog — distinct from the generic Movies browse page. */
+export function ChildrenPage() {
+  return <MoviesPage audience="children" />;
 }
 
 // ============ SERIES PAGE ============
@@ -362,8 +414,6 @@ export function MovieDetailsPage() {
   const [related, setRelated] = useState<CatalogMovie[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [inWatchlist, setInWatchlist] = useState(false);
-  const [liked, setLiked] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -475,47 +525,40 @@ export function MovieDetailsPage() {
                 <Button
                   size="lg"
                   onClick={() => navigate(`/player/movie/${movie.id}`)}
-                  className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 font-semibold"
-                  aria-label={`Play ${movie.title}`}
+                  className="gap-2 font-semibold"
+                  aria-label={`Watch full movie ${movie.title}`}
                 >
                   <Play className="h-5 w-5 fill-current" />
-                  {t.movie.play}
+                  Watch Full Movie
                 </Button>
-              ) : hasDemoClip(movie) ? (
+              ) : null}
+              {hasDemoClip(movie) ? (
                 <Button
                   size="lg"
+                  variant={canPlayFullMovie(movie) ? 'secondary' : 'default'}
                   onClick={() => navigate(`/player/movie/${movie.id}`)}
-                  className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 font-semibold"
+                  className="gap-2 font-semibold"
                   aria-label={`Play demo clip for ${movie.title}`}
                 >
                   <Play className="h-5 w-5 fill-current" />
                   Play Demo Clip
                 </Button>
               ) : null}
-              {movieIsDemo && (
+              {!canPlayFullMovie(movie) ? (
                 <Badge variant="secondary" className="px-3 py-2 text-sm" data-testid="full-movie-unavailable">
                   {fullMovieUnavailableLabel()}
                 </Badge>
-              )}
+              ) : null}
               <Button
                 variant="outline"
                 size="lg"
-                onClick={() => setInWatchlist(!inWatchlist)}
-                className={`gap-2 ${inWatchlist ? 'border-primary text-primary' : ''}`}
+                disabled
+                title="Watchlist sync is not available yet"
+                className="gap-2 opacity-70"
+                data-testid="watchlist-deferred"
               >
                 <Plus className="h-5 w-5" />
-                {t.movie.watchlist}
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setLiked(!liked)}
-                className={liked ? 'text-destructive' : ''}
-              >
-                <Heart className={`h-5 w-5 ${liked ? 'fill-current' : ''}`} />
-              </Button>
-              <Button variant="ghost" size="icon">
-                <Share2 className="h-5 w-5" />
+                Watchlist (soon)
               </Button>
             </div>
             {movieIsDemo && (
@@ -664,25 +707,44 @@ export function SeriesDetailsPage() {
                   </a>
                 </Button>
               )}
-              {canPlayFullMovie(show) || hasDemoClip(show) ? (
-                <Button
-                  size="lg"
-                  onClick={() => {
-                    const first = showEpisodes[0];
-                    if (first) navigate(`/player/episode/${first.id}`);
-                  }}
-                  className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2"
-                  aria-label={hasDemoClip(show) ? `Play demo clip for ${show.title}` : `Play ${show.title}`}
-                >
-                  <Play className="h-5 w-5 fill-current" />
-                  {hasDemoClip(show) ? 'Play Demo Clip' : t.movie.play}
-                </Button>
-              ) : null}
-              {showIsDemo && (
-                <Badge variant="secondary" className="px-3 py-2 text-sm" data-testid="full-series-unavailable">
-                  Full Series Unavailable
+              {(() => {
+                const playableEpisode = showEpisodes.find(
+                  (ep) => canPlayFullMovie(ep) || hasDemoClip(ep)
+                );
+                if (playableEpisode) {
+                  return (
+                    <Button
+                      size="lg"
+                      onClick={() =>
+                        navigate(
+                          `/player/episode/${playableEpisode.id}?series=${encodeURIComponent(String(show.id))}&season=${selectedSeason}`
+                        )
+                      }
+                      className="gap-2"
+                      aria-label={
+                        hasDemoClip(playableEpisode)
+                          ? `Play demo clip for ${show.title}`
+                          : `Play ${show.title}`
+                      }
+                    >
+                      <Play className="h-5 w-5 fill-current" />
+                      {hasDemoClip(playableEpisode) && !canPlayFullMovie(playableEpisode)
+                        ? 'Play Demo Clip'
+                        : t.movie.play}
+                    </Button>
+                  );
+                }
+                return (
+                  <Badge variant="secondary" className="px-3 py-2 text-sm" data-testid="full-series-unavailable">
+                    Full Series Unavailable
+                  </Badge>
+                );
+              })()}
+              {showIsDemo ? (
+                <Badge variant="outline" className="px-3 py-2 text-sm">
+                  Demo catalog
                 </Badge>
-              )}
+              ) : null}
             </div>
             {showIsDemo && (
               <p className="text-xs text-muted-foreground">
@@ -732,30 +794,57 @@ export function SeriesDetailsPage() {
 
           <div className="space-y-3">
             {showEpisodes.length > 0 ? (
-              showEpisodes.map((ep) => (
-                <div
-                  key={ep.id}
-                  onClick={() => navigate(`/player/episode/${ep.id}`)}
-                  className="flex gap-4 p-3 rounded-lg bg-card hover:bg-card/80 cursor-pointer transition-colors"
-                >
-                  <div className="relative w-[120px] md:w-[160px] flex-shrink-0">
-                    <img
-                      src={ep.thumbnail || show.poster}
-                      alt={ep.title}
-                      className="w-full aspect-video rounded object-cover"
-                    />
+              showEpisodes.map((ep) => {
+                const playable = canPlayFullMovie(ep) || hasDemoClip(ep);
+                return (
+                  <div
+                    key={ep.id}
+                    role={playable ? 'button' : undefined}
+                    tabIndex={playable ? 0 : undefined}
+                    onClick={() => {
+                      if (!playable) return;
+                      navigate(
+                        `/player/episode/${ep.id}?series=${encodeURIComponent(String(show.id))}&season=${selectedSeason}`
+                      );
+                    }}
+                    onKeyDown={(e) => {
+                      if (!playable) return;
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        navigate(
+                          `/player/episode/${ep.id}?series=${encodeURIComponent(String(show.id))}&season=${selectedSeason}`
+                        );
+                      }
+                    }}
+                    className={`flex gap-4 rounded-lg border border-border p-3 transition-colors ${
+                      playable ? 'cursor-pointer bg-card hover:bg-muted/40' : 'cursor-default bg-muted/20 opacity-80'
+                    }`}
+                    data-testid={`episode-row-${ep.id}`}
+                  >
+                    <div className="relative w-[120px] md:w-[160px] flex-shrink-0">
+                      <img
+                        src={ep.thumbnail || show.poster}
+                        alt=""
+                        loading="lazy"
+                        className="w-full aspect-video rounded object-cover"
+                      />
+                      {hasDemoClip(ep) ? (
+                        <Badge className="absolute start-1 top-1 bg-emerald-600/90 text-[10px]">Demo Clip</Badge>
+                      ) : null}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-medium text-foreground text-sm">
+                        E{ep.episode} - {ep.title}
+                      </h4>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {ep.duration} {t.common.min}
+                        {!playable ? ' · Unavailable' : ''}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{ep.description}</p>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-medium text-foreground text-sm">
-                      E{ep.episode} - {ep.title}
-                    </h4>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {ep.duration} {t.common.min}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{ep.description}</p>
-                  </div>
-                </div>
-              ))
+                );
+              })
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 <p>No episodes available for this season yet.</p>
@@ -769,9 +858,6 @@ export function SeriesDetailsPage() {
 }
 
 // ============ VIDEO PLAYER PAGE ============
-// Real adaptive HLS player lives in pages/PlayerPage.tsx (Phase 8).
-export { default as PlayerPage } from '@/pages/PlayerPage';
-
 // ============ SEARCH PAGE ============
 export function SearchPage() {
   const { t } = useLang();

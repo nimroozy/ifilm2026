@@ -6,7 +6,14 @@ import CustomerLayout, { LangProvider, AuthProvider } from '@/components/Custome
 import DocumentLangSync from '@/components/DocumentLangSync';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Index from '@/pages/Index';
-import { MoviesPage, SeriesPage, MovieDetailsPage, SeriesDetailsPage, SearchPage } from '@/pages/Browse';
+import {
+  MoviesPage,
+  ChildrenPage,
+  SeriesPage,
+  MovieDetailsPage,
+  SeriesDetailsPage,
+  SearchPage,
+} from '@/pages/Browse';
 import PlayerPage from '@/pages/PlayerPage';
 import { LoginPage, ProfilePage, DevicesPage, WatchlistPage, HistoryPage } from '@/pages/Account';
 import RequireAdmin from '@/pages/admin/RequireAdmin';
@@ -43,7 +50,7 @@ const AppRoutes = () => (
     <Route path="/" element={<CustomerRoute><Index /></CustomerRoute>} />
     <Route path="/movies" element={<CustomerRoute><MoviesPage /></CustomerRoute>} />
     <Route path="/series" element={<CustomerRoute><SeriesPage /></CustomerRoute>} />
-    <Route path="/children" element={<CustomerRoute><MoviesPage /></CustomerRoute>} />
+    <Route path="/children" element={<CustomerRoute><ChildrenPage /></CustomerRoute>} />
     <Route path="/movie/:id" element={<CustomerRoute><MovieDetailsPage /></CustomerRoute>} />
     <Route path="/series/:id" element={<CustomerRoute><SeriesDetailsPage /></CustomerRoute>} />
     <Route path="/search" element={<CustomerRoute><SearchPage /></CustomerRoute>} />

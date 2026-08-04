@@ -161,7 +161,7 @@ describe('media upload admin pages', () => {
     const input = screen.getByTestId('media-file-input') as HTMLInputElement;
     const file = new File([new Uint8Array([1, 2, 3, 4])], 'a.mp4', { type: 'video/mp4' });
     fireEvent.change(input, { target: { files: [file] } });
-    fireEvent.click(screen.getByTestId('start-upload'));
+    fireEvent.click(screen.getByTestId('media-upload-submit'));
     await waitFor(() => expect(createMediaUploadSession).toHaveBeenCalled());
     await waitFor(() => expect(uploadMediaSessionFile).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByText('DETAIL')).toBeInTheDocument());

@@ -171,6 +171,7 @@ export async function fetchSeriesDetail(idOrSlug: number | string): Promise<Seri
         metadataSource: '',
         demoOwned: false,
         hasDemoClip: false,
+        hlsPath: null as string | null,
       }));
     const seasonNumbers = Array.from(new Set(eps.map((e) => e.season))).sort((a, b) => a - b);
     const seasons =

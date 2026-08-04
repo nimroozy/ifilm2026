@@ -9,8 +9,6 @@ import {
   Cpu,
   PlayCircle,
   Database,
-  Server,
-  Users,
   Menu,
   LogOut,
   ArrowUpCircle,
@@ -20,19 +18,47 @@ import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { adminApi, tokenStore, type AdminUserDto } from '@/lib/api';
 
-const navItems = [
-  { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/admin/movies', label: 'Movies', icon: Film },
-  { to: '/admin/series', label: 'Series', icon: Tv },
-  { to: '/admin/genres', label: 'Genres', icon: Tags },
-  { to: '/admin/tools/upload', label: 'Upload', icon: Upload },
-  { to: '/admin/tools/tmdb', label: 'TMDB Import', icon: Database },
-  { to: '/admin/media/processing', label: 'Processing', icon: Cpu },
-  { to: '/admin/media/playback-sessions', label: 'Playback', icon: PlayCircle },
-  { to: '/admin/system/updates', label: 'Updates', icon: ArrowUpCircle },
-  { to: '/admin/tools/encoding', label: 'Encoding (legacy)', icon: Film },
-  { to: '/admin/tools/cdn', label: 'CDN (soon)', icon: Server },
-  { to: '/admin/tools/users', label: 'Users (soon)', icon: Users },
+type NavItem = {
+  to: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  end?: boolean;
+};
+
+type NavGroup = {
+  label: string;
+  items: NavItem[];
+};
+
+const navGroups: NavGroup[] = [
+  {
+    label: 'Overview',
+    items: [{ to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true }],
+  },
+  {
+    label: 'Catalog',
+    items: [
+      { to: '/admin/movies', label: 'Movies', icon: Film },
+      { to: '/admin/series', label: 'Series', icon: Tv },
+      { to: '/admin/genres', label: 'Genres', icon: Tags },
+    ],
+  },
+  {
+    label: 'Media',
+    items: [
+      { to: '/admin/tools/upload', label: 'Upload', icon: Upload },
+      { to: '/admin/media/processing', label: 'Processing', icon: Cpu },
+      { to: '/admin/media/playback-sessions', label: 'Playback Sessions', icon: PlayCircle },
+    ],
+  },
+  {
+    label: 'Metadata',
+    items: [{ to: '/admin/tools/tmdb', label: 'TMDB Import', icon: Database }],
+  },
+  {
+    label: 'System',
+    items: [{ to: '/admin/system/updates', label: 'Updates', icon: ArrowUpCircle }],
+  },
 ];
 
 export default function AdminLayout() {
@@ -40,6 +66,7 @@ export default function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [admin, setAdmin] = useState<AdminUserDto | null>(null);
   const [versionLabel, setVersionLabel] = useState<string | null>(null);
+  const [envBadge, setEnvBadge] = useState<string | null>(null);
 
   useEffect(() => {
     const previousTitle = document.title;
@@ -57,7 +84,10 @@ export default function AdminLayout() {
         if (!cancelled) setAdmin(me);
         if ((me.permissions || []).includes('system_updates.read')) {
           return adminApi.getSystemVersion().then((v) => {
-            if (!cancelled) setVersionLabel(`${v.version}`);
+            if (!cancelled) {
+              setVersionLabel(`${v.version}`);
+              setEnvBadge(v.deployment_mode || v.update_channel || null);
+            }
           });
         }
         return undefined;
@@ -78,8 +108,13 @@ export default function AdminLayout() {
   const SidebarContent = () => (
     <div className="flex h-full flex-col text-left" data-testid="admin-sidebar-content">
       <div className="border-b border-border p-4">
-        <h2 className="font-serif text-xl font-bold text-primary">iFilm</h2>
-        <p className="mt-1 text-xs text-muted-foreground">Admin Panel</p>
+        <h2 className="font-display text-xl font-bold tracking-tight text-foreground">iFilm</h2>
+        <p className="mt-1 text-xs text-muted-foreground">Content Operations</p>
+        {envBadge ? (
+          <Badge variant="outline" className="mt-2 text-[10px] uppercase" data-testid="admin-env-badge">
+            {envBadge}
+          </Badge>
+        ) : null}
       </div>
       {admin && (
         <div className="border-b border-border p-3">
@@ -89,24 +124,33 @@ export default function AdminLayout() {
           <p className="truncate text-xs text-muted-foreground">{admin.role_name || 'Admin'}</p>
         </div>
       )}
-      <nav className="flex-1 space-y-1 overflow-y-auto p-2">
-        {navItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            onClick={() => setSidebarOpen(false)}
-            className={({ isActive }) =>
-              `flex w-full flex-row items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors ${
-                isActive
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-              }`
-            }
-          >
-            <item.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span>{item.label}</span>
-          </NavLink>
+      <nav className="flex-1 space-y-4 overflow-y-auto p-2" aria-label="Admin">
+        {navGroups.map((group) => (
+          <div key={group.label}>
+            <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {group.label}
+            </p>
+            <div className="space-y-0.5">
+              {group.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  onClick={() => setSidebarOpen(false)}
+                  className={({ isActive }) =>
+                    `flex w-full flex-row items-center gap-3 rounded-md px-3 py-2 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                      isActive
+                        ? 'bg-primary/15 text-primary'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                    }`
+                  }
+                >
+                  <item.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span>{item.label}</span>
+                </NavLink>
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
       <div className="space-y-2 border-t border-border p-3">
@@ -165,7 +209,7 @@ export default function AdminLayout() {
             >
               <Menu className="h-5 w-5" />
             </Button>
-            <h1 className="text-lg font-semibold text-foreground">Catalog Admin</h1>
+            <h1 className="text-lg font-semibold text-foreground">iFilm Admin</h1>
           </div>
           <div className="flex items-center gap-2">
             {admin?.role_name && (

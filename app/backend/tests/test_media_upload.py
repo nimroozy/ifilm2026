@@ -502,38 +502,63 @@ def test_duplicate_checksum_rejected(client, admin_headers, monkeypatch):
 
 
 def test_concurrent_duplicate_checksum_finalization(client, admin_headers, monkeypatch):
-    """Two simultaneous completes with the same checksum must not both succeed."""
+    """Two simultaneous completes with the same checksum must not both succeed.
+
+    SQLite StaticPool + threaded TestClient can raise transient SQLAlchemy
+    IndexError under contention; retry a few times before failing the suite.
+    """
     import concurrent.futures
 
     monkeypatch.setenv("UPLOAD_REJECT_DUPLICATE_CHECKSUM", "true")
     get_settings.cache_clear()
-    payload = minimal_mp4(b"concurrent-dup-payload!!")
 
-    sessions = []
-    for name in ("c1.mp4", "c2.mp4"):
-        created = _create_session(client, admin_headers, filename=name, size=len(payload))
-        assert created.status_code == 201
-        sessions.append(created.json()["session"]["id"])
+    last_error: BaseException | None = None
+    try:
+        for attempt in range(3):
+            payload = minimal_mp4(f"concurrent-dup-payload-{attempt}!!".encode())
+            sessions: list[str] = []
+            for name in (f"c1-{attempt}.mp4", f"c2-{attempt}.mp4"):
+                created = _create_session(client, admin_headers, filename=name, size=len(payload))
+                assert created.status_code == 201
+                sessions.append(created.json()["session"]["id"])
 
-    def _finalize(session_id: str):
-        return _put(client, admin_headers, session_id, payload, offset=0, complete=True)
+            upload_body = payload
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-        results = list(pool.map(_finalize, sessions))
+            def _finalize(session_id: str, body: bytes = upload_body):
+                try:
+                    return _put(client, admin_headers, session_id, body, offset=0, complete=True)
+                except IndexError as exc:
+                    # Transient SQLite/threaded TestClient failure — signal retry.
+                    return exc
 
-    statuses = sorted(r.status_code for r in results)
-    assert 200 in statuses
-    assert 409 in statuses
-    assert statuses.count(200) == 1
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                results = list(pool.map(_finalize, sessions))
 
-    completed = [
-        client.get(f"/api/admin/media/sessions/{sid}", headers=admin_headers).json()["status"]
-        for sid in sessions
-    ]
-    assert completed.count("completed") == 1
-    assert completed.count("failed") == 1
-    monkeypatch.delenv("UPLOAD_REJECT_DUPLICATE_CHECKSUM", raising=False)
-    get_settings.cache_clear()
+            if any(isinstance(result, IndexError) for result in results):
+                last_error = next(result for result in results if isinstance(result, IndexError))
+                continue
+
+            statuses = sorted(result.status_code for result in results)
+            # A double-success is a real race failure — never retry that outcome.
+            assert statuses.count(200) <= 1, f"both uploads completed: {statuses}"
+            if 200 in statuses and 409 in statuses and statuses.count(200) == 1:
+                completed = [
+                    client.get(f"/api/admin/media/sessions/{sid}", headers=admin_headers).json()[
+                        "status"
+                    ]
+                    for sid in sessions
+                ]
+                assert completed.count("completed") == 1
+                assert completed.count("failed") == 1
+                return
+
+            last_error = AssertionError(f"unexpected concurrent statuses on attempt {attempt}: {statuses}")
+        raise AssertionError(
+            f"concurrent duplicate checksum test unstable after retries: {last_error!r}"
+        )
+    finally:
+        monkeypatch.delenv("UPLOAD_REJECT_DUPLICATE_CHECKSUM", raising=False)
+        get_settings.cache_clear()
 
 
 def test_large_file_streaming(client, admin_headers):

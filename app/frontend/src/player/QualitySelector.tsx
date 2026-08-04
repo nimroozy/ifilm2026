@@ -38,7 +38,7 @@ export function QualitySelector({
       disabled={disabled}
     >
       <SelectTrigger
-        className="w-[110px] h-8 bg-black/40 border-white/20 text-white text-xs"
+        className="w-[110px] h-10 min-h-10 bg-black/40 border-white/20 text-white text-xs"
         aria-label="Video quality"
         data-testid="quality-selector"
       >
