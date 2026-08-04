@@ -687,6 +687,7 @@ export function SearchPage() {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
+  const [reloadToken, setReloadToken] = useState(0);
   const [results, setResults] = useState<
     Array<(CatalogMovie | CatalogSeries) & { resultType: 'movie' | 'series' }>
   >([]);
@@ -704,6 +705,7 @@ export function SearchPage() {
       return;
     }
     let cancelled = false;
+    const requestId = reloadToken;
     const timer = window.setTimeout(async () => {
       setLoading(true);
       setError(null);
@@ -719,22 +721,35 @@ export function SearchPage() {
         if (cancelled) return;
         setResults([]);
         setError(
-          err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Search failed'
+          err instanceof ApiError
+            ? err.message || 'Search request failed. Please try again.'
+            : err instanceof Error
+              ? err.message
+              : 'Search request failed. Please try again.'
         );
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && requestId === reloadToken) setLoading(false);
       }
     }, 180);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [query]);
+  }, [query, reloadToken]);
+
+  useEffect(() => {
+    if (!results.length) return;
+    const active = results[activeIndex];
+    if (!active) return;
+    const node = document.getElementById(`search-result-${active.resultType}-${active.id}`);
+    node?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [activeIndex, results]);
 
   const openResult = (item: (typeof results)[number]) => {
     navigate(item.resultType === 'series' ? `/series/${item.id}` : `/movie/${item.id}`);
   };
 
+  /** Highlight match using text nodes only — never inject HTML from titles/queries. */
   const highlight = (text: string) => {
     const q = query.trim();
     if (!q) return text;
@@ -743,11 +758,15 @@ export function SearchPage() {
     return (
       <>
         {text.slice(0, idx)}
-        <mark className="rounded-sm bg-primary/30 px-0.5 text-foreground">{text.slice(idx, idx + q.length)}</mark>
+        <mark className="rounded-sm bg-primary/30 px-0.5 text-foreground">
+          {text.slice(idx, idx + q.length)}
+        </mark>
         {text.slice(idx + q.length)}
       </>
     );
   };
+
+  const listExpanded = Boolean(query.trim()) && results.length > 0 && !loading && !error;
 
   return (
     <div className="min-h-screen">
@@ -755,10 +774,16 @@ export function SearchPage() {
         <div className="relative mx-auto mb-8 max-w-2xl">
           <SearchIcon className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
           <Input
+            role="combobox"
             placeholder={t.search.placeholder}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                setQuery('');
+                return;
+              }
               if (!results.length) return;
               if (event.key === 'ArrowDown') {
                 event.preventDefault();
@@ -772,11 +797,18 @@ export function SearchPage() {
                 if (item) openResult(item);
               }
             }}
-            className="h-14 rounded-2xl border-border bg-card/80 pl-12 text-lg shadow-md backdrop-blur-sm"
+            className="h-14 rounded-2xl border-border bg-card/80 pl-12 pr-12 text-lg shadow-md backdrop-blur-sm"
             autoFocus
+            autoComplete="off"
             aria-label="Search catalog"
+            aria-autocomplete="list"
+            aria-expanded={listExpanded}
             aria-controls="search-results"
-            aria-activedescendant={results[activeIndex] ? `search-result-${results[activeIndex].resultType}-${results[activeIndex].id}` : undefined}
+            aria-activedescendant={
+              listExpanded && results[activeIndex]
+                ? `search-result-${results[activeIndex].resultType}-${results[activeIndex].id}`
+                : undefined
+            }
           />
           {query ? (
             <Button
@@ -791,7 +823,7 @@ export function SearchPage() {
           ) : null}
         </div>
 
-        {!query ? (
+        {!query.trim() ? (
           <div className="mx-auto max-w-2xl">
             <h3 className="mb-3 text-sm font-medium text-muted-foreground">{t.search.popular}</h3>
             <div className="flex flex-wrap gap-2">
@@ -811,9 +843,15 @@ export function SearchPage() {
         ) : loading ? (
           <PageLoading />
         ) : error ? (
-          <PageError message={error} onRetry={() => setQuery((q) => `${q}`)} />
+          <div className="mx-auto max-w-lg space-y-3 text-center" data-testid="search-api-error">
+            <p className="text-muted-foreground" role="alert">
+              {error}
+            </p>
+            <p className="text-xs text-muted-foreground">This is a search service error, not an empty result.</p>
+            <Button onClick={() => setReloadToken((value) => value + 1)}>Retry</Button>
+          </div>
         ) : results.length === 0 ? (
-          <div className="py-20 text-center text-muted-foreground">
+          <div className="py-20 text-center text-muted-foreground" data-testid="search-no-results">
             <p className="text-lg">{t.search.noResults}</p>
           </div>
         ) : (
@@ -842,6 +880,7 @@ export function SearchPage() {
                   year={item.year}
                   rating={item.rating}
                   showDemo={hasDemoClip(item)}
+                  playable={canPlayFullMovie(item) || hasDemoClip(item)}
                   badge={item.resultType === 'series' ? 'Series' : 'Movie'}
                   onActivate={() => openResult(item)}
                 />
