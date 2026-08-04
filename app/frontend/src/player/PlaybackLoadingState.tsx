@@ -9,7 +9,7 @@ export function PlayerLoadingState({ label = 'Preparing playback…' }: { label?
       data-testid="player-loading"
     >
       <div className="relative flex h-16 w-16 items-center justify-center">
-        <span className="absolute inset-0 rounded-full border border-primary/30 animate-ping" />
+        <span className="absolute inset-0 rounded-full border border-primary/30 motion-safe:animate-ping" />
         <Loader2 className="h-10 w-10 animate-spin text-primary" aria-hidden />
       </div>
       <p className="text-sm font-medium tracking-wide text-white/85">{label}</p>
