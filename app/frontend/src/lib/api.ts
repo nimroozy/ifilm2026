@@ -755,6 +755,27 @@ export interface SystemVersionDto {
   deployment_mode: string;
   update_channel: string;
   maintenance_mode: boolean;
+  update_blocked?: boolean;
+  integrity?: {
+    ok?: boolean;
+    installed_version?: string | null;
+    release_manifest_verified?: boolean;
+    configured_digests_match?: boolean;
+    running_digests_match?: boolean;
+    migration_head?: string | null;
+    health_status?: string | null;
+    update_channel?: string | null;
+    rollback_target?: string | null;
+    digest_mismatch?: boolean;
+    digest_summary?: {
+      backend?: string | null;
+      frontend?: string | null;
+      running_backend?: string | null;
+      running_frontend?: string | null;
+    };
+    checks?: Array<{ name: string; passed: boolean; detail?: string }>;
+    checked_at?: string | null;
+  } | null;
 }
 
 export interface SystemUpdateCheckDto {

@@ -95,6 +95,22 @@ class FakeAgent:
         if command == "rollback_last_update":
             self.current["version"] = "0.1.0-test"
             return {"job_id": body.get("job_id"), "state": "rolled_back", "result": self.current}
+        if command == "verify_installation":
+            return {
+                "ok": True,
+                "installed_version": self.current["version"],
+                "release_manifest_verified": True,
+                "configured_digests_match": True,
+                "running_digests_match": True,
+                "migration_head": self.current.get("migration_head"),
+                "health_status": "healthy",
+                "update_channel": self.current.get("channel", "stable"),
+                "rollback_target": None,
+                "digest_mismatch": False,
+                "digest_summary": {},
+                "checks": [],
+                "checked_at": "2026-08-01T00:00:00Z",
+            }
         raise UpdateAgentError("invalid_command", command)
 
 

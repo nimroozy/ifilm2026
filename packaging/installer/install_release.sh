@@ -95,12 +95,21 @@ wizard() {
 
 upsert_env() {
   local key="$1" value="$2"
-  if grep -q "^${key}=" "$ENV_FILE" 2>/dev/null; then
+  local tmp
+  tmp="$(mktemp "${ENV_FILE}.XXXXXX")"
+  chmod 600 "$tmp"
+  if [[ -f "$ENV_FILE" ]] && grep -q "^${key}=" "$ENV_FILE" 2>/dev/null; then
     # Replace the whole assignment; values are generated without shell metacharacters.
-    sed -i "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
+    sed "s|^${key}=.*|${key}=${value}|" "$ENV_FILE" >"$tmp"
+  elif [[ -f "$ENV_FILE" ]]; then
+    cat "$ENV_FILE" >"$tmp"
+    printf '%s=%s\n' "$key" "$value" >>"$tmp"
   else
-    printf '%s=%s\n' "$key" "$value" >>"$ENV_FILE"
+    printf '%s=%s\n' "$key" "$value" >"$tmp"
   fi
+  sync "$tmp" 2>/dev/null || true
+  mv -f "$tmp" "$ENV_FILE"
+  chmod 600 "$ENV_FILE"
 }
 
 read_env_value() {
@@ -136,7 +145,7 @@ maybe_wipe_existing_data() {
     || die "refusing data wipe: set IFILM_WIPE_DATA=1 IFILM_DELETE_CONFIRM=DELETE-IFILM-DATA"
   log "wiping existing postgres/redis data directories after typed confirmation"
   if [[ -f "$COMPOSE_FILE" && -f "$ENV_FILE" ]]; then
-    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" down || true
+    docker compose -p ifilm --env-file "$ENV_FILE" -f "$COMPOSE_FILE" down || true
   fi
   rm -rf "${IFILM_VAR}/postgres" "${IFILM_VAR}/redis"
   mkdir -p "${IFILM_VAR}/postgres" "${IFILM_VAR}/redis"
@@ -158,8 +167,29 @@ apply_image_digests_from_manifest() {
   case "$frontend" in
     *:latest|*:main|*:master|*:staging) die "mutable frontend image tag rejected" ;;
   esac
-  upsert_env IFILM_IMAGE_BACKEND_API "$backend"
-  upsert_env IFILM_IMAGE_FRONTEND "$frontend"
+  # Atomic dual-key write: stage full env then replace once.
+  local tmp
+  tmp="$(mktemp "${ENV_FILE}.XXXXXX")"
+  chmod 600 "$tmp"
+  if [[ -f "$ENV_FILE" ]]; then
+    # shellcheck disable=SC2002
+    cat "$ENV_FILE" | sed \
+      -e "s|^IFILM_IMAGE_BACKEND_API=.*|IFILM_IMAGE_BACKEND_API=${backend}|" \
+      -e "s|^IFILM_IMAGE_FRONTEND=.*|IFILM_IMAGE_FRONTEND=${frontend}|" \
+      >"$tmp"
+    grep -q '^IFILM_IMAGE_BACKEND_API=' "$tmp" || printf 'IFILM_IMAGE_BACKEND_API=%s\n' "$backend" >>"$tmp"
+    grep -q '^IFILM_IMAGE_FRONTEND=' "$tmp" || printf 'IFILM_IMAGE_FRONTEND=%s\n' "$frontend" >>"$tmp"
+  else
+    printf 'IFILM_IMAGE_BACKEND_API=%s\nIFILM_IMAGE_FRONTEND=%s\n' "$backend" "$frontend" >"$tmp"
+  fi
+  sync "$tmp" 2>/dev/null || true
+  mv -f "$tmp" "$ENV_FILE"
+  chmod 600 "$ENV_FILE"
+  # Confirm persisted values match the signed manifest before continuing.
+  [[ "$(read_env_value IFILM_IMAGE_BACKEND_API)" == "$backend" ]] \
+    || die "persisted backend image digest does not match signed manifest"
+  [[ "$(read_env_value IFILM_IMAGE_FRONTEND)" == "$frontend" ]] \
+    || die "persisted frontend image digest does not match signed manifest"
   log "pinned images from signed manifest"
 }
 
@@ -309,6 +339,12 @@ EOF
 install_agent_unit() {
   install -d -m 0755 "$IFILM_HOME/agent"
   install -m 0755 "$IFILM_HOME/current/packaging/update-agent/agent.py" "$IFILM_HOME/agent/agent.py"
+  # Official CLI entrypoint (e.g. sudo ifilm-update-agent verify-installation)
+  cat >/usr/local/sbin/ifilm-update-agent <<'EOF'
+#!/bin/sh
+exec /usr/bin/python3 /opt/ifilm/current/packaging/update-agent/agent.py "$@"
+EOF
+  chmod 0755 /usr/local/sbin/ifilm-update-agent
   if [[ -d /run/systemd/system ]] && command -v systemctl >/dev/null 2>&1; then
     install -d -m 0755 /etc/systemd/system
     cat >/etc/systemd/system/ifilm-update-agent.service <<'UNIT'
@@ -372,7 +408,7 @@ start_stack() {
   [[ -f "$COMPOSE_FILE" ]] || die "missing compose file ${COMPOSE_FILE}"
   apply_image_digests_from_manifest
   # Production installs pull immutable digest refs only — never --build.
-  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" pull
+  docker compose -p ifilm --env-file "$ENV_FILE" -f "$COMPOSE_FILE" pull
   # shellcheck disable=SC1090,SC1091
   set -a
   # shellcheck disable=SC1090,SC1091
@@ -380,7 +416,7 @@ start_stack() {
   set +a
   verify_pulled_digest "${IFILM_IMAGE_BACKEND_API}"
   verify_pulled_digest "${IFILM_IMAGE_FRONTEND}"
-  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --no-build
+  docker compose -p ifilm --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --no-build
   HTTP_PORT="${IFILM_HTTP_PORT:-8080}"
   log "waiting for backend liveness on :${HTTP_PORT}"
   for _ in $(seq 1 60); do
@@ -393,16 +429,16 @@ start_stack() {
     || die "API liveness check failed"
 
   # Fail fast with an actionable message if credentials do not match PGDATA.
-  if ! docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T postgres \
+  if ! docker compose -p ifilm --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T postgres \
     sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null && PGPASSWORD="$POSTGRES_PASSWORD" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "SELECT 1" >/dev/null'; then
     die "PostgreSQL password authentication failed for user ifilm. While ${IFILM_VAR}/postgres is initialized the installer reuses POSTGRES_PASSWORD from ${ENV_FILE} and will not invent a new one. Restore the matching ifilm.env, or wipe with IFILM_WIPE_DATA=1 IFILM_DELETE_CONFIRM=DELETE-IFILM-DATA and re-run."
   fi
 
   # Migrations before readiness: empty databases are live but not ready until schema exists.
-  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend-api \
+  docker compose -p ifilm --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend-api \
     ifilm-alembic upgrade head
   # Explicit admin bootstrap only — never create_all, never unsafe demo seed.
-  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend-api \
+  docker compose -p ifilm --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend-api \
     sh -c 'set -a; . /run/ifilm/runtime.env 2>/dev/null || true; set +a; python -m scripts.seed_production_admin'
 
   log "waiting for backend readiness on :${HTTP_PORT}"

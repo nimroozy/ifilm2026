@@ -60,6 +60,26 @@ Optional `MAINTENANCE_MODE` can signal customer APIs while admins watch update p
 3. Ask the update agent (or ops runbook) to install that verified release.
 4. Never point production at an arbitrary Git URL or commit SHA.
 
+## Transactional updates
+
+Install/update/rollback follows a fixed order: lock → verify signed release →
+save previous release/env → backup → stage release → atomically write
+`IFILM_IMAGE_*` digests from the signed manifest → pull digests → recreate the
+`ifilm` Compose project → migrate → health → four-way digest verify → atomic
+`/opt/ifilm/current` switch → record completion → unlock.
+
+On failure the agent restores previous env image refs, previous symlink, and
+previous services. Candidate digests must never remain after a stable install.
+
+Official verification:
+
+```bash
+sudo ifilm-update-agent verify-installation
+```
+
+Returns nonzero when symlink, signed digests, compose config, running
+containers, migration head, health, or channel disagree.
+
 ## Disposable verification
 
 See `DISPOSABLE_VERIFICATION.md` for the recorded clean install (`v0.1.0-test`), update (`v0.1.1-test`), checksum rejection, and automatic health-failure rollback.

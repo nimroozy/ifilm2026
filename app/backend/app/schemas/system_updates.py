@@ -14,6 +14,8 @@ class SystemVersionOut(BaseModel):
     deployment_mode: str
     update_channel: str
     maintenance_mode: bool = False
+    integrity: dict[str, Any] | None = None
+    update_blocked: bool = False
 
 
 class UpdateCheckOut(BaseModel):

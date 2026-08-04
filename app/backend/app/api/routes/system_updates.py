@@ -42,6 +42,7 @@ def _http_from_exc(exc: Exception) -> HTTPException:
             "concurrent_update": "Another update or rollback is already running",
             "no_update_available": "No update available",
             "target_mismatch": "Requested target version is not the latest checked release",
+            "digest_mismatch": "Configured and running image digests disagree; reconcile before updating",
         }.get(str(exc), str(exc))
         return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
     if isinstance(exc, UpdateAgentError):
