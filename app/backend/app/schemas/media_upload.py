@@ -75,6 +75,13 @@ class MediaAssetOut(ORMModel):
     probe_json: dict | None = None
     probe_version: str | None = None
     probed_at: datetime | None = None
+    source_type: str = "uploaded"
+    external_url: str | None = None
+    external_kind: str | None = None
+    external_content_type: str | None = None
+    external_content_length: int | None = None
+    external_accept_ranges: bool = False
+    external_validated_at: datetime | None = None
     created_by_admin_id: int | None
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -110,3 +117,20 @@ class MediaAssetDetachRequest(BaseModel):
     """Detach ownership. Optionally unpublish when detach would leave published content unplayable."""
 
     force_unpublish: bool = False
+
+
+class ExternalMediaAttachRequest(BaseModel):
+    """Validate and attach an HTTPS MP4/HLS URL to a movie or episode."""
+
+    url: str = Field(min_length=8, max_length=2048)
+    owner_type: str = Field(pattern="^(movie|episode)$")
+    owner_id: int = Field(gt=0)
+    category: str = "originals"
+
+    @field_validator("category")
+    @classmethod
+    def validate_category(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in MEDIA_CATEGORIES:
+            raise ValueError(f"category must be one of {', '.join(MEDIA_CATEGORIES)}")
+        return normalized

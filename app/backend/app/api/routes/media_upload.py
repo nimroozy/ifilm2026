@@ -13,6 +13,7 @@ from app.models.admin import AdminUser
 from app.models.media_assets import MediaAsset
 from app.schemas.common import Envelope, paginated
 from app.schemas.media_upload import (
+    ExternalMediaAttachRequest,
     MediaAssetDetachRequest,
     MediaAssetLinkRequest,
     MediaAssetOut,
@@ -22,6 +23,7 @@ from app.schemas.media_upload import (
 )
 from app.services import media_linking
 from app.services import media_upload as upload_service
+from app.services.media_external_attach import attach_external_media
 
 router = APIRouter(tags=["media-upload"])
 
@@ -187,6 +189,32 @@ def list_media_assets(
         page=page,
         page_size=page_size,
     )
+
+
+@router.post(
+    "/admin/media/external",
+    response_model=MediaAssetOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def attach_external_media_asset(
+    payload: ExternalMediaAttachRequest,
+    db: DbSession,
+    admin: Annotated[AdminUser, Depends(require_permissions("upload.manage"))],
+):
+    """Validate an HTTPS MP4/HLS URL and attach it as external media."""
+    settings = get_settings()
+    require_feature("enable_uploads", settings)
+    movie_id = payload.owner_id if payload.owner_type == "movie" else None
+    episode_id = payload.owner_id if payload.owner_type == "episode" else None
+    asset = attach_external_media(
+        db,
+        url=payload.url,
+        movie_id=movie_id,
+        episode_id=episode_id,
+        admin_id=admin.id,
+        category=payload.category,
+    )
+    return MediaAssetOut.model_validate(asset)
 
 
 @router.post(

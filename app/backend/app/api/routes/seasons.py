@@ -55,7 +55,7 @@ def list_public_season_episodes(season_id: int, db: DbSession) -> list[EpisodeOu
         ],
         key=lambda e: e.episode_number,
     )
-    return [episode_out(e) for e in episodes]
+    return [episode_out(e, db) for e in episodes]
 
 
 def _get_season(db: DbSession, season_id: int) -> Season:
@@ -186,7 +186,7 @@ def list_season_episodes(
         [e for e in (season.episodes or []) if e.deleted_at is None],
         key=lambda e: e.episode_number,
     )
-    return [episode_out(e) for e in episodes]
+    return [episode_out(e, db) for e in episodes]
 
 
 @router.post(
@@ -209,7 +209,7 @@ def create_episode(
     )
     db.add(episode)
     db.commit()
-    return episode_out(_get_episode(db, episode.id))
+    return episode_out(_get_episode(db, episode.id), db)
 
 
 @router.get("/admin/episodes/{episode_id}", response_model=EpisodeOut)
@@ -218,7 +218,7 @@ def get_episode(
     db: DbSession,
     _: Annotated[AdminUser, Depends(require_permissions("series.read"))],
 ) -> EpisodeOut:
-    return episode_out(_get_episode(db, episode_id))
+    return episode_out(_get_episode(db, episode_id), db)
 
 
 @router.patch("/admin/episodes/{episode_id}", response_model=EpisodeOut)
@@ -242,7 +242,7 @@ def update_episode(
     episode.updated_at = utcnow()
     db.add(episode)
     db.commit()
-    return episode_out(_get_episode(db, episode.id))
+    return episode_out(_get_episode(db, episode.id), db)
 
 
 @router.delete("/admin/episodes/{episode_id}", response_model=Message)

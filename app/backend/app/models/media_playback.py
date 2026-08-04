@@ -34,8 +34,8 @@ class MediaPlaybackSession(Base):
     media_asset_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("media_assets.id", ondelete="CASCADE"), nullable=False
     )
-    media_package_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("media_packages.id", ondelete="CASCADE"), nullable=False
+    media_package_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("media_packages.id", ondelete="CASCADE"), nullable=True
     )
     principal_type: Mapped[str] = mapped_column(String(32), nullable=False)
     principal_id: Mapped[str] = mapped_column(String(64), nullable=False)

@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from sqlalchemy import (
     JSON,
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     Float,
@@ -79,6 +80,15 @@ class MediaAsset(Base):
     category: Mapped[str] = mapped_column(String(32), default="originals")
     upload_status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
     processing_status: Mapped[str] = mapped_column(String(32), default="none", index=True)
+
+    # uploaded = local file; external = validated HTTPS MP4/HLS URL
+    source_type: Mapped[str] = mapped_column(String(32), default="uploaded", index=True)
+    external_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    external_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    external_content_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    external_content_length: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    external_accept_ranges: Mapped[bool] = mapped_column(Boolean, default=False)
+    external_validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Probed metadata (ffprobe). Null until a successful probe completes.
     container_format: Mapped[str | None] = mapped_column(String(64), nullable=True)

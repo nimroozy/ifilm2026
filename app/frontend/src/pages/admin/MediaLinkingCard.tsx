@@ -11,6 +11,7 @@ import {
   PlayCircle,
   RotateCcw,
   Cpu,
+  Globe,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -34,6 +35,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import {
   adminApi,
@@ -74,6 +76,15 @@ function formatDate(value?: string | null): string {
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 }
 
+function isExternalAsset(asset: MediaAssetDto): boolean {
+  return asset.source_type === 'external' || Boolean(asset.external_url);
+}
+
+function truncateUrl(url: string, max = 48): string {
+  if (url.length <= max) return url;
+  return `${url.slice(0, max - 1)}…`;
+}
+
 interface MediaLinkingCardProps {
   ownerType: OwnerType;
   ownerId: number;
@@ -93,6 +104,7 @@ export default function MediaLinkingCard({
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [linkOpen, setLinkOpen] = useState(false);
+  const [externalOpen, setExternalOpen] = useState(false);
   const [detachTarget, setDetachTarget] = useState<MediaAssetDto | null>(null);
   const [forceUnpublish, setForceUnpublish] = useState(false);
 
@@ -196,11 +208,21 @@ export default function MediaLinkingCard({
               <Link2 className="me-1.5 h-3.5 w-3.5" />
               Link Existing Media
             </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setExternalOpen(true)}
+              data-testid="media-external-url"
+            >
+              <Globe className="me-1.5 h-3.5 w-3.5" />
+              External URL
+            </Button>
           </div>
         </div>
         <p className="text-xs text-muted-foreground">
           Link one video asset to this {ownerType}. Detach removes the association only — media files and packages are
-          preserved. Publishing still requires an active playable HLS package.
+          preserved. Publishing still requires an active playable HLS package or validated external media.
         </p>
       </CardHeader>
       <CardContent className="space-y-4" aria-live="polite">
@@ -208,7 +230,7 @@ export default function MediaLinkingCard({
         {error ? <ErrorState message={error} onRetry={load} /> : null}
         {!loading && !error && assets.length === 0 ? (
           <EmptyState
-            message={`No media is linked to this ${ownerType}. Use Upload and Link or Link Existing Media.`}
+            message={`No media is linked to this ${ownerType}. Use Upload and Link, Link Existing Media, or External URL.`}
           />
         ) : null}
 
@@ -216,6 +238,7 @@ export default function MediaLinkingCard({
           {assets.map((asset) => {
             const packages = packagesByAsset[asset.id] ?? [];
             const active = packages.find((p) => p.is_active && p.status === 'completed') ?? packages.find((p) => p.is_active);
+            const external = isExternalAsset(asset);
             return (
               <li
                 key={asset.id}
@@ -228,36 +251,69 @@ export default function MediaLinkingCard({
                       {asset.original_filename}
                     </p>
                     <div className="flex flex-wrap gap-1.5">
+                      {external ? <Badge variant="secondary">External</Badge> : null}
                       <Badge variant="outline">{asset.category}</Badge>
                       <StatusBadge status={asset.upload_status} />
-                      <Badge variant="secondary">probe: {asset.probed_at ? 'done' : asset.processing_status}</Badge>
-                      <Badge variant="secondary">encode: {asset.processing_status}</Badge>
+                      {!external ? (
+                        <>
+                          <Badge variant="secondary">probe: {asset.probed_at ? 'done' : asset.processing_status}</Badge>
+                          <Badge variant="secondary">encode: {asset.processing_status}</Badge>
+                        </>
+                      ) : null}
+                      {external && asset.external_kind ? (
+                        <Badge variant="outline">{asset.external_kind}</Badge>
+                      ) : null}
                       {active ? (
                         <Badge className="bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/20">
                           package: {active.status}
+                        </Badge>
+                      ) : external ? (
+                        <Badge className="bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/20">
+                          external playable
                         </Badge>
                       ) : (
                         <Badge variant="destructive">no active package</Badge>
                       )}
                     </div>
-                    <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted-foreground sm:grid-cols-4">
-                      <div>
-                        <dt className="inline">Size </dt>
-                        <dd className="inline">{formatBytes(asset.size_bytes)}</dd>
-                      </div>
-                      <div>
-                        <dt className="inline">Duration </dt>
-                        <dd className="inline">{formatDuration(asset.duration_seconds)}</dd>
-                      </div>
-                      <div>
-                        <dt className="inline">Resolution </dt>
-                        <dd className="inline">{resolutionLabel(asset)}</dd>
-                      </div>
-                      <div>
-                        <dt className="inline">Created </dt>
-                        <dd className="inline">{formatDate(asset.created_at)}</dd>
-                      </div>
-                    </dl>
+                    {external && asset.external_url ? (
+                      <p
+                        className="mt-1 truncate text-xs text-muted-foreground"
+                        title={asset.external_url}
+                      >
+                        {truncateUrl(asset.external_url)}
+                      </p>
+                    ) : null}
+                    {!external ? (
+                      <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted-foreground sm:grid-cols-4">
+                        <div>
+                          <dt className="inline">Size </dt>
+                          <dd className="inline">{formatBytes(asset.size_bytes)}</dd>
+                        </div>
+                        <div>
+                          <dt className="inline">Duration </dt>
+                          <dd className="inline">{formatDuration(asset.duration_seconds)}</dd>
+                        </div>
+                        <div>
+                          <dt className="inline">Resolution </dt>
+                          <dd className="inline">{resolutionLabel(asset)}</dd>
+                        </div>
+                        <div>
+                          <dt className="inline">Created </dt>
+                          <dd className="inline">{formatDate(asset.created_at)}</dd>
+                        </div>
+                      </dl>
+                    ) : (
+                      <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted-foreground sm:grid-cols-4">
+                        <div>
+                          <dt className="inline">Kind </dt>
+                          <dd className="inline">{asset.external_kind || '—'}</dd>
+                        </div>
+                        <div>
+                          <dt className="inline">Created </dt>
+                          <dd className="inline">{formatDate(asset.created_at)}</dd>
+                        </div>
+                      </dl>
+                    )}
                     {active?.id ? (
                       <p className="mt-1 truncate text-xs text-muted-foreground" title={active.id}>
                         Active package: {active.id}
@@ -271,37 +327,41 @@ export default function MediaLinkingCard({
                         View Asset
                       </Link>
                     </Button>
-                    <Button type="button" size="sm" variant="outline" asChild>
-                      <Link to={`/admin/media/processing?media_asset_id=${asset.id}`}>
-                        <Cpu className="me-1 h-3.5 w-3.5" />
-                        Processing
-                      </Link>
-                    </Button>
-                    <Button type="button" size="sm" variant="outline" asChild>
-                      <Link to={`/player/asset/${asset.id}`}>
-                        <PlayCircle className="me-1 h-3.5 w-3.5" />
-                        Protected Player
-                      </Link>
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      disabled={busyId === asset.id}
-                      onClick={() => runAction(asset.id, 'probe')}
-                    >
-                      {busyId === asset.id ? <Loader2 className="me-1 h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="me-1 h-3.5 w-3.5" />}
-                      Retry Probe
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      disabled={busyId === asset.id}
-                      onClick={() => runAction(asset.id, 'encode')}
-                    >
-                      Queue Encoding
-                    </Button>
+                    {!external ? (
+                      <>
+                        <Button type="button" size="sm" variant="outline" asChild>
+                          <Link to={`/admin/media/processing?media_asset_id=${asset.id}`}>
+                            <Cpu className="me-1 h-3.5 w-3.5" />
+                            Processing
+                          </Link>
+                        </Button>
+                        <Button type="button" size="sm" variant="outline" asChild>
+                          <Link to={`/player/asset/${asset.id}`}>
+                            <PlayCircle className="me-1 h-3.5 w-3.5" />
+                            Protected Player
+                          </Link>
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          disabled={busyId === asset.id}
+                          onClick={() => runAction(asset.id, 'probe')}
+                        >
+                          {busyId === asset.id ? <Loader2 className="me-1 h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="me-1 h-3.5 w-3.5" />}
+                          Retry Probe
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          disabled={busyId === asset.id}
+                          onClick={() => runAction(asset.id, 'encode')}
+                        >
+                          Queue Encoding
+                        </Button>
+                      </>
+                    ) : null}
                     <Button
                       type="button"
                       size="sm"
@@ -330,6 +390,17 @@ export default function MediaLinkingCard({
         ownerType={ownerType}
         ownerId={ownerId}
         onLinked={async () => {
+          await load();
+          onChanged?.();
+        }}
+      />
+
+      <ExternalUrlDialog
+        open={externalOpen}
+        onOpenChange={setExternalOpen}
+        ownerType={ownerType}
+        ownerId={ownerId}
+        onAttached={async () => {
           await load();
           onChanged?.();
         }}
@@ -386,6 +457,92 @@ export default function MediaLinkingCard({
         </AlertDialogContent>
       </AlertDialog>
     </Card>
+  );
+}
+
+function ExternalUrlDialog({
+  open,
+  onOpenChange,
+  ownerType,
+  ownerId,
+  onAttached,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  ownerType: OwnerType;
+  ownerId: number;
+  onAttached: () => Promise<void>;
+}) {
+  const [url, setUrl] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setUrl('');
+      setSubmitting(false);
+    }
+  }, [open]);
+
+  async function submit() {
+    const trimmed = url.trim();
+    if (!trimmed.startsWith('https://')) {
+      toast.error('URL must start with https://');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await adminApi.attachExternalMedia({
+        url: trimmed,
+        owner_type: ownerType,
+        owner_id: ownerId,
+      });
+      toast.success('External media attached');
+      onOpenChange(false);
+      await onAttached();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to attach external media');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg" data-testid="external-url-dialog">
+        <DialogHeader>
+          <DialogTitle>Attach external URL</DialogTitle>
+          <DialogDescription>
+            Provide an HTTPS URL to an external video (direct file or HLS playlist). The URL is validated before linking.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          <Label htmlFor="external-media-url">HTTPS URL</Label>
+          <Input
+            id="external-media-url"
+            type="url"
+            placeholder="https://..."
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            data-testid="external-media-url-input"
+            disabled={submitting}
+          />
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" disabled={submitting} onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            disabled={submitting || !url.trim()}
+            onClick={() => void submit()}
+            data-testid="external-media-submit"
+          >
+            {submitting ? <Loader2 className="me-1 h-3.5 w-3.5 animate-spin" /> : null}
+            Attach
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

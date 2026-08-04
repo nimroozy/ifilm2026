@@ -68,15 +68,41 @@ def get_playback_principal(
 
 def _created_response(session: MediaPlaybackSession, raw_token: str) -> PlaybackSessionCreated:
     settings = get_settings()
+    from sqlalchemy.orm import object_session
+    from app.models.media_assets import MediaAsset
+
+    db = object_session(session)
+    media_asset = session.media_asset
+    if media_asset is None and db is not None:
+        media_asset = db.get(MediaAsset, session.media_asset_id)
+
+    if (
+        media_asset is not None
+        and getattr(media_asset, "source_type", "uploaded") == "external"
+        and media_asset.external_url
+    ):
+        url = media_asset.external_url
+        return PlaybackSessionCreated(
+            id=session.id,
+            media_asset_id=session.media_asset_id,
+            media_package_id=None,
+            expires_at=session.expires_at,
+            playback_token=raw_token,
+            master_playlist_url=url,
+            source_type="external",
+            playback_url=url,
+        )
+
+    url = master_playlist_url(api_prefix=settings.api_prefix, token=raw_token)
     return PlaybackSessionCreated(
         id=session.id,
         media_asset_id=session.media_asset_id,
         media_package_id=session.media_package_id,
         expires_at=session.expires_at,
         playback_token=raw_token,
-        master_playlist_url=master_playlist_url(
-            api_prefix=settings.api_prefix, token=raw_token
-        ),
+        master_playlist_url=url,
+        source_type="package",
+        playback_url=url,
     )
 
 router = APIRouter(tags=["streaming"])

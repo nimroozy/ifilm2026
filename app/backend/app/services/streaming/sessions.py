@@ -22,6 +22,7 @@ from app.models.user import Subscriber
 from app.services.streaming.activation import require_active_completed_package
 from app.services.streaming.audit import record_session_event
 from app.services.streaming.eligibility import playback_eligibility
+from app.services.media_external_attach import is_external_playable
 from app.services.streaming.tokens import (
     generate_playback_token,
     hash_playback_token,
@@ -70,14 +71,20 @@ def create_playback_session(
             detail=eligibility.reason or "Playback not allowed",
         )
 
-    package = require_active_completed_package(db, media_asset.id)
+    package_id: str | None
+    if is_external_playable(media_asset):
+        package_id = None
+    else:
+        package = require_active_completed_package(db, media_asset.id)
+        package_id = package.id
+
     raw_token = generate_playback_token()
     token_hash = hash_playback_token(raw_token, cfg)
     principal_type, principal_id = _principal_fields(principal)
     now = utcnow()
     session = MediaPlaybackSession(
         media_asset_id=media_asset.id,
-        media_package_id=package.id,
+        media_package_id=package_id,
         principal_type=principal_type,
         principal_id=principal_id,
         token_hash=token_hash,

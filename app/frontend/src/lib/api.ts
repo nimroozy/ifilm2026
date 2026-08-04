@@ -150,6 +150,12 @@ export interface MovieDto {
   views?: number;
   type?: 'movie' | string;
   hls_path?: string | null;
+  playable?: boolean;
+  has_playable_package?: boolean;
+  has_external_media?: boolean;
+  producer?: string;
+  writer?: string;
+  studio?: string;
   // Compatibility aliases
   year?: number | null;
   duration?: number | null;
@@ -250,6 +256,9 @@ export interface EpisodeDto {
   created_at?: string | null;
   updated_at?: string | null;
   hls_path?: string | null;
+  playable?: boolean;
+  has_playable_package?: boolean;
+  has_external_media?: boolean;
   // Compatibility
   season?: number | null;
   episode?: number | null;
@@ -367,6 +376,7 @@ export type MovieCreatePayload = {
   country?: string;
   imdb_id?: string | null;
   imdb_rating?: number | null;
+  tmdb_id?: number | null;
   poster_url?: string;
   backdrop_url?: string;
   trailer_url?: string;
@@ -374,6 +384,9 @@ export type MovieCreatePayload = {
   is_trending?: boolean;
   genre_ids?: number[];
   director?: string;
+  producer?: string;
+  writer?: string;
+  studio?: string;
   cast?: string[];
   audio?: string[];
   subtitles?: string[];
@@ -482,6 +495,13 @@ export interface MediaAssetDto {
   probe_json?: Record<string, unknown> | null;
   probe_version?: string | null;
   probed_at?: string | null;
+  source_type?: 'uploaded' | 'external' | string;
+  external_url?: string | null;
+  external_kind?: string | null;
+  external_content_type?: string | null;
+  external_content_length?: number | null;
+  external_accept_ranges?: boolean;
+  external_validated_at?: string | null;
   created_by_admin_id: number | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -1557,6 +1577,16 @@ export const adminApi = {
     return data;
   },
 
+  async attachExternalMedia(payload: {
+    url: string;
+    owner_type: 'movie' | 'episode';
+    owner_id: number;
+    category?: MediaCategory;
+  }) {
+    const { data } = await adminHttp.post<MediaAssetDto>('/admin/media/external', payload);
+    return data;
+  },
+
   async detachMediaAsset(assetId: string, payload?: { force_unpublish?: boolean }) {
     const { data } = await adminHttp.post<MediaAssetDto>(
       `/admin/media/assets/${assetId}/detach`,
@@ -1807,6 +1837,12 @@ export function mapMovieDto(dto: MovieDto) {
     trailerLanguage: dto.trailer_language || '',
     trailerPublishedAt: dto.trailer_published_at ?? null,
     hlsPath: dto.hls_path ?? null,
+    playable: dto.playable ?? false,
+    hasPlayablePackage: dto.has_playable_package ?? false,
+    hasExternalMedia: dto.has_external_media ?? false,
+    producer: dto.producer || '',
+    writer: dto.writer || '',
+    studio: dto.studio || '',
     genreIds: Array.isArray(dto.genres)
       ? dto.genres.filter((g): g is GenreDto => typeof g !== 'string').map((g) => g.id)
       : [],
@@ -1883,6 +1919,9 @@ export function mapEpisodeDto(dto: EpisodeDto) {
     demoOwned: dto.demo_owned ?? false,
     hasDemoClip: dto.has_demo_clip ?? false,
     hlsPath: dto.hls_path ?? null,
+    playable: dto.playable ?? false,
+    hasPlayablePackage: dto.has_playable_package ?? false,
+    hasExternalMedia: dto.has_external_media ?? false,
   };
 }
 

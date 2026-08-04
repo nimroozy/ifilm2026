@@ -37,16 +37,18 @@ class CustomerPlaybackSessionCreate(BaseModel):
 class PlaybackSessionCreated(BaseModel):
     id: str
     media_asset_id: str
-    media_package_id: str
+    media_package_id: str | None = None
     expires_at: datetime
     playback_token: str = Field(description="Returned once; never stored or logged")
     master_playlist_url: str
+    source_type: Literal["package", "external"] = "package"
+    playback_url: str | None = None
 
 
 class PlaybackSessionOut(ORMModel):
     id: str
     media_asset_id: str
-    media_package_id: str
+    media_package_id: str | None = None
     principal_type: str
     principal_id: str
     status: str

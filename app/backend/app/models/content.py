@@ -112,6 +112,9 @@ class Movie(Base):
 
     # Compatibility / media plumbing (not exposed as binary upload in this milestone)
     director: Mapped[str] = mapped_column(String(255), default="")
+    producer: Mapped[str] = mapped_column(String(512), default="")
+    writer: Mapped[str] = mapped_column(String(512), default="")
+    studio: Mapped[str] = mapped_column(String(512), default="")
     cast: Mapped[list] = mapped_column(JSON, default=list)
     audio: Mapped[list] = mapped_column(JSON, default=list)
     subtitles: Mapped[list] = mapped_column(JSON, default=list)

@@ -17,6 +17,7 @@ from app.schemas.content import (
     SeasonOut,
     SeriesOut,
 )
+from app.services.publishing.readiness import evaluate_playable_package
 from app.services.publishing.visibility import (
     apply_public_visibility,
     public_episode_count_for_season,
@@ -28,6 +29,20 @@ from app.utils.slug import slug_or_from_title
 
 def utcnow() -> datetime:
     return datetime.now(UTC)
+
+
+def content_playability(
+    db: Session | None, *, movie_id: int | None = None, episode_id: int | None = None
+) -> tuple[bool, bool, bool]:
+    """Return (playable, has_playable_package, has_external_media)."""
+    if db is None:
+        return False, False, False
+    playable, _package_id, package_status, _issues = evaluate_playable_package(
+        db, movie_id=movie_id, episode_id=episode_id
+    )
+    has_external = playable and package_status == "external"
+    has_package = playable and not has_external
+    return playable, has_package, has_external
 
 
 def not_deleted(query, model):
@@ -49,8 +64,12 @@ def genre_out(genre: Genre, *, movie_count: int | None = None, series_count: int
     )
 
 
-def movie_out(movie: Movie) -> MovieOut:
+def movie_out(movie: Movie, db: Session | None = None) -> MovieOut:
     genres = [genre_out(g, movie_count=0, series_count=0) for g in (movie.genre_links or [])]
+    playable, has_package, has_external = content_playability(db, movie_id=movie.id)
+    # Legacy hls_path also counts as playable evidence for older records.
+    if not playable and movie.hls_path and str(movie.hls_path).strip():
+        playable = True
     return MovieOut(
         id=movie.id,
         title=movie.title,
@@ -90,6 +109,9 @@ def movie_out(movie: Movie) -> MovieOut:
         updated_at=movie.updated_at,
         genres=genres,
         director=movie.director or "",
+        producer=getattr(movie, "producer", "") or "",
+        writer=getattr(movie, "writer", "") or "",
+        studio=getattr(movie, "studio", "") or "",
         cast=movie.cast or [],
         audio=movie.audio or [],
         subtitles=movie.subtitles or [],
@@ -98,6 +120,9 @@ def movie_out(movie: Movie) -> MovieOut:
         views=movie.views or 0,
         type="movie",
         hls_path=movie.hls_path,
+        playable=playable,
+        has_playable_package=has_package,
+        has_external_media=has_external,
         year=movie.release_year,
         duration=movie.duration_minutes,
         rating=movie.imdb_rating,
@@ -194,7 +219,10 @@ def season_out(season: Season, *, public_counts: bool = False) -> SeasonOut:
     )
 
 
-def episode_out(episode: Episode) -> EpisodeOut:
+def episode_out(episode: Episode, db: Session | None = None) -> EpisodeOut:
+    playable, has_package, has_external = content_playability(db, episode_id=episode.id)
+    if not playable and episode.hls_path and str(episode.hls_path).strip():
+        playable = True
     return EpisodeOut(
         id=episode.id,
         season_id=episode.season_id,
@@ -215,6 +243,9 @@ def episode_out(episode: Episode) -> EpisodeOut:
         created_at=episode.created_at,
         updated_at=episode.updated_at,
         hls_path=episode.hls_path,
+        playable=playable,
+        has_playable_package=has_package,
+        has_external_media=has_external,
         season=episode.season.season_number if episode.season else None,
         episode=episode.episode_number,
         duration=episode.duration_minutes,

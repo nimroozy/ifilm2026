@@ -112,7 +112,7 @@ jobs:
           # Exact local parity: full pytest suite, zero failures required.
           pytest -q
           alembic heads | tee /tmp/alembic-heads.txt
-          grep -q '014_tmdb_demo_metadata' /tmp/alembic-heads.txt
+          grep -q '015_external_media_playability' /tmp/alembic-heads.txt
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -410,7 +410,7 @@ jobs:
             --version "$VERSION" \
             --channel "$CHANNEL" \
             --archive "$ARCHIVE" \
-            --migration-head 014_tmdb_demo_metadata \
+            --migration-head 015_external_media_playability \
             --minimum-version 0.1.0 \
             --database-backup-required \
             --rollback-supported \

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Edit, Trash2, Eye } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Eye, Database } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -90,12 +90,20 @@ export default function MoviesListPage() {
         title="Movies"
         description={`${total} total`}
         actions={
-          <Button asChild className="gap-2">
-            <Link to="/admin/movies/new">
-              <Plus className="h-4 w-4" />
-              Add Movie
-            </Link>
-          </Button>
+          <>
+            <Button asChild className="gap-2">
+              <Link to="/admin/movies/new">
+                <Plus className="h-4 w-4" />
+                + New Movie
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="gap-2">
+              <Link to="/admin/tools/tmdb">
+                <Database className="h-4 w-4" />
+                Import TMDB
+              </Link>
+            </Button>
+          </>
         }
       />
 
@@ -181,12 +189,20 @@ export default function MoviesListPage() {
         <EmptyState
           message="No movies found."
           action={
-            <Button asChild size="sm">
-              <Link to="/admin/movies/new">
-                <Plus className="h-4 w-4" />
-                Add Movie
-              </Link>
-            </Button>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button asChild size="sm" className="gap-2">
+                <Link to="/admin/movies/new">
+                  <Plus className="h-4 w-4" />
+                  + New Movie
+                </Link>
+              </Button>
+              <Button asChild size="sm" variant="outline" className="gap-2">
+                <Link to="/admin/tools/tmdb">
+                  <Database className="h-4 w-4" />
+                  Import TMDB
+                </Link>
+              </Button>
+            </div>
           }
         />
       ) : (

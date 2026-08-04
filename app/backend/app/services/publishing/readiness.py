@@ -101,14 +101,26 @@ def _package_integrity(db: Session, package: MediaPackage) -> list[ReadinessIssu
 def evaluate_playable_package(
     db: Session, *, movie_id: int | None = None, episode_id: int | None = None
 ) -> tuple[bool, str | None, str | None, list[ReadinessIssue]]:
-    """Return playable flag, package id, package status, and issues for linked content."""
+    """Return playable flag, package id, package status, and issues for linked content.
+
+    Playable when an uploaded active HLS package exists OR a validated external URL exists.
+    """
     assets = _find_linked_assets(db, movie_id=movie_id, episode_id=episode_id)
     if not assets:
         return False, None, None, [ReadinessIssue("no_media_asset", "No linked media asset")]
 
-    # Prefer an asset that already has an active completed package.
+    # External validated HTTPS media counts as playable (no package required).
     for asset in assets:
         if asset.upload_status in {"failed", "cancelled", "deleted"}:
+            continue
+        if getattr(asset, "source_type", "uploaded") == "external" and asset.external_url and asset.external_validated_at:
+            return True, None, "external", []
+
+    # Prefer an uploaded asset that already has an active completed package.
+    for asset in assets:
+        if asset.upload_status in {"failed", "cancelled", "deleted"}:
+            continue
+        if getattr(asset, "source_type", "uploaded") == "external":
             continue
         if getattr(asset, "deleted_at", None) is not None:
             continue
@@ -122,6 +134,13 @@ def evaluate_playable_package(
 
     # Surface the most useful failure from the newest asset.
     asset = assets[0]
+    if getattr(asset, "source_type", "uploaded") == "external":
+        return (
+            False,
+            None,
+            "external",
+            [ReadinessIssue("external_not_validated", "External media URL is not validated")],
+        )
     if asset.upload_status in {"failed", "cancelled", "deleted"}:
         return (
             False,

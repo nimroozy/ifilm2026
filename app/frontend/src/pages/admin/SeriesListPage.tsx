@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Edit, Trash2, Eye, Layers } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Eye, Layers, Database } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,7 +18,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { adminApi, ApiError, type SeriesDto } from '@/lib/api';
-import { EmptyState, ErrorState, LoadingBlock, PosterThumb, StatusBadge } from './adminShared';
+import { EmptyState, ErrorState, LoadingBlock, PageHeader, PosterThumb, StatusBadge } from './adminShared';
 
 export default function SeriesListPage() {
   const [items, setItems] = useState<SeriesDto[]>([]);
@@ -73,18 +73,26 @@ export default function SeriesListPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-semibold text-foreground">Series</h2>
-          <p className="text-sm text-muted-foreground">{total} total</p>
-        </div>
-        <Button asChild className="bg-primary text-primary-foreground gap-2">
-          <Link to="/admin/series/new">
-            <Plus className="h-4 w-4" />
-            Add Series
-          </Link>
-        </Button>
-      </div>
+      <PageHeader
+        title="Series"
+        description={`${total} total`}
+        actions={
+          <>
+            <Button asChild className="gap-2">
+              <Link to="/admin/series/new">
+                <Plus className="h-4 w-4" />
+                + New Series
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="gap-2">
+              <Link to="/admin/tools/tmdb">
+                <Database className="h-4 w-4" />
+                Import TMDB
+              </Link>
+            </Button>
+          </>
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[200px] max-w-sm">
@@ -127,7 +135,25 @@ export default function SeriesListPage() {
       ) : error ? (
         <ErrorState message={error} onRetry={load} />
       ) : items.length === 0 ? (
-        <EmptyState message="No series found." />
+        <EmptyState
+          message="No series found."
+          action={
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button asChild size="sm" className="gap-2">
+                <Link to="/admin/series/new">
+                  <Plus className="h-4 w-4" />
+                  + New Series
+                </Link>
+              </Button>
+              <Button asChild size="sm" variant="outline" className="gap-2">
+                <Link to="/admin/tools/tmdb">
+                  <Database className="h-4 w-4" />
+                  Import TMDB
+                </Link>
+              </Button>
+            </div>
+          }
+        />
       ) : (
         <Card className="bg-card border-border">
           <CardContent className="p-0">

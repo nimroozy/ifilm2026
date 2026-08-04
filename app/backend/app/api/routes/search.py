@@ -43,6 +43,6 @@ def search(db: DbSession, q: str = Query("", min_length=0)) -> dict[str, list[Mo
         .all()
     )
     return {
-        "movies": [movie_out(m) for m in movies],
+        "movies": [movie_out(m, db) for m in movies],
         "series": [series_out(s, public_counts=True) for s in series_items],
     }

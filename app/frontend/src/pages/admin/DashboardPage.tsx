@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Film, Tv, Layers, Clapperboard, Tags, FileText, CheckCircle } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Film, Tv, Layers, Clapperboard, Tags, FileText, CheckCircle, Plus, Database } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { adminApi, ApiError, type DashboardStatsDto } from '@/lib/api';
 import { ErrorState, LoadingBlock, PageHeader } from './adminShared';
@@ -47,6 +49,28 @@ export default function DashboardPage() {
       <PageHeader
         title="Dashboard"
         description="Catalog counts from the live admin API."
+        actions={
+          <>
+            <Button asChild className="gap-2">
+              <Link to="/admin/movies/new">
+                <Plus className="h-4 w-4" />
+                New Movie
+              </Link>
+            </Button>
+            <Button asChild className="gap-2">
+              <Link to="/admin/series/new">
+                <Plus className="h-4 w-4" />
+                New Series
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="gap-2">
+              <Link to="/admin/tools/tmdb">
+                <Database className="h-4 w-4" />
+                Import TMDB
+              </Link>
+            </Button>
+          </>
+        }
       />
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4" data-testid="dashboard-stats">
         {cards.map((stat) => (
