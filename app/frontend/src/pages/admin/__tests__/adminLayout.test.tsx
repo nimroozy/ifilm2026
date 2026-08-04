@@ -8,6 +8,7 @@ import AdminLayout from '../AdminLayout';
 import DocumentLangSync from '@/components/DocumentLangSync';
 import { LangProvider, useLang } from '@/components/CustomerLayout';
 import { tokenStore } from '@/lib/api';
+import { LOCALE_STORAGE_KEY } from '@/lib/locale';
 
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
@@ -65,12 +66,14 @@ function renderAt(initial: string) {
 describe('admin LTR layout', () => {
   beforeEach(() => {
     tokenStore.clearAdmin();
+    localStorage.clear();
     document.documentElement.setAttribute('dir', 'rtl');
     document.documentElement.setAttribute('lang', 'fa');
   });
 
   afterEach(() => {
     cleanup();
+    localStorage.clear();
   });
 
   it('admin root has dir=ltr and lang=en', async () => {
@@ -118,13 +121,16 @@ describe('admin LTR layout', () => {
         </LangProvider>
       </QueryClientProvider>
     );
+    // Default public locale is English; switch to Persian explicitly.
+    fireEvent.click(screen.getByText('Set FA'));
     expect(screen.getByTestId('public-dir').textContent).toBe('rtl');
     await waitFor(() => {
       expect(document.documentElement.getAttribute('dir')).toBe('rtl');
+      expect(localStorage.getItem(LOCALE_STORAGE_KEY)).toBe('fa');
     });
     cleanup();
 
-    // Public lang context defaults to fa; admin must still force LTR left sidebar.
+    // Saved public locale is fa; admin must still force LTR left sidebar.
     renderAt('/admin');
     const sidebar = await screen.findByTestId('admin-desktop-sidebar');
     expect(sidebar.className).toContain('left-0');
@@ -149,11 +155,17 @@ describe('admin LTR layout', () => {
 
   it('public application still supports RTL', async () => {
     renderAt('/');
+    // First-visit default is English/LTR.
+    await waitFor(() => {
+      expect(document.documentElement.getAttribute('dir')).toBe('ltr');
+      expect(document.documentElement.getAttribute('lang')).toBe('en');
+    });
+    expect(screen.getByTestId('public-dir').textContent).toBe('ltr');
+    fireEvent.click(screen.getByText('Set FA'));
     await waitFor(() => {
       expect(document.documentElement.getAttribute('dir')).toBe('rtl');
       expect(document.documentElement.getAttribute('lang')).toBe('fa');
     });
-    expect(screen.getByTestId('public-dir').textContent).toBe('rtl');
     fireEvent.click(screen.getByText('Set EN'));
     await waitFor(() => {
       expect(document.documentElement.getAttribute('dir')).toBe('ltr');
@@ -174,6 +186,9 @@ describe('production metadata cleanup', () => {
     expect(html).toContain('<title>iFilm Admin</title>');
     expect(html).toContain('content="iFilm media and catalog administration"');
     expect(html).toContain('href="/favicon.svg"');
+    expect(html).toMatch(/<html[^>]*lang="en"/);
+    expect(html).toMatch(/<html[^>]*dir="ltr"/);
+    expect(html).toContain("localStorage.getItem('ifilm.locale')");
     expect(html).not.toContain('Atoms Generated Project');
     expect(html).not.toContain('metadl.com');
     expect(html).not.toContain('favicon_atoms');

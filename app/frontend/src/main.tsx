@@ -2,6 +2,10 @@ import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 import { loadRuntimeConfig } from './lib/config.ts';
+import { applyBootstrapDocumentLocale } from './lib/locale.ts';
+
+// Apply persisted public locale (or English default) before React mounts.
+applyBootstrapDocumentLocale();
 
 // Load runtime configuration before rendering the app
 async function initializeApp() {

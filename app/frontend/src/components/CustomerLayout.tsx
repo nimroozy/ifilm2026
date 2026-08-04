@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Home, Film, Tv, Search, User, Bell, Menu, X, Globe, ChevronDown, Baby } from 'lucide-react';
 import { translations } from '@/data/mockData';
@@ -7,9 +7,16 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Button } from '@/components/ui/button';
 import { api, tokenStore } from '@/lib/api';
 import { isMockMode } from '@/lib/dataMode';
+import {
+  type AppLocale,
+  applyDocumentLocale,
+  localeDir,
+  readStoredLocale,
+  writeStoredLocale,
+} from '@/lib/locale';
 
 // ============ LANGUAGE CONTEXT ============
-type Lang = 'en' | 'fa' | 'ps';
+type Lang = AppLocale;
 interface LangContextType {
   lang: Lang;
   setLang: (l: Lang) => void;
@@ -18,24 +25,34 @@ interface LangContextType {
 }
 
 const LangContext = createContext<LangContextType>({
-  lang: 'fa',
+  lang: 'en',
   setLang: () => {},
-  t: translations.fa,
-  dir: 'rtl',
+  t: translations.en,
+  dir: 'ltr',
 });
 
 export const useLang = () => useContext(LangContext);
 
 export function LangProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLang] = useState<Lang>('fa');
-  const dir = lang === 'en' ? 'ltr' : 'rtl';
+  // Synchronous init from persisted storage — no browser-language default, no fa flash.
+  const [lang, setLangState] = useState<Lang>(() => readStoredLocale());
+  const dir = localeDir(lang);
   const t = translations[lang];
 
-  // Document lang/dir are applied by DocumentLangSync inside the router so
-  // /admin can stay LTR without fighting public RTL language changes.
+  const setLang = useCallback((next: Lang) => {
+    writeStoredLocale(next);
+    setLangState(next);
+    // Keep document in sync immediately for public routes; DocumentLangSync
+    // still owns admin forcing so it can override on /admin.
+    applyDocumentLocale(next);
+  }, []);
+
+  // Document lang/dir for route changes are owned by DocumentLangSync.
+  // On mount, re-apply so the first paint matches persisted locale.
   useEffect(() => {
     document.documentElement.classList.add('dark');
-  }, []);
+    applyDocumentLocale(lang);
+  }, [lang]);
 
   return (
     <LangContext.Provider value={{ lang, setLang, t, dir }}>

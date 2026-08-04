@@ -1,9 +1,33 @@
 <!doctype html>
-<html lang="fa" dir="rtl" class="dark">
+<html lang="en" dir="ltr" class="dark">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // Synchronous locale bootstrap — no browser-language default, no Persian flash.
+      (function () {
+        try {
+          var path = location.pathname || '';
+          if (path === '/admin' || path.indexOf('/admin/') === 0) {
+            document.documentElement.setAttribute('lang', 'en');
+            document.documentElement.setAttribute('dir', 'ltr');
+            return;
+          }
+          var saved = null;
+          try {
+            saved = localStorage.getItem('ifilm.locale');
+          } catch (e) {}
+          if (saved !== 'en' && saved !== 'fa' && saved !== 'ps') {
+            var match = document.cookie.match(/(?:^|; )ifilm\.locale=([^;]*)/);
+            saved = match ? decodeURIComponent(match[1]) : null;
+          }
+          var locale = saved === 'en' || saved === 'fa' || saved === 'ps' ? saved : 'en';
+          document.documentElement.setAttribute('lang', locale);
+          document.documentElement.setAttribute('dir', locale === 'en' ? 'ltr' : 'rtl');
+        } catch (e) {}
+      })();
+    </script>
     <title>iFilm Admin</title>
     <meta name="description" content="iFilm media and catalog administration" />
     <meta name="author" content="iFilm" />
