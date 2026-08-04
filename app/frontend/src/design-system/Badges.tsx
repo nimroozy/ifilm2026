@@ -57,7 +57,7 @@ export function DemoBadge({ className }: { className?: string }) {
       )}
       data-testid="demo-clip-badge"
     >
-      Demo
+      Demo Clip
     </span>
   );
 }
