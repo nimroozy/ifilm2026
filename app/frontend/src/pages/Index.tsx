@@ -1,29 +1,27 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Play, Info, Star, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth, useLang } from '@/components/CustomerLayout';
 import { ContentShelf, MediaCard } from '@/design-system';
+import { HeroCarousel } from '@/components/HeroCarousel';
 import { watchHistory } from '@/data/mockData';
 import { fetchHomeCatalog, type CatalogMovie, type CatalogSeries } from '@/lib/catalogData';
 import { api, ApiError, tokenStore, type WatchProgressDto } from '@/lib/api';
 import { isMockMode } from '@/lib/dataMode';
-import { canPlayFullMovie, fullMovieUnavailableLabel, hasDemoClip } from '@/lib/catalogPresentation';
-import { trailerEmbedUrl } from '@/lib/trailers';
+import { hasDemoClip, canPlayFullMovie } from '@/lib/catalogPresentation';
 
 type HomeData = Awaited<ReturnType<typeof fetchHomeCatalog>>;
 
 function HomeLoading() {
   return (
     <div className="space-y-6 pt-8" data-testid="home-loading">
-      <Skeleton className="h-[50vh] w-full rounded-none" />
-      <div className="container mx-auto px-4 space-y-4">
-        <Skeleton className="h-6 w-48" />
-        <div className="flex gap-3 overflow-hidden">
+      <Skeleton className="h-[70vh] w-full rounded-none" />
+      <div className="space-y-4 px-4 sm:px-6 lg:px-8">
+        <Skeleton className="h-7 w-56" />
+        <div className="flex gap-4 overflow-hidden">
           {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-[210px] w-[140px] shrink-0" />
+            <Skeleton key={i} className="h-[260px] w-[160px] shrink-0 rounded-xl" />
           ))}
         </div>
       </div>
@@ -46,124 +44,6 @@ function HomeError({ message, onRetry }: { message: string; onRetry: () => void 
   );
 }
 
-function HeroBanner({ featured }: { featured: CatalogMovie[] }) {
-  const { t } = useLang();
-  const navigate = useNavigate();
-  const [current, setCurrent] = useState(0);
-  const movie = featured[current] || featured[0];
-
-  if (!movie) {
-    return (
-      <section className="relative h-[40vh] w-full overflow-hidden -mt-16 md:-mt-20 bg-muted flex items-center justify-center">
-        <p className="text-muted-foreground">No featured titles yet.</p>
-      </section>
-    );
-  }
-
-  const playable = canPlayFullMovie(movie);
-  const demo = hasDemoClip(movie);
-  const trailerHref = trailerEmbedUrl(movie) || null;
-
-  return (
-    <section
-      className="relative h-[70vh] md:h-[85vh] w-full overflow-hidden -mt-16 md:-mt-20"
-      aria-label="Featured title"
-    >
-      <div className="absolute inset-0 bg-[hsl(222,28%,6%)]">
-        <img
-          src={movie.backdrop}
-          alt=""
-          className="h-full w-full object-cover opacity-55"
-          loading="eager"
-          decoding="async"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/55 to-background/15" />
-        <div className="absolute inset-0 bg-gradient-to-r from-background/95 via-background/45 to-transparent" />
-      </div>
-
-      <div className="relative flex h-full items-end pb-16 md:pb-24">
-        <div className="container mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-          <div className="space-y-4 animate-fade-in">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">iFilm</p>
-            <h1 className="max-w-[18ch] font-display text-3xl font-bold leading-tight text-foreground drop-shadow-lg md:text-5xl lg:text-6xl">
-              {movie.title}
-            </h1>
-            <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-              {movie.ageRating ? (
-                <Badge variant="outline" className="border-primary/50 text-primary">
-                  {movie.ageRating}
-                </Badge>
-              ) : null}
-              <span>{movie.year}</span>
-              <span className="flex items-center gap-1">
-                <Clock className="h-3.5 w-3.5" />
-                {movie.duration} {t.common.min}
-              </span>
-              <span className="flex items-center gap-1">
-                <Star className="h-3.5 w-3.5 fill-primary text-primary" />
-                {movie.rating}
-              </span>
-            </div>
-            <p className="max-w-2xl text-sm text-foreground/85 md:text-base line-clamp-3 md:line-clamp-4">
-              {movie.description}
-            </p>
-            <div className="flex flex-wrap items-center gap-3 pt-2">
-              {playable || demo ? (
-                <Button
-                  size="lg"
-                  variant="play"
-                  onClick={() => navigate(`/player/movie/${movie.id}`)}
-                  className="gap-2"
-                  aria-label={demo ? `Play demo clip for ${movie.title}` : `Play ${movie.title}`}
-                >
-                  <Play className="h-5 w-5 fill-current" />
-                  {demo && !playable ? 'Play Demo Clip' : t.hero.play}
-                </Button>
-              ) : (
-                <Badge variant="secondary" className="px-3 py-2 text-sm">
-                  {fullMovieUnavailableLabel()}
-                </Badge>
-              )}
-              <Button
-                size="lg"
-                variant="glass"
-                onClick={() => navigate(`/movie/${movie.id}`)}
-                className="gap-2"
-              >
-                <Info className="h-5 w-5" />
-                {t.hero.moreInfo}
-              </Button>
-              {trailerHref ? (
-                <Button size="lg" variant="outline" asChild className="gap-2">
-                  <a href={trailerHref} target="_blank" rel="noopener noreferrer">
-                    Trailer
-                  </a>
-                </Button>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="absolute bottom-6 left-1/2 flex -translate-x-1/2 gap-2" role="tablist" aria-label="Featured titles">
-        {featured.map((item, i) => (
-          <button
-            key={item.id}
-            type="button"
-            role="tab"
-            aria-selected={i === current}
-            aria-label={`Show ${item.title}`}
-            onClick={() => setCurrent(i)}
-            className={`h-2 rounded-full transition-all focus-visible:ring-2 focus-visible:ring-ring ${
-              i === current ? 'w-6 bg-primary' : 'w-2 bg-foreground/30 hover:bg-foreground/50'
-            }`}
-          />
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function ContentRow({
   title,
   items,
@@ -183,6 +63,10 @@ function ContentRow({
         const contentType = type === 'series' || item.type === 'series' ? 'Series' : 'Movie';
         const qualities = 'qualities' in item ? item.qualities : undefined;
         const topQuality = Array.isArray(qualities) && qualities.length ? String(qualities[0]) : undefined;
+        const runtime =
+          'duration' in item && typeof item.duration === 'number' && item.duration > 0
+            ? `${item.duration} min`
+            : undefined;
         return (
           <MediaCard
             key={`${contentType}-${item.id}`}
@@ -190,6 +74,7 @@ function ContentRow({
             imageUrl={item.poster}
             year={item.year}
             rating={item.rating}
+            runtime={runtime}
             quality={topQuality}
             showDemo={hasDemoClip(item)}
             playable={canPlayFullMovie(item) || hasDemoClip(item)}
@@ -343,21 +228,28 @@ export default function HomePage() {
   if (error) return <HomeError message={error} onRetry={load} />;
   if (!data) return <HomeError message="No catalog data" onRetry={load} />;
 
+  const dramaMovies = data.popular.filter((m) => m.genres.includes('Drama')).slice(0, 12);
+  const topRated = [...data.popular].sort((a, b) => b.rating - a.rating).slice(0, 12);
+  const newReleases = [...data.recentlyAdded].slice(0, 12);
+  const animationFamily = data.familyMovies.slice(0, 12);
+
   return (
-    <div>
-      <HeroBanner featured={data.featured} />
-      <div className="space-y-2 -mt-8 relative z-10">
+    <div className="pb-8">
+      <HeroCarousel featured={data.featured} />
+      <div className="relative z-10 -mt-10 space-y-1 md:-mt-14">
         <ContinueWatchingRow />
         <ContentRow title={t.sections.trending} items={data.trending} />
-        <ContentRow title={t.sections.popularSeries} items={data.popularSeries} type="series" />
-        <ContentRow title={t.sections.recentlyAdded} items={data.recentlyAdded} />
+        <ContentRow title={t.sections.recentlyAdded} items={newReleases} />
+        <ContentRow title="Top Rated" items={topRated} />
         <ContentRow title={t.sections.popularMovies} items={data.popular} />
+        <ContentRow title={t.sections.popularSeries} items={data.popularSeries} type="series" />
+        <ContentRow title={t.sections.action} items={data.actionMovies} />
+        <ContentRow title="Drama" items={dramaMovies} />
+        <ContentRow title={t.sections.comedy} items={data.comedyMovies} />
+        <ContentRow title="Animation & Family" items={animationFamily} />
         <ContentRow title={t.sections.afghanMovies} items={data.afghanMovies} />
         <ContentRow title={t.sections.persianDubbed} items={data.persianDubbed} />
         <ContentRow title={t.sections.pashtoDubbed} items={data.pashtoDubbed} />
-        <ContentRow title={t.sections.action} items={data.actionMovies} />
-        <ContentRow title={t.sections.comedy} items={data.comedyMovies} />
-        <ContentRow title={t.sections.family} items={data.familyMovies} />
       </div>
     </div>
   );
