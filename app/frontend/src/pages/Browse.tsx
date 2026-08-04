@@ -228,8 +228,9 @@ export function MoviesPage({ audience = 'all' }: { audience?: 'all' | 'children'
                 year={movie.year}
                 rating={movie.rating}
                 runtime={movie.duration ? `${movie.duration} min` : undefined}
-                quality={movie.qualities?.[0] || 'HD'}
+                quality={movie.qualities?.[0] || undefined}
                 showDemo={hasDemoClip(movie)}
+                playable={canPlayFullMovie(movie) || hasDemoClip(movie)}
                 onActivate={() => navigate(`/movie/${movie.id}`)}
               />
             ))}

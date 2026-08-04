@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Play, Info, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,12 @@ import { trailerEmbedUrl } from '@/lib/trailers';
 import { cn } from '@/lib/utils';
 
 const AUTOPLAY_MS = 8000;
+const SWIPE_THRESHOLD_PX = 48;
+
+function prefersReducedMotion(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
 
 /** Full-bleed Netflix-style featured carousel. */
 export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
@@ -18,14 +24,32 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
   const navigate = useNavigate();
   const [current, setCurrent] = useState(0);
   const [paused, setPaused] = useState(false);
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const touchStartX = useRef<number | null>(null);
 
   useEffect(() => {
-    if (paused || featured.length < 2) return;
+    const update = () => setReduceMotion(prefersReducedMotion());
+    update();
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+
+  useEffect(() => {
+    if (paused || reduceMotion || featured.length < 2) return;
     const id = window.setInterval(() => {
       setCurrent((value) => (value + 1) % featured.length);
     }, AUTOPLAY_MS);
     return () => window.clearInterval(id);
-  }, [paused, featured.length]);
+  }, [paused, reduceMotion, featured.length]);
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.hidden) setPaused(true);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
 
   const movie = featured[current] || featured[0];
   if (!movie) {
@@ -43,20 +67,50 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
 
   const go = (delta: number) => {
     if (!featured.length) return;
+    setPaused(true);
     setCurrent((value) => (value + delta + featured.length) % featured.length);
+  };
+
+  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (featured.length < 2) return;
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      go(-1);
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      go(1);
+    }
   };
 
   return (
     <section
       className="relative -mt-16 h-[78vh] w-full overflow-hidden md:-mt-20 md:h-[90vh]"
       aria-label="Featured titles"
+      aria-roledescription="carousel"
+      tabIndex={0}
+      onKeyDown={onKeyDown}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
+      onPointerDown={() => setPaused(true)}
       onFocusCapture={() => setPaused(true)}
       onBlurCapture={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
           setPaused(false);
         }
+      }}
+      onTouchStart={(event) => {
+        touchStartX.current = event.changedTouches[0]?.clientX ?? null;
+        setPaused(true);
+      }}
+      onTouchEnd={(event) => {
+        const start = touchStartX.current;
+        touchStartX.current = null;
+        if (start == null || featured.length < 2) return;
+        const end = event.changedTouches[0]?.clientX;
+        if (end == null) return;
+        const delta = end - start;
+        if (Math.abs(delta) < SWIPE_THRESHOLD_PX) return;
+        go(delta > 0 ? -1 : 1);
       }}
     >
       <div className="absolute inset-0 bg-[hsl(222,28%,5%)]">
@@ -64,7 +118,10 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
           key={movie.id}
           src={movie.backdrop || movie.poster}
           alt=""
-          className="h-full w-full object-cover object-center opacity-75 animate-fade-in"
+          className={cn(
+            'h-full w-full object-cover object-center opacity-75',
+            !reduceMotion && 'animate-fade-in'
+          )}
           loading="eager"
           decoding="async"
         />
@@ -75,7 +132,10 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
 
       <div className="relative z-10 flex h-full items-end pb-20 md:pb-28">
         <div className="container mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
-          <div key={movie.id} className="max-w-2xl space-y-5 animate-lift-in">
+          <div
+            key={movie.id}
+            className={cn('max-w-2xl space-y-5', !reduceMotion && 'animate-lift-in')}
+          >
             <p className={typography.eyebrow}>iFilm</p>
             {logoUrl ? (
               <img
@@ -93,7 +153,11 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
             <div className="flex flex-wrap items-center gap-2">
               {movie.ageRating ? <MetaChip>{movie.ageRating}</MetaChip> : null}
               {movie.year ? <MetaChip>{movie.year}</MetaChip> : null}
-              {movie.duration ? <MetaChip>{movie.duration} {t.common.min}</MetaChip> : null}
+              {movie.duration ? (
+                <MetaChip>
+                  {movie.duration} {t.common.min}
+                </MetaChip>
+              ) : null}
               {movie.rating ? <MetaChip>★ {Number(movie.rating).toFixed(1)}</MetaChip> : null}
             </div>
 
@@ -167,7 +231,10 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
             role="tab"
             aria-selected={index === current}
             aria-label={`Show ${item.title}`}
-            onClick={() => setCurrent(index)}
+            onClick={() => {
+              setPaused(true);
+              setCurrent(index);
+            }}
             className={cn(
               'h-2 rounded-full transition-all duration-normal focus-visible:ring-2 focus-visible:ring-ring',
               index === current ? 'w-8 bg-primary' : 'w-2 bg-foreground/35 hover:bg-foreground/55'

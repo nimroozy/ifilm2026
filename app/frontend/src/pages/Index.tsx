@@ -9,7 +9,7 @@ import { watchHistory } from '@/data/mockData';
 import { fetchHomeCatalog, type CatalogMovie, type CatalogSeries } from '@/lib/catalogData';
 import { api, ApiError, tokenStore, type WatchProgressDto } from '@/lib/api';
 import { isMockMode } from '@/lib/dataMode';
-import { hasDemoClip } from '@/lib/catalogPresentation';
+import { hasDemoClip, canPlayFullMovie } from '@/lib/catalogPresentation';
 
 type HomeData = Awaited<ReturnType<typeof fetchHomeCatalog>>;
 
