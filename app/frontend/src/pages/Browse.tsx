@@ -686,6 +686,8 @@ export function SearchPage() {
   const { t } = useLang();
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [reloadToken, setReloadToken] = useState(0);
   const [results, setResults] = useState<
     Array<(CatalogMovie | CatalogSeries) & { resultType: 'movie' | 'series' }>
   >([]);
@@ -699,9 +701,11 @@ export function SearchPage() {
       setResults([]);
       setError(null);
       setLoading(false);
+      setActiveIndex(0);
       return;
     }
     let cancelled = false;
+    const requestId = reloadToken;
     const timer = window.setTimeout(async () => {
       setLoading(true);
       setError(null);
@@ -712,53 +716,126 @@ export function SearchPage() {
           ...data.movies.map((m) => ({ ...m, resultType: 'movie' as const })),
           ...data.series.map((s) => ({ ...s, resultType: 'series' as const })),
         ]);
+        setActiveIndex(0);
       } catch (err) {
         if (cancelled) return;
         setResults([]);
         setError(
-          err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Search failed'
+          err instanceof ApiError
+            ? err.message || 'Search request failed. Please try again.'
+            : err instanceof Error
+              ? err.message
+              : 'Search request failed. Please try again.'
         );
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && requestId === reloadToken) setLoading(false);
       }
-    }, 250);
+    }, 180);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [query]);
+  }, [query, reloadToken]);
+
+  useEffect(() => {
+    if (!results.length) return;
+    const active = results[activeIndex];
+    if (!active) return;
+    const node = document.getElementById(`search-result-${active.resultType}-${active.id}`);
+    node?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [activeIndex, results]);
+
+  const openResult = (item: (typeof results)[number]) => {
+    navigate(item.resultType === 'series' ? `/series/${item.id}` : `/movie/${item.id}`);
+  };
+
+  /** Highlight match using text nodes only — never inject HTML from titles/queries. */
+  const highlight = (text: string) => {
+    const q = query.trim();
+    if (!q) return text;
+    const idx = text.toLowerCase().indexOf(q.toLowerCase());
+    if (idx < 0) return text;
+    return (
+      <>
+        {text.slice(0, idx)}
+        <mark className="rounded-sm bg-primary/30 px-0.5 text-foreground">
+          {text.slice(idx, idx + q.length)}
+        </mark>
+        {text.slice(idx + q.length)}
+      </>
+    );
+  };
+
+  const listExpanded = Boolean(query.trim()) && results.length > 0 && !loading && !error;
 
   return (
     <div className="min-h-screen">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
-        <div className="relative max-w-2xl mx-auto mb-8">
-          <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+      <div className="container mx-auto px-4 pb-10 pt-6 sm:px-6 lg:px-8">
+        <div className="relative mx-auto mb-8 max-w-2xl">
+          <SearchIcon className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
           <Input
+            role="combobox"
             placeholder={t.search.placeholder}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="pl-12 h-14 text-lg bg-card border-border rounded-xl"
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                setQuery('');
+                return;
+              }
+              if (!results.length) return;
+              if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                setActiveIndex((value) => Math.min(results.length - 1, value + 1));
+              } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                setActiveIndex((value) => Math.max(0, value - 1));
+              } else if (event.key === 'Enter') {
+                event.preventDefault();
+                const item = results[activeIndex];
+                if (item) openResult(item);
+              }
+            }}
+            className="h-14 rounded-2xl border-border bg-card/80 pl-12 pr-12 text-lg shadow-md backdrop-blur-sm"
             autoFocus
+            autoComplete="off"
+            aria-label="Search catalog"
+            aria-autocomplete="list"
+            aria-expanded={listExpanded}
+            aria-controls="search-results"
+            aria-activedescendant={
+              listExpanded && results[activeIndex]
+                ? `search-result-${results[activeIndex].resultType}-${results[activeIndex].id}`
+                : undefined
+            }
           />
-          {query && (
+          {query ? (
             <Button
               variant="ghost"
               size="icon"
               onClick={() => setQuery('')}
               className="absolute right-2 top-1/2 -translate-y-1/2"
+              aria-label="Clear search"
             >
               <X className="h-5 w-5" />
             </Button>
-          )}
+          ) : null}
         </div>
 
-        {!query ? (
-          <div className="max-w-2xl mx-auto">
-            <h3 className="text-sm font-medium text-muted-foreground mb-3">{t.search.popular}</h3>
+        {!query.trim() ? (
+          <div className="mx-auto max-w-2xl">
+            <h3 className="mb-3 text-sm font-medium text-muted-foreground">{t.search.popular}</h3>
             <div className="flex flex-wrap gap-2">
-              {popularSearches.map((s) => (
-                <Button key={s} variant="secondary" size="sm" onClick={() => setQuery(s)} className="rounded-full">
-                  {s}
+              {popularSearches.map((term) => (
+                <Button
+                  key={term}
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setQuery(term)}
+                  className="rounded-full"
+                >
+                  {term}
                 </Button>
               ))}
             </div>
@@ -766,43 +843,51 @@ export function SearchPage() {
         ) : loading ? (
           <PageLoading />
         ) : error ? (
-          <PageError message={error} onRetry={() => setQuery((q) => q + '')} />
+          <div className="mx-auto max-w-lg space-y-3 text-center" data-testid="search-api-error">
+            <p className="text-muted-foreground" role="alert">
+              {error}
+            </p>
+            <p className="text-xs text-muted-foreground">This is a search service error, not an empty result.</p>
+            <Button onClick={() => setReloadToken((value) => value + 1)}>Retry</Button>
+          </div>
         ) : results.length === 0 ? (
-          <div className="text-center py-20 text-muted-foreground">
+          <div className="py-20 text-center text-muted-foreground" data-testid="search-no-results">
             <p className="text-lg">{t.search.noResults}</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-            {results.map((item) => (
+          <div
+            id="search-results"
+            role="listbox"
+            aria-label="Search results"
+            className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+          >
+            {results.map((item, index) => (
               <div
                 key={`${item.resultType}-${item.id}`}
-                onClick={() =>
-                  navigate(item.resultType === 'series' ? `/series/${item.id}` : `/movie/${item.id}`)
+                id={`search-result-${item.resultType}-${item.id}`}
+                role="option"
+                aria-selected={index === activeIndex}
+                className={
+                  index === activeIndex
+                    ? 'rounded-xl ring-2 ring-primary ring-offset-2 ring-offset-background'
+                    : undefined
                 }
-                className="cursor-pointer group"
               >
-                <div className="relative aspect-[2/3] rounded-lg overflow-hidden bg-muted mb-2">
-                  <img
-                    src={item.poster}
-                    alt={item.title}
-                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                  />
-                  <Badge className="absolute top-2 left-2 bg-primary/90 text-primary-foreground text-[10px]">
-                    {item.resultType === 'series' ? 'Series' : 'Movie'}
-                  </Badge>
-                  {hasDemoClip(item) && (
-                    <div className="absolute top-2 right-2">
-                      <DemoClipBadge item={item} />
-                    </div>
-                  )}
-                </div>
-                <h3 className="text-sm font-medium text-foreground truncate">{item.title}</h3>
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <span>{item.year}</span>
-                  <span>•</span>
-                  <Star className="h-3 w-3 text-primary fill-primary" />
-                  <span>{item.rating}</span>
-                </div>
+                <MediaCard
+                  className="!w-full max-w-none"
+                  title={item.title}
+                  imageUrl={item.poster}
+                  year={item.year}
+                  rating={item.rating}
+                  showDemo={hasDemoClip(item)}
+                  playable={canPlayFullMovie(item) || hasDemoClip(item)}
+                  badge={item.resultType === 'series' ? 'Series' : 'Movie'}
+                  onActivate={() => openResult(item)}
+                />
+                <p className="mt-1 px-0.5 text-xs text-muted-foreground">
+                  {highlight(item.title)}
+                  {item.genres?.length ? ` · ${item.genres.slice(0, 2).join(', ')}` : ''}
+                </p>
               </div>
             ))}
           </div>
