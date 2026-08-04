@@ -26,6 +26,7 @@ describe('api helpers', () => {
       description: 'desc',
       poster_url: 'p',
       backdrop_url: 'b',
+      logo_url: 'logo.svg',
       audio: ['Dari'],
       subtitles: ['English'],
       qualities: ['720p'],
@@ -42,6 +43,7 @@ describe('api helpers', () => {
     expect(mapped.duration).toBe(100);
     expect(mapped.rating).toBe(8);
     expect(mapped.poster).toBe('p');
+    expect(mapped.logoUrl).toBe('logo.svg');
     expect(mapped.featured).toBe(true);
     expect(mapped.genres).toEqual(['Drama']);
     expect(mapped.type).toBe('movie');

@@ -66,6 +66,18 @@ export default {
           DEFAULT: 'hsl(var(--accent))',
           foreground: 'hsl(var(--accent-foreground))',
         },
+        success: {
+          DEFAULT: 'hsl(var(--success))',
+          foreground: 'hsl(var(--success-foreground))',
+        },
+        warning: {
+          DEFAULT: 'hsl(var(--warning))',
+          foreground: 'hsl(var(--warning-foreground))',
+        },
+        gold: {
+          DEFAULT: 'hsl(var(--primary))',
+          foreground: 'hsl(var(--primary-foreground))',
+        },
         popover: {
           DEFAULT: 'hsl(var(--popover))',
           foreground: 'hsl(var(--popover-foreground))',
@@ -117,12 +129,31 @@ export default {
           from: { transform: 'translateY(10px)', opacity: '0' },
           to: { transform: 'translateY(0)', opacity: '1' },
         },
+        'scale-in': {
+          from: { transform: 'scale(0.96)', opacity: '0' },
+          to: { transform: 'scale(1)', opacity: '1' },
+        },
+        'lift-in': {
+          from: { transform: 'translateY(16px)', opacity: '0' },
+          to: { transform: 'translateY(0)', opacity: '1' },
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
         'fade-in': 'fade-in 0.5s ease-out',
         'slide-up': 'slide-up 0.4s ease-out',
+        'scale-in': 'scale-in 0.35s ease-out',
+        'lift-in': 'lift-in 0.45s ease-out',
+      },
+      fontSize: {
+        'display-xl': ['4.5rem', { lineHeight: '1.05', letterSpacing: '-0.03em', fontWeight: '700' }],
+        'display-lg': ['3.5rem', { lineHeight: '1.08', letterSpacing: '-0.025em', fontWeight: '700' }],
+        'display-md': ['2.5rem', { lineHeight: '1.12', letterSpacing: '-0.02em', fontWeight: '700' }],
+      },
+      spacing: {
+        'shelf-x': '1.5rem',
+        'section-y': '1.5rem',
       },
     },
   },

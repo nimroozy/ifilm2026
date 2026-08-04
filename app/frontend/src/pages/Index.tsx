@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Play, Info, Star, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Play, Info, Star, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth, useLang } from '@/components/CustomerLayout';
+import { ContentShelf, MediaCard } from '@/design-system';
 import { watchHistory } from '@/data/mockData';
 import { fetchHomeCatalog, type CatalogMovie, type CatalogSeries } from '@/lib/catalogData';
 import { api, ApiError, tokenStore, type WatchProgressDto } from '@/lib/api';
@@ -110,8 +111,9 @@ function HeroBanner({ featured }: { featured: CatalogMovie[] }) {
               {playable || demo ? (
                 <Button
                   size="lg"
+                  variant="play"
                   onClick={() => navigate(`/player/movie/${movie.id}`)}
-                  className="gap-2 font-semibold shadow-lg"
+                  className="gap-2"
                   aria-label={demo ? `Play demo clip for ${movie.title}` : `Play ${movie.title}`}
                 >
                   <Play className="h-5 w-5 fill-current" />
@@ -124,15 +126,15 @@ function HeroBanner({ featured }: { featured: CatalogMovie[] }) {
               )}
               <Button
                 size="lg"
-                variant="secondary"
+                variant="glass"
                 onClick={() => navigate(`/movie/${movie.id}`)}
-                className="gap-2 shadow-md"
+                className="gap-2"
               >
                 <Info className="h-5 w-5" />
                 {t.hero.moreInfo}
               </Button>
               {trailerHref ? (
-                <Button size="lg" variant="outline" asChild className="gap-2 bg-background/40 backdrop-blur">
+                <Button size="lg" variant="outline" asChild className="gap-2">
                   <a href={trailerHref} target="_blank" rel="noopener noreferrer">
                     Trailer
                   </a>
@@ -171,96 +173,39 @@ function ContentRow({
   items: (CatalogMovie | CatalogSeries)[];
   type?: 'movie' | 'series';
 }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
-
-  const scroll = (dir: 'left' | 'right') => {
-    if (scrollRef.current) {
-      const amount = dir === 'left' ? -400 : 400;
-      scrollRef.current.scrollBy({ left: amount, behavior: 'smooth' });
-    }
-  };
 
   if (!items.length) return null;
 
   return (
-    <section className="py-4 md:py-6">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <h2 className="text-lg md:text-xl font-display font-bold text-foreground mb-3">{title}</h2>
-      </div>
-      <div className="relative group">
-        <button
-          onClick={() => scroll('left')}
-          className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-background/80 backdrop-blur-sm p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hidden md:flex"
-        >
-          <ChevronLeft className="h-5 w-5" />
-        </button>
-        <div
-          ref={scrollRef}
-          className="flex gap-3 overflow-x-auto hide-scrollbar px-4 sm:px-6 lg:px-8 scroll-smooth"
-        >
-          {items.map((item) => {
-            const contentType = type === 'series' || item.type === 'series' ? 'Series' : 'Movie';
-            return (
-            <div
-              key={`${contentType}-${item.id}`}
-              role="link"
-              tabIndex={0}
-              onClick={() => navigate(type === 'series' ? `/series/${item.id}` : `/movie/${item.id}`)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  navigate(type === 'series' ? `/series/${item.id}` : `/movie/${item.id}`);
-                }
-              }}
-              className="flex-shrink-0 w-[140px] md:w-[180px] cursor-pointer group/card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg"
-            >
-              <div className="relative aspect-[2/3] rounded-lg overflow-hidden bg-muted mb-2">
-                <img
-                  src={item.poster}
-                  alt={item.title}
-                  loading="lazy"
-                  decoding="async"
-                  sizes="(max-width: 768px) 140px, 180px"
-                  className="w-full h-full object-cover transition-transform duration-normal group-hover/card:scale-105"
-                />
-                <div className="absolute top-2 left-2 right-2 flex flex-wrap justify-between gap-1">
-                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5">
-                    {contentType}
-                  </Badge>
-                  {hasDemoClip(item) && (
-                    <Badge className="bg-emerald-600/90 text-white text-[10px] px-1.5 py-0.5" data-testid="demo-clip-badge">
-                      Demo Clip
-                    </Badge>
-                  )}
-                  {item.type === 'series' && 'newEpisode' in item && item.newEpisode && (
-                    <Badge className="bg-destructive text-destructive-foreground text-[10px] px-1.5 py-0.5">
-                      NEW
-                    </Badge>
-                  )}
-                </div>
-              </div>
-              <h3 className="text-xs md:text-sm font-medium text-foreground truncate">{item.title}</h3>
-              <div className="flex items-center gap-1.5 text-[10px] md:text-xs text-muted-foreground">
-                <span>{item.year}</span>
-                <span>•</span>
-                <span className="flex items-center gap-0.5">
-                  <Star className="h-3 w-3 text-primary fill-primary" />
-                  {item.rating}
-                </span>
-              </div>
-            </div>
-            );
-          })}
-        </div>
-        <button
-          onClick={() => scroll('right')}
-          className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-background/80 backdrop-blur-sm p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hidden md:flex"
-        >
-          <ChevronRight className="h-5 w-5" />
-        </button>
-      </div>
-    </section>
+    <ContentShelf title={title}>
+      {items.map((item) => {
+        const contentType = type === 'series' || item.type === 'series' ? 'Series' : 'Movie';
+        const qualities = 'qualities' in item ? item.qualities : undefined;
+        const topQuality = Array.isArray(qualities) && qualities.length ? String(qualities[0]) : undefined;
+        return (
+          <MediaCard
+            key={`${contentType}-${item.id}`}
+            title={item.title}
+            imageUrl={item.poster}
+            year={item.year}
+            rating={item.rating}
+            quality={topQuality}
+            showDemo={hasDemoClip(item)}
+            badge={
+              item.type === 'series' && 'newEpisode' in item && item.newEpisode
+                ? 'NEW'
+                : contentType === 'Series'
+                  ? 'Series'
+                  : undefined
+            }
+            onActivate={() =>
+              navigate(type === 'series' || item.type === 'series' ? `/series/${item.id}` : `/movie/${item.id}`)
+            }
+          />
+        );
+      })}
+    </ContentShelf>
   );
 }
 
@@ -333,67 +278,28 @@ function ContinueWatchingRow() {
   if (!items.length) return null;
 
   return (
-    <section className="py-4 md:py-6">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <h2 className="text-lg md:text-xl font-serif font-bold text-foreground mb-3">
-          {t.sections.continueWatching}
-        </h2>
-      </div>
-      <div className="flex gap-3 overflow-x-auto hide-scrollbar px-4 sm:px-6 lg:px-8">
-        {items.map((item) => (
-          <div
-            key={item.id}
-            role="link"
-            tabIndex={0}
-            onClick={() => {
-              if ('media_asset_id' in item) {
-                if (item.available && item.player_path) navigate(item.player_path);
-              } else {
-                navigate(item.type === 'series' ? `/series/${item.contentId}` : `/player/movie/${item.contentId}`);
-              }
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                (event.currentTarget as HTMLDivElement).click();
-              }
-            }}
-            className="flex-shrink-0 w-[200px] md:w-[280px] cursor-pointer group/card"
-          >
-            <div className="relative aspect-video rounded-lg overflow-hidden bg-muted mb-2">
-              {('poster_url' in item ? item.poster_url : item.poster) ? (
-                <img
-                  src={'poster_url' in item ? item.poster_url : item.poster}
-                  alt={item.title}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="flex h-full items-center justify-center px-3 text-center text-xs text-muted-foreground">
-                  {item.title}
-                </div>
-              )}
-              <div className="absolute inset-0 bg-black/0 group-hover/card:bg-black/40 transition-all flex items-center justify-center opacity-0 group-hover/card:opacity-100">
-                <Play className="h-10 w-10 text-white fill-white" />
-              </div>
-              <div className="absolute bottom-0 left-0 right-0 h-1 bg-muted/50">
-                <div
-                  className="h-full bg-primary"
-                  style={{
-                    width: `${Math.min(100, Math.max(0, 'progress_percent' in item ? item.progress_percent : item.progress))}%`,
-                  }}
-                />
-              </div>
-            </div>
-            <h3 className="text-xs md:text-sm font-medium text-foreground truncate">{item.title}</h3>
-            {('subtitle' in item ? item.subtitle : item.episode) && (
-              <p className="text-[10px] text-muted-foreground">
-                {'subtitle' in item ? item.subtitle : item.episode}
-              </p>
-            )}
-          </div>
-        ))}
-      </div>
-    </section>
+    <ContentShelf title={t.sections.continueWatching}>
+      {items.map((item) => (
+        <MediaCard
+          key={item.id}
+          variant="landscape"
+          size="sm"
+          title={item.title}
+          imageUrl={'poster_url' in item ? item.poster_url : item.poster}
+          progress={
+            Math.min(100, Math.max(0, 'progress_percent' in item ? item.progress_percent : item.progress))
+          }
+          runtime={'subtitle' in item ? item.subtitle || undefined : item.episode || undefined}
+          onActivate={() => {
+            if ('media_asset_id' in item) {
+              if (item.available && item.player_path) navigate(item.player_path);
+            } else {
+              navigate(item.type === 'series' ? `/series/${item.contentId}` : `/player/movie/${item.contentId}`);
+            }
+          }}
+        />
+      ))}
+    </ContentShelf>
   );
 }
 

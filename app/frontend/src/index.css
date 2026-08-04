@@ -190,6 +190,36 @@
   animation: ifilm-shimmer 1.4s ease-in-out infinite;
 }
 
+/* Cinema type scale helpers */
+.ifilm-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+  font-weight: 700;
+  line-height: 1.08;
+}
+
+.ifilm-meta {
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: hsl(var(--muted-foreground));
+}
+
+.ifilm-page {
+  --page-pad-x: 1rem;
+}
+
+@media (min-width: 640px) {
+  .ifilm-page {
+    --page-pad-x: 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .ifilm-page {
+    --page-pad-x: 2rem;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ifilm-skeleton {
     animation: none;
