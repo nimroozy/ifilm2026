@@ -82,4 +82,23 @@ containers, migration head, health, or channel disagree.
 
 ## Disposable verification
 
-See `DISPOSABLE_VERIFICATION.md` for the recorded clean install (`v0.1.0-test`), update (`v0.1.1-test`), checksum rejection, and automatic health-failure rollback.
+See `DISPOSABLE_VERIFICATION.md` for the full record.
+
+PR #40 physical proof (2026-08-04), final head
+`e1b94daf88e1f90f005f98616f38a86c5c5c60cd`:
+
+| Gate | Result |
+| --- | --- |
+| Signed candidate `v1.2.1-rc.1` | Pass — https://github.com/nimroozy/ifilm2026/releases/tag/v1.2.1-rc.1 |
+| Release workflow | Pass — https://github.com/nimroozy/ifilm2026/actions/runs/30891929117 |
+| Clean install `v1.2.0` (ext4 + systemd) | Pass |
+| Stable → candidate four-way digests | Pass |
+| Forced health failure → `rolled_back` | Pass |
+| Compose conflict / unrelated container | Pass |
+| API restart / stale job authority | Pass |
+| Interrupted atomic env write | Pass |
+| Real rollback to `v1.2.0` | Pass |
+| Admin integrity mismatch block | Pass |
+| `verify-installation` after healthy terminals | Pass |
+
+Stable channel continues to ignore the prerelease. Do not merge until human review.
