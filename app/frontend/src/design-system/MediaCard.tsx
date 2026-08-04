@@ -14,6 +14,8 @@ export interface MediaCardProps {
   runtime?: string;
   quality?: string;
   showDemo?: boolean;
+  /** When true, show the Play overlay. Never imply playback if not playable. */
+  playable?: boolean;
   progress?: number;
   badge?: string;
   variant?: MediaCardVariant;
@@ -44,6 +46,7 @@ export function MediaCard({
   runtime,
   quality,
   showDemo,
+  playable = false,
   progress,
   badge,
   variant = 'poster',
@@ -67,7 +70,8 @@ export function MediaCard({
         }
       }}
       className={cn(
-        'group/card flex-shrink-0 cursor-pointer outline-none',
+        'group/card flex-shrink-0 outline-none',
+        onActivate ? 'cursor-pointer' : undefined,
         sizeClass(variant, size),
         'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-xl',
         className
@@ -80,7 +84,9 @@ export function MediaCard({
           surfaces.mediaCard,
           aspect,
           'group-hover/card:-translate-y-1 group-hover/card:shadow-xl group-hover/card:ring-white/15',
-          'group-focus-visible/card:-translate-y-1'
+          'group-focus-visible/card:-translate-y-1',
+          // Touch devices: keep a subtle lift available via active without requiring hover
+          'active:-translate-y-0.5'
         )}
       >
         {imageUrl ? (
@@ -99,11 +105,16 @@ export function MediaCard({
 
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-80" />
 
-        <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all duration-normal group-hover/card:bg-black/35 group-hover/card:opacity-100">
-          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg scale-90 transition-transform duration-normal group-hover/card:scale-100">
-            <Play className="h-5 w-5 fill-current" aria-hidden />
-          </span>
-        </div>
+        {playable ? (
+          <div
+            className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all duration-normal group-hover/card:bg-black/35 group-hover/card:opacity-100 group-focus-visible/card:bg-black/35 group-focus-visible/card:opacity-100"
+            data-testid="media-card-play"
+          >
+            <span className="flex h-12 w-12 scale-90 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform duration-normal group-hover/card:scale-100">
+              <Play className="h-5 w-5 fill-current" aria-hidden />
+            </span>
+          </div>
+        ) : null}
 
         <div className="absolute left-2 right-2 top-2 flex flex-wrap items-start justify-between gap-1">
           <div className="flex flex-wrap gap-1">
@@ -134,7 +145,7 @@ export function MediaCard({
       </div>
 
       <h3 className="truncate text-sm font-semibold text-foreground md:text-[15px]">{title}</h3>
-      <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+      <div className="mt-0.5 flex min-h-[1rem] items-center gap-1.5 text-xs text-muted-foreground">
         {year ? <span>{year}</span> : null}
         {year && runtime ? <span aria-hidden>•</span> : null}
         {runtime ? <span>{runtime}</span> : null}

@@ -13,6 +13,7 @@ describe('design system', () => {
         rating={8.4}
         quality="1080p"
         showDemo
+        playable
         progress={42}
         onActivate={onActivate}
       />
@@ -23,8 +24,16 @@ describe('design system', () => {
     expect(screen.getByTestId('demo-clip-badge')).toBeInTheDocument();
     expect(screen.getByTestId('quality-badge')).toHaveTextContent('1080p');
     expect(screen.getByTestId('media-card-progress')).toHaveStyle({ width: '42%' });
+    expect(screen.getByTestId('media-card-play')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('media-card'));
     expect(onActivate).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides Play overlay unless content is playable', () => {
+    const { rerender } = render(<MediaCard title="Unavailable Film" />);
+    expect(screen.queryByTestId('media-card-play')).not.toBeInTheDocument();
+    rerender(<MediaCard title="Playable Film" playable />);
+    expect(screen.getByTestId('media-card-play')).toBeInTheDocument();
   });
 
   it('supports keyboard activation on MediaCard', () => {

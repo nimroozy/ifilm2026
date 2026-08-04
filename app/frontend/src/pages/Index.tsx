@@ -192,6 +192,7 @@ function ContentRow({
             rating={item.rating}
             quality={topQuality}
             showDemo={hasDemoClip(item)}
+            playable={canPlayFullMovie(item) || hasDemoClip(item)}
             badge={
               item.type === 'series' && 'newEpisode' in item && item.newEpisode
                 ? 'NEW'
@@ -290,6 +291,11 @@ function ContinueWatchingRow() {
             Math.min(100, Math.max(0, 'progress_percent' in item ? item.progress_percent : item.progress))
           }
           runtime={'subtitle' in item ? item.subtitle || undefined : item.episode || undefined}
+          playable={
+            'media_asset_id' in item
+              ? Boolean(item.available && item.player_path)
+              : true
+          }
           onActivate={() => {
             if ('media_asset_id' in item) {
               if (item.available && item.player_path) navigate(item.player_path);

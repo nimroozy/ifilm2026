@@ -31,7 +31,11 @@ export function ContentShelf({
   };
 
   return (
-    <section className={cn('py-4 md:py-6', className)} aria-label={ariaLabel || title} data-testid={testId}>
+    <section
+      className={cn('relative overflow-x-clip py-4 md:py-6', className)}
+      aria-label={ariaLabel || title}
+      data-testid={testId}
+    >
       <SectionHeader title={title} subtitle={subtitle} />
       <div className="group relative">
         <button
