@@ -13,3 +13,4 @@ export {
   StatusChip,
   MetaChip,
 } from './Badges';
+export { motionClass, motionPresets } from './motion';

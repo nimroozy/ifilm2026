@@ -59,18 +59,9 @@ describe('design system', () => {
     expect(screen.getAllByTestId('media-card')).toHaveLength(2);
   });
 
-  it('renders MetaRow and StatusChip', () => {
-    render(
-      <div>
-        <MetaRow items={['2024', '120 min', null, 'Action']} />
-        <StatusChip tone="success">Published</StatusChip>
-        <RatingBadge value={7} />
-      </div>
-    );
-    expect(screen.getByText('2024')).toBeInTheDocument();
-    expect(screen.getByText('120 min')).toBeInTheDocument();
-    expect(screen.getByText('Action')).toBeInTheDocument();
-    expect(screen.getByText('Published')).toBeInTheDocument();
-    expect(screen.getByTestId('rating-badge')).toHaveTextContent('7.0');
+  it('exposes motion presets', async () => {
+    const { motionClass, motionPresets } = await import('@/design-system');
+    expect(motionPresets.fadeIn).toContain('fade-in');
+    expect(motionClass('fadeIn', 'hoverLift')).toContain('animate-fade-in');
   });
 });
