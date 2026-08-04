@@ -116,14 +116,24 @@ def _run(
     env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Fixed-argv subprocess helper. Never uses shell=True."""
-    return subprocess.run(
-        argv,
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        env=env,
-    )
+    try:
+        return subprocess.run(
+            argv,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=env,
+        )
+    except subprocess.TimeoutExpired as exc:
+        stdout = exc.stdout.decode("utf-8", errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+        stderr = exc.stderr.decode("utf-8", errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+        return subprocess.CompletedProcess(
+            args=argv,
+            returncode=124,
+            stdout=stdout,
+            stderr=stderr or f"command timed out after {timeout}s",
+        )
 
 
 def _compose_env() -> dict[str, str]:
