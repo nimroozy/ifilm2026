@@ -784,22 +784,23 @@ def _compose_stop_app(compose_file: Path) -> None:
     )
     if stop.returncode != 0:
         # Idempotent: missing services are acceptable during first install / recovery.
-        detail = (stop.stderr or stop.stdout or "").strip().splitlines()
-        tail = detail[-1] if detail else ""
-        if "no such service" not in tail.lower() and "no containers" not in (stop.stderr or "").lower():
-            # Still try remove; conflicts are handled below.
-            pass
+        pass
     rm = _run(
         _compose_cmd(compose_file, "rm", "-f", *APP_SERVICES),
         timeout=300,
         env=_compose_env(),
     )
     if rm.returncode != 0:
-        # Controlled conflict recovery: remove only labeled ifilm project app containers.
-        for name in _list_project_containers():
-            for service in APP_SERVICES:
-                if name == f"{COMPOSE_PROJECT}-{service}-1" or name.startswith(f"{COMPOSE_PROJECT}-{service}-"):
-                    _run(["docker", "rm", "-f", name], timeout=120)
+        pass
+    # Always clear leftover iFilm project app containers that would collide on
+    # recreate (e.g. manually injected name conflicts). Scoped to compose
+    # project label only — never broad host-wide docker rm filters.
+    for name in _list_project_containers():
+        for service in APP_SERVICES:
+            prefix = f"{COMPOSE_PROJECT}-{service}-"
+            exact = f"{COMPOSE_PROJECT}-{service}-1"
+            if name == exact or name.startswith(prefix):
+                _run(["docker", "rm", "-f", name], timeout=120)
 
 
 def _compose_pull_and_up(compose_file: Path | None = None) -> None:
