@@ -236,12 +236,23 @@ export function MovieDetailView({
 
       <div className="relative z-10 space-y-12 pb-16 pt-2 md:space-y-16">
         {/* Overview + technical */}
+        {(movie.description ||
+          movie.director ||
+          movie.audio?.length ||
+          movie.subtitles?.length ||
+          movie.qualities?.length ||
+          movie.country ||
+          movie.language ||
+          runtimeLabel ||
+          imdbLabel) ? (
         <section className="container mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
           <div className="grid gap-10 lg:grid-cols-[1.4fr_1fr]">
+            {movie.description ? (
             <div>
               <SectionHeader title="Overview" className="mb-4 px-0" />
               <p className={cn(typography.body, 'text-foreground/90')}>{movie.description}</p>
             </div>
+            ) : <div />}
             <div className="rounded-2xl border border-white/8 bg-card/60 p-5 shadow-lg backdrop-blur-sm">
               <h2 className={cn(typography.sectionTitle, 'mb-4')}>Technical Details</h2>
               <dl className="space-y-3 text-sm">
@@ -271,6 +282,7 @@ export function MovieDetailView({
             </div>
           </div>
         </section>
+        ) : null}
 
         {/* Cast */}
         {movie.cast?.length ? (
@@ -286,7 +298,8 @@ export function MovieDetailView({
           </section>
         ) : null}
 
-        {/* Gallery */}
+        {/* Gallery — only when artwork exists */}
+        {movie.poster || movie.backdrop ? (
         <section className="container mx-auto max-w-6xl px-4 sm:px-6 lg:px-8" aria-labelledby="gallery-heading">
           <h2 id="gallery-heading" className={cn(typography.sectionTitle, 'mb-5')}>
             Gallery
@@ -308,6 +321,7 @@ export function MovieDetailView({
             ) : null}
           </div>
         </section>
+        ) : null}
 
         {/* Trailer */}
         {trailer ? (
@@ -327,6 +341,7 @@ export function MovieDetailView({
                 allowFullScreen
                 loading="lazy"
                 data-testid="youtube-trailer-embed"
+                referrerPolicy="strict-origin-when-cross-origin"
               />
             </div>
           </section>
@@ -343,6 +358,7 @@ export function MovieDetailView({
                 year={item.year}
                 rating={item.rating}
                 showDemo={hasDemoClip(item)}
+                playable={canPlayFullMovie(item) || hasDemoClip(item)}
                 onActivate={() => navigate(`/movie/${item.id}`)}
               />
             ))}

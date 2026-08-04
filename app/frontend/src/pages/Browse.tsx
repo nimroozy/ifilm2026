@@ -411,7 +411,15 @@ export function MovieDetailsPage() {
       const more = await fetchMovies({ page_size: 20, sort: 'newest' });
       setRelated(
         more.items
-          .filter((m) => m.id !== item.id && m.genres.some((g) => item.genres.includes(g)))
+          .filter((m) => {
+            if (m.id === item.id) return false;
+            const status =
+              'catalogStatus' in m && typeof (m as { catalogStatus?: string }).catalogStatus === 'string'
+                ? (m as { catalogStatus?: string }).catalogStatus
+                : 'published';
+            if (status !== 'published') return false;
+            return m.genres.some((g) => item.genres.includes(g));
+          })
           .slice(0, 6)
       );
     } catch (err) {
