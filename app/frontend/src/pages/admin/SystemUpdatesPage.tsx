@@ -239,6 +239,63 @@ export default function SystemUpdatesPage() {
         </dl>
       </section>
 
+      {version?.integrity && (
+        <section className="space-y-3" aria-labelledby="integrity-heading">
+          <h3 id="integrity-heading" className="text-lg font-medium">
+            Installation integrity
+          </h3>
+          {version.integrity.digest_mismatch && (
+            <div className="flex items-start gap-2 text-destructive text-sm" role="alert">
+              <ShieldAlert className="h-4 w-4 mt-0.5 shrink-0" aria-hidden />
+              <p>
+                <strong>HIGH:</strong> Configured and running image digests differ. Further updates
+                are blocked until the installation is reconciled.
+              </p>
+            </div>
+          )}
+          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+            <div>
+              <dt className="text-muted-foreground">Installed version</dt>
+              <dd className="font-medium">{version.integrity.installed_version || version.version || '—'}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Release manifest</dt>
+              <dd>{version.integrity.release_manifest_verified ? 'verified' : 'not verified'}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Configured digests</dt>
+              <dd>{version.integrity.configured_digests_match ? 'match' : 'mismatch'}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Running digests</dt>
+              <dd>{version.integrity.running_digests_match ? 'match' : 'mismatch'}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Migration head</dt>
+              <dd className="font-mono text-xs">{version.integrity.migration_head || version.migration_head || '—'}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Health</dt>
+              <dd>{version.integrity.health_status || '—'}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Rollback target</dt>
+              <dd>{version.integrity.rollback_target || '—'}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Digest tips</dt>
+              <dd className="font-mono text-xs">
+                cfg {version.integrity.digest_summary?.backend || '—'} /{' '}
+                {version.integrity.digest_summary?.frontend || '—'}
+                <br />
+                run {version.integrity.digest_summary?.running_backend || '—'} /{' '}
+                {version.integrity.digest_summary?.running_frontend || '—'}
+              </dd>
+            </div>
+          </dl>
+        </section>
+      )}
+
       <section className="space-y-3" aria-labelledby="latest-heading">
         <h3 id="latest-heading" className="text-lg font-medium">
           Latest available
@@ -288,7 +345,11 @@ export default function SystemUpdatesPage() {
             <Button type="button" variant="secondary" disabled={busy} onClick={onBackup}>
               Create Backup
             </Button>
-            <Button type="button" disabled={busy || !check?.update_available} onClick={onInstall}>
+            <Button
+              type="button"
+              disabled={busy || !check?.update_available || Boolean(version?.update_blocked)}
+              onClick={onInstall}
+            >
               Install Update
             </Button>
             <Button type="button" variant="destructive" disabled={busy || !activeJob} onClick={onRollback}>

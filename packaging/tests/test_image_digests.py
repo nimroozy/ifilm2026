@@ -162,7 +162,9 @@ class UpdaterDigestBehaviorTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        with mock.patch.object(agent, "_compose_pull_and_up") as pull_up:
+        with mock.patch.object(agent, "_compose_pull_and_up") as pull_up, mock.patch.object(
+            agent, "_verify_four_way_digests", return_value={"consistent": True}
+        ), mock.patch.object(agent, "_wait_healthy"):
             pull_up.return_value = None
             result = agent.rollback_last_update({"job_id": "t1", "reason": "test"})
 

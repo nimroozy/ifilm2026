@@ -129,6 +129,63 @@ def _read_local_manifest(settings: Settings) -> dict[str, Any]:
         return {}
 
 
+def _sanitize_integrity(raw: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Return admin-safe integrity summary (no secrets or filesystem paths)."""
+    if not isinstance(raw, dict):
+        return None
+    checks = []
+    for item in raw.get("checks") or []:
+        if not isinstance(item, dict):
+            continue
+        detail = str(item.get("detail") or "")
+        # Strip absolute paths that may appear in agent details.
+        if "/" in detail and ("/opt/" in detail or "/etc/" in detail or "/var/" in detail):
+            detail = item.get("name", "")
+        checks.append(
+            {
+                "name": str(item.get("name") or ""),
+                "passed": bool(item.get("passed")),
+                "detail": detail[:160],
+            }
+        )
+    digest_raw = raw.get("digest_summary")
+    digest_summary: dict[str, Any] = digest_raw if isinstance(digest_raw, dict) else {}
+    return {
+        "ok": bool(raw.get("ok")),
+        "installed_version": raw.get("installed_version"),
+        "release_manifest_verified": bool(raw.get("release_manifest_verified")),
+        "configured_digests_match": bool(raw.get("configured_digests_match")),
+        "running_digests_match": bool(raw.get("running_digests_match")),
+        "migration_head": raw.get("migration_head"),
+        "health_status": raw.get("health_status"),
+        "update_channel": raw.get("update_channel"),
+        "rollback_target": raw.get("rollback_target"),
+        "digest_mismatch": bool(raw.get("digest_mismatch")),
+        "digest_summary": {
+            "backend": digest_summary.get("backend"),
+            "frontend": digest_summary.get("frontend"),
+            "running_backend": digest_summary.get("running_backend"),
+            "running_frontend": digest_summary.get("running_frontend"),
+        },
+        "checks": checks,
+        "checked_at": raw.get("checked_at"),
+    }
+
+
+def get_installation_integrity(
+    settings: Settings | None = None, client: UpdateAgentClient | None = None
+) -> dict[str, Any] | None:
+    settings = settings or get_settings()
+    if client is None and not settings.update_agent_shared_secret:
+        return None
+    try:
+        agent = client or get_update_agent_client()
+        result = agent.call("verify_installation", {}, timeout=120.0)
+        return _sanitize_integrity(result if isinstance(result, dict) else None)
+    except UpdateAgentError:
+        return None
+
+
 def get_version_info(settings: Settings | None = None, client: UpdateAgentClient | None = None) -> dict[str, Any]:
     settings = settings or get_settings()
     local = _read_local_manifest(settings)
@@ -137,6 +194,7 @@ def get_version_info(settings: Settings | None = None, client: UpdateAgentClient
     build_date = local.get("published_at") or settings.app_build_date or None
     migration_head = str(local.get("migration_head") or settings.app_migration_head or "") or None
     channel = str(local.get("channel") or settings.update_channel or "stable")
+    integrity = None
     if client is not None or settings.update_agent_shared_secret:
         try:
             agent = client or get_update_agent_client()
@@ -146,6 +204,7 @@ def get_version_info(settings: Settings | None = None, client: UpdateAgentClient
             migration_head = str(current.get("migration_head") or migration_head or "")
             channel = str(current.get("channel") or channel)
             build_date = current.get("published_at") or build_date
+            integrity = get_installation_integrity(settings=settings, client=agent)
         except UpdateAgentError:
             pass
     return {
@@ -156,6 +215,8 @@ def get_version_info(settings: Settings | None = None, client: UpdateAgentClient
         "deployment_mode": settings.app_env,
         "update_channel": channel,
         "maintenance_mode": bool(settings.maintenance_mode),
+        "integrity": integrity,
+        "update_blocked": bool(integrity and integrity.get("digest_mismatch")),
     }
 
 
@@ -307,7 +368,13 @@ def start_install(
         raise RuntimeError("concurrent_update")
 
     agent = client or get_update_agent_client()
-    check = agent.call("check_latest_release", {"channel": get_settings().update_channel})
+    # Block further updates until configured vs running digests are reconciled.
+    integrity = get_installation_integrity(client=agent)
+    if integrity and integrity.get("digest_mismatch"):
+        raise RuntimeError("digest_mismatch")
+
+    source_channel = get_settings().update_channel or "stable"
+    check = agent.call("check_latest_release", {"channel": source_channel})
     latest = check.get("latest")
     if not check.get("update_available") or not isinstance(latest, dict):
         raise RuntimeError("no_update_available")
@@ -317,16 +384,17 @@ def start_install(
     job = SystemUpdateJob(
         id=str(uuid.uuid4()),
         state="queued",
-        channel=get_settings().update_channel,
+        channel=source_channel,
         current_version=str((check.get("current") or {}).get("version") or ""),
         target_version=str(latest.get("version") or ""),
         actor_admin_id=admin.id,
         release_commit_sha=str(latest.get("commit_sha") or "") or None,
         started_at=_utcnow(),
+        operator_notes=f"source_channel={source_channel}",
     )
     db.add(job)
     db.flush()
-    _add_event(db, job.id, "install_queued", job.target_version)
+    _add_event(db, job.id, "install_queued", f"{job.target_version} channel={source_channel}")
     db.commit()
     job_id = job.id
 
@@ -335,7 +403,10 @@ def start_install(
         "manifest_url": latest.get("manifest_url"),
         "signature_url": latest.get("signature_url"),
         "archive_url": latest.get("archive_url"),
-        "channel": get_settings().update_channel,
+        "channel": source_channel,
+        "source_channel": source_channel,
+        # Candidate verification may temporarily use beta/staging; restore stable after.
+        "restore_channel": "stable",
     }
 
     def _run() -> None:
@@ -428,7 +499,11 @@ def _reconcile_active_job(
 
     Compose recreation restarts backend-api, which can kill the in-process
     waiter thread before it persists the agent result. Prefer the agent job
-    file when present; otherwise infer completion from the live version.
+    file when present.
+
+    Never treat a stale job as authority to rewrite the current release: the
+    agent owns symlink/env mutations. Version equality alone is insufficient
+    when the agent job is still active, missing, or reports failure.
     """
     if job.state not in ACTIVE_STATES:
         return
@@ -437,6 +512,7 @@ def _reconcile_active_job(
         try:
             progress = agent.call("query_update_progress", {"job_id": job.agent_job_id})
             state = str(progress.get("state") or job.state)
+            # Only adopt terminal or progressed states from the matching agent job.
             if state != job.state:
                 job.state = state
                 if progress.get("backup_id"):
@@ -458,28 +534,29 @@ def _reconcile_active_job(
                     job.finished_at = job.finished_at or _utcnow()
                     if state == "rolled_back" and not job.rollback_result:
                         job.rollback_result = "application_only"
+                    if state == "completed":
+                        try:
+                            ver = get_version_info(client=agent)
+                            # Require integrity before celebrating completion.
+                            integrity = ver.get("integrity") if isinstance(ver, dict) else None
+                            if integrity and integrity.get("digest_mismatch"):
+                                job.state = "failed"
+                                job.error_code = "digest_mismatch"
+                                job.error_message = "update finished but digests are inconsistent"
+                            else:
+                                job.resulting_migration_head = ver.get("migration_head")
+                        except Exception:  # noqa: BLE001
+                            pass
                 db.commit()
                 return
+            # Agent still reports the same active state — do not invent completion.
+            return
         except UpdateAgentError:
-            pass
-    # Fallback: compare live version to the job target/current after agent work.
-    try:
-        live = get_version_info(client=agent)
-    except Exception:  # noqa: BLE001
-        return
-    live_version = str(live.get("version") or "")
-    target = str(job.target_version or "").lstrip("v")
-    current = str(job.current_version or "").lstrip("v")
-    if job.state == "installing" and target and live_version == target:
-        job.state = "completed"
-        job.finished_at = job.finished_at or _utcnow()
-        job.resulting_migration_head = live.get("migration_head")
-        db.commit()
-    elif job.state == "rollback_running" and current and live_version == current:
-        job.state = "rolled_back"
-        job.rollback_result = job.rollback_result or "application_only"
-        job.finished_at = job.finished_at or _utcnow()
-        db.commit()
+            # Agent unreachable: leave job active; do not flip state from version alone.
+            return
+    # No agent_job_id yet (queued / early). Do not mark completed from live version:
+    # a stale API restart must not claim success or trigger symlink/env changes.
+    return
 
 
 def get_job(db: Session, job_id: str, admin: AdminUser, *, client: UpdateAgentClient | None = None) -> dict[str, Any]:

@@ -1,181 +1,233 @@
-# Disposable verification record (PR #14)
+# Disposable verification record
 
-This document records the disposable-host verification for the installer and
+This document records disposable-host verification for the installer and
 self-update system. **No secrets are included.**
 
-## Host
+## PR #40 — transactional updater physical proof (2026-08-04)
+
+Branch: `cursor/updater-transaction-hardening-4873`  
+Final head: `e1b94daf88e1f90f005f98616f38a86c5c5c60cd`  
+PR: https://github.com/nimroozy/ifilm2026/pull/40 (do not merge automatically)
+
+### Candidate release
 
 | Field | Value |
 | --- | --- |
-| Role | Disposable cloud agent VM (isolated from staging Compose project) |
-| OS | Ubuntu 24.04.4 LTS |
-| Kernel | 6.12.94+ |
-| Arch | x86_64 |
-| CPUs | 4 |
-| RAM | ~16 GiB |
-| Free disk | ~165–186 GiB |
-| Root FS | overlay (allowed only with `IFILM_ALLOW_OVERLAY_FS=1`) |
-| Init | no systemd PID 1 (Docker already running) |
-| HTTP port | `18080` (staging left on `8080`) |
-| Connectivity | outbound HTTPS to GitHub |
-| Firewall | host netfilter not readable in this environment |
+| Tag | `v1.2.1-rc.1` (prerelease) |
+| Release URL | https://github.com/nimroozy/ifilm2026/releases/tag/v1.2.1-rc.1 |
+| Workflow URL | https://github.com/nimroozy/ifilm2026/actions/runs/30891929117 |
+| Commit packaged | `cbcdf09e1d404640db227866197ea6c038a9fcfb` |
+| Stable baseline | `v1.2.0` |
+| Stable ignores prerelease | Yes — latest stable remains `v1.2.0` |
 
-Staging containers/volumes were **not** used for data. Disposable paths:
-
-- `/opt/ifilm`
-- `/etc/ifilm/ifilm.env` (mode `600`)
-- `/var/lib/ifilm/*`
-
-## Signing
-
-- Scheme: Ed25519 (`openssl pkeyutl` with `-rawin`)
-- Public key committed: `packaging/keys/release-signing.pub`
-- Public fingerprint (SHA-256 of DER): `e7b365230a5b360f417532cba134fdb91eaa73b814163f3175a3f13d28286612`
-- Private key: Environment secret `IFILM_RELEASE_SIGNING_KEY` in `production-release` for Actions-signed candidates; **not** committed; **not** printed; local PEM copies shredded after verification
-
-Rejection matrix exercised (tooling tests + bad published release):
-
-- unsigned / modified manifests
-- wrong public key
-- modified artifacts / checksum mismatch (`v0.1.2-badtest`)
-- mismatched image digest detection
-- stale `minimum_version` policy check
-
-## Releases
-
-| Tag | URL | Result |
-| --- | --- | --- |
-| `v0.1.0-test` | https://github.com/nimroozy/ifilm2026/releases/tag/v0.1.0-test | Clean install baseline |
-| `v0.1.1-test` | https://github.com/nimroozy/ifilm2026/releases/tag/v0.1.1-test | Successful update + migration `012_system_update_notes` |
-| `v0.1.2-badtest` | https://github.com/nimroozy/ifilm2026/releases/tag/v0.1.2-badtest | Intentional checksum mismatch → `verification_failed` |
-| `v0.1.3-failhealth` | https://github.com/nimroozy/ifilm2026/releases/tag/v0.1.3-failhealth | Intentional health failure → automatic `rolled_back` |
-
-Assets verified by downloading from GitHub Releases (not the working tree).
-
-## Bootstrap command used
-
-`main` does not yet contain `install.sh` (pre-merge). Disposable bootstrap used the PR branch / commit-pinned raw URL:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/nimroozy/ifilm2026/<commit>/install.sh -o /tmp/ifilm-install.sh
-sudo env \
-  IFILM_VERSION=v0.1.0-test \
-  IFILM_CHANNEL=staging \
-  IFILM_HTTP_PORT=18080 \
-  IFILM_REQUIRED_PORTS=18080 \
-  IFILM_ALLOW_OVERLAY_FS=1 \
-  IFILM_ALLOW_PRERELEASE_CHANNEL=1 \
-  IFILM_RELEASE_PUBLIC_KEY_URL=https://raw.githubusercontent.com/nimroozy/ifilm2026/deployment/installer-updater/packaging/keys/release-signing.pub \
-  IFILM_NONINTERACTIVE=1 \
-  INSTALL_MODE=staging \
-  PUBLIC_DOMAIN=localhost \
-  ADMIN_EMAIL=admin@disposable.test \
-  ADMIN_USERNAME=admin \
-  ADMIN_PASSWORD='***' \
-  ENABLE_UPLOADS=true \
-  bash /tmp/ifilm-install.sh
-```
-
-**Deviation:** public one-liner points at `main`; until merge, disposable verification used the feature-branch/commit raw URL. Release artifacts still came only from GitHub Releases.
-
-## Results
-
-### Clean install (`v0.1.0-test`)
-- Signature + checksum verification passed
-- Paths `/opt/ifilm`, `/etc/ifilm`, `/var/lib/ifilm` created
-- Secrets file mode `600`
-- Migrations through `011_system_updates` once
-- Admin bootstrap OK
-- Health ready OK
-- Version reported `0.1.0-test`
-
-### Sample persistent data
-- Admin user
-- Genre + movie `Disposable Film`
-- Media original + package marker files under `/var/lib/ifilm/media`
-- Fixture subscriber skipped (compose initially forced `STAGING_ALLOW_FIXTURE_AUTH=false`; later made overridable — catalog/media used for preservation proof)
-
-### Update (`v0.1.1-test`) via admin API (`/admin/system/updates` backend)
-- Check found `0.1.1-test` on staging channel
-- Preflight passed (signature, newer version, disk, locks)
-- Backup created + `pg_restore -l` OK; secrets redacted in config backup
-- Install completed
-- Version → `0.1.1-test`; migration head → `012_system_update_notes`
-- Movie + media preserved; secrets file unchanged path/mode
-
-### Forced failures
-- **A.** `v0.1.2-badtest` → `verification_failed` / `checksum_mismatch`; version remained `0.1.1-test`
-- **B.** `v0.1.3-failhealth` → health check failed → automatic `rolled_back` to `0.1.1-test`; movie + media intact
-
-### Restart recovery
-- Stale agent lock caused preflight `lock_free` failure (no second concurrent update)
-- Clearing lock restored preflight success
-- History remained queryable
-- Agent restarted without systemd via supervised process
-
-### Uninstall
-- Default uninstall removed containers, **preserved** `/var/lib/ifilm` and `/etc/ifilm`
-- Destructive delete requires typed `IFILM_DELETE_CONFIRM=DELETE-IFILM-DATA`
-
-## Supported OS matrix (this run)
-
-| Platform | Claim | Evidence |
-| --- | --- | --- |
-| Ubuntu 24.04 x86_64 | **Verified / supported** | Disposable clean install + update + rollback |
-| Ubuntu 22.04 | **Experimental / unverified** | Requires `IFILM_ALLOW_UNVERIFIED_OS=1`; not proven |
-| Debian 12 | **Experimental / unverified** | Requires `IFILM_ALLOW_UNVERIFIED_OS=1`; not proven |
-| Other OS/arch | Rejected | Installer hard-fail |
-| Overlay FS / no-systemd | Explicit opt-in only | Not normal production deployment |
-
-## Emergency key rotation (2026-08-01)
-
-Previous production signing private key was **exposed and permanently compromised**.
-Revoked fingerprint: `8c04b9141a9fe72346edf9e1f6bc27b0fbef3dc728d6e61124fb897e74ac1e26`.
-Current fingerprint: `e7b365230a5b360f417532cba134fdb91eaa73b814163f3175a3f13d28286612`.
-See `KEY_ROTATION_EMERGENCY_2026-08-01.md`. Do not trust artifacts signed under the revoked identity.
-
-## Actions-signed candidates (`v0.1.4-candidate` → `v0.1.5-candidate`)
-
-Production Ed25519 key stored in Environment secret `IFILM_RELEASE_SIGNING_KEY`
-(`production-release`). Public fingerprint verified:
-
-`e7b365230a5b360f417532cba134fdb91eaa73b814163f3175a3f13d28286612`
-
-| Tag | Release run | Result |
-| --- | --- | --- |
-| `v0.1.4-candidate` | https://github.com/nimroozy/ifilm2026/actions/runs/30703638647 | Actions-signed success (`manifest_signed=true`) |
-| `v0.1.5-candidate` | https://github.com/nimroozy/ifilm2026/actions/runs/30703891825 | Actions-signed success |
+Release assets present: signed `release-manifest.json` + `.sig`, archive,
+`SHA256SUMS`, backend/frontend image refs, SBOMs, Trivy JSON reports.
 
 Immutable digests:
 
 | Release | backend-api | frontend |
 | --- | --- | --- |
-| `0.1.4-candidate` | `...@sha256:6a18a77fac4df24baeb400879db648bdc480ff9f7ce00c013c70831348e5041c` | `...@sha256:0e7fc89a5ef6dc0547f21a77d6ce5cee4dc0c198846f27452e816d7f0ee74a0e` |
-| `0.1.5-candidate` | `...@sha256:52ea7339d1433e7c2763969f107d810d7e704a7bf80b0fd4a687b7a4de3319af` | `...@sha256:9aca7350b6b321dec7bf5cd8d8d71fd9479bfe728aa5780816e893dd287171a6` |
+| `v1.2.0` | `...@sha256:0a5e31a9f69158d4620bd1b361899ca3f325665ca981248d54e5b670f1b34329` | `...@sha256:6886ca57300bb61ad7a27e858b1ef4e37a26287df9cac41d37ae64a087dc7127` |
+| `v1.2.1-rc.1` | `...@sha256:2bb7c732976cc8d9cde512f0cf163b9f6f06b1d62f5ae85679de45a81fbc9ced` | `...@sha256:283fe690dd7c2891a510c4ec6f5fb6b84ad0dbc70bd33419ab4bcdd81b7fd465` |
 
-### Disposable proof (Ubuntu 24.04 overlay, port `18080`)
+Public-key fingerprint (SHA-256 of DER):  
+`e7b365230a5b360f417532cba134fdb91eaa73b814163f3175a3f13d28286612`  
+(matches production trust anchor; private key never printed/exported)
 
-1. **Clean install** of Actions-signed `v0.1.4-candidate` (bootstrap public key URL still branch-pinned pre-merge). Ready OK; migration head `012_system_update_notes`; env mode `600`; marker row `cand-014-marker`.
-2. **Update** via admin API to Actions-signed `v0.1.5-candidate`: preflight signature OK; backup `pg_restore -l` OK; agent job `completed`; live version `0.1.5-candidate`; containers on 0.1.5 digests; marker preserved.
-3. **Rollback** via admin API (`application_only`): agent job `rolled_back`; live version `0.1.4-candidate`; previous digests restored; marker preserved; ready OK.
+### Disposable host
 
-### Fixes found during the Actions-signed proof
+| Field | Value |
+| --- | --- |
+| Role | Isolated proof stack on Ubuntu 24.04 x86_64 (not production data) |
+| OS | Ubuntu 24.04.4 LTS |
+| Kernel | 6.8.0-124-generic |
+| Arch | x86_64 |
+| CPUs | 2 |
+| RAM | 3.8 GiB |
+| Free disk | ~87 GiB |
+| Root FS | **ext4** (`/dev/vda1`) |
+| Init | systemd |
+| Docker | 29.7.1 |
+| Compose | v5.3.1 |
+| Proof HTTP port | `18080` |
+| Production HTTP port | `8080` (left untouched; ready remained OK) |
 
-- Successful API preflight must record terminal state `preflight_ok` (not active `preflight`) so install is not blocked.
-- Update-agent compose subprocesses must refresh `IFILM_IMAGE_*` from `/etc/ifilm/ifilm.env` (process env from `EnvironmentFile` / supervised `set -a` otherwise shadows `--env-file` and leaves stale containers).
-- Explicit `docker pull <digest>` + `--force-recreate` for app services; auto-rollback after release-tree mutation failures.
-- Backend reconciles active install/rollback jobs after API restart during compose recreate.
+Proof isolation (same physical machine as a live demo, **no production data**):
 
-## Limitations / deviations
+- `DOCKER_HOST=unix:///var/run/docker-ifilm-proof.sock`
+- Docker data-root `/var/lib/docker-ifilm-proof`
+- Paths `/opt/ifilm-proof`, `/etc/ifilm-proof`, `/var/lib/ifilm-proof`
+- Compose project name remains `ifilm` inside the isolated dockerd
+- Host-only compose bind rewrite (`_rewrite_proof_volume_sources`) maps proof
+  host paths while container mount targets stay `/var/lib/ifilm`, `/run/ifilm`
+- **No** `IFILM_ALLOW_OVERLAY_FS` (ext4 + real systemd)
 
-1. Bootstrap URL used PR branch/commit for disposable tests, not `main` (pre-merge).
-2. Overlay root FS required explicit opt-in.
-3. No systemd — update-agent run as supervised process (`UPDATE_AGENT_SOCKET_MODE=0o666`).
-4. Port `18080` to avoid colliding with staging on `8080`.
-5. Hotfixes applied during verification committed on the PR branch.
-6. Database rollback classification for `012`: **backward-compatible / rollback-safe column**; rollback proof used **application_only** (no DB restore).
-7. Trivy policy: unapproved CRITICAL always fail (time-bound ignores for unfixed Debian base); HIGH fail only when `FixedVersion` exists.
-8. Admin API HTTP calls that recreate `backend-api` may return `502` while the agent job still finishes successfully; job reconciliation / agent job files are authoritative.
+### Pre-proof review (candidate head)
+
+- PR scoped to updater reliability (no product/UI/catalog/migration churn)
+- No debug output / secrets printed
+- No broad `docker rm -f`; no mutable image tags
+- Symlink switches only after health + four-way digest verify
+- Env writes atomic (`fsync` + `os.replace`), mode `600`
+- Rollback restores env, symlink, Compose state, running digests
+- Stale reconciliation cannot overwrite a newer active job
+- `UPDATE_CHANNEL` restored after candidate testing
+- `verify-installation` exits nonzero for mismatch classes
+
+### Automated suites (final head `e1b94da`)
+
+| Suite | Result |
+| --- | --- |
+| Backend pytest | 236 passed, 1 skipped |
+| Frontend `systemUpdates.test.tsx` | 5 passed |
+| Packaging tests | 41 passed |
+| CI checks on PR #40 | green (Backend / Frontend / Installer) |
+
+### Clean install baseline (`v1.2.0`)
+
+Public installer against signed `v1.2.0` into proof paths/port.
+
+Verified:
+
+- Signature + checksums
+- Env mode `600`
+- `/opt/ifilm-proof/current` → `releases/v1.2.0`
+- Migration head `014_tmdb_demo_metadata`
+- Services healthy on `:18080`
+- `verify-installation` OK
+- Running digests match `v1.2.0` manifest
+
+Persistence markers (non-production):
+
+- DB row `proof_markers.id=marker-v120` note `disposable-proof`
+- File `/var/lib/ifilm-proof/media/originals/PROOF_MARKER.txt` = `disposable-media-marker`
+
+### Stable → signed candidate (`v1.2.0` → `v1.2.1-rc.1`)
+
+Agent job `8f4b180edb0b0806` → `completed`.
+
+Four-way integrity (all agreed on candidate digests):
+
+1. Signed manifest refs
+2. `/etc/ifilm-proof/ifilm.env` refs
+3. Effective Compose refs
+4. Running container digests
+
+Also verified:
+
+- `current` symlink → `v1.2.1-rc.1` only after health
+- Persistence markers retained
+- Migration head unchanged (`014_tmdb_demo_metadata`)
+- `source_channel=stable`, `channel_after=stable` (UPDATE_CHANNEL restored)
+- No duplicate iFilm containers / no mixed RC+stable running set
+- `verify-installation` passed
+
+### Forced health-failure rollback
+
+Method (not function mocks): apply valid `v1.2.1-rc.1` digests, recreate Compose,
+then inject `iptables REJECT` on TCP `18080` so real `_wait_healthy` fails;
+then real `_perform_rollback_to`.
+
+| Check | Result |
+| --- | --- |
+| Update does not complete / symlink not flipped to candidate | Pass |
+| Previous env refs restored (`0a5e31a9` / `6886ca57`) | Pass |
+| Previous `current` symlink (`v1.2.0`) | Pass |
+| Previous Compose + running digests restored | Pass |
+| Persistence markers remain | Pass |
+| Job `healthfail-proof` state `rolled_back` | Pass |
+| `verify-installation` OK against `v1.2.0` | Pass |
+| No leftover REJECT/DROP rule; no partial candidate app digests | Pass |
+
+Elapsed health wait under REJECT: ~120.6s (60 retries × 2s).
+
+### Compose conflict proof
+
+Injected project-labeled `ifilm-backend-api-conflict` plus unrelated
+`unrelated-proof-nginx`. Updater removed only iFilm-managed leftovers; project
+name stayed `ifilm`; unrelated nginx kept; single `backend-api`; rerun idempotent.
+
+### API restart / stale job proof
+
+Newer `active_target` (`job-new` → `1.2.1-rc.1`) remained authoritative.
+Stale installing job `staleapi001` (`9.9.9-fake`) could not complete, change
+symlink, or overwrite env image refs when queried.
+
+### Interrupted env write
+
+Simulated crash during `os.replace` left original `/etc/ifilm-proof/ifilm.env`
+intact, mode `600`, secrets present (not printed).
+
+### Real rollback (`v1.2.1-rc.1` → `v1.2.0`)
+
+Job `rollback-proof` → `rolled_back`. Env/Compose/running digests and symlink
+matched `v1.2.0`; markers preserved; health + `verify-installation` OK.
+
+### Admin integrity UI / verify gate
+
+`verify-installation` fields exercised for System Updates integrity surface:
+
+- installed version, manifest verification, configured/running digest match,
+  migration head, health, rollback target
+
+Deliberate bad env digest:
+
+- `digest_mismatch=true`, exit nonzero, `ok=false`
+- update blocked (`update_blocked=true`)
+- response JSON contained **no** secrets and **no** filesystem paths
+- correct env restored afterward; verify OK
+
+### Proof-driven code fixes on the branch
+
+1. Always clear project-scoped app container leftovers on recreate (`19858dc`)
+2. Map `subprocess.TimeoutExpired` to returncode `124` so hung health curls
+   become `health_check_failed` instead of bypassing rollback (`e1b94da`)
+3. mypy fix for integrity `digest_summary` typing (`cbcdf09`) — required for
+   the signed candidate workflow
+
+### Ready gate
+
+All required physical scenarios passed; no BLOCKER/HIGH remaining for the
+signed-candidate disposable proof; CI green. PR marked Ready for Review;
+**not** merged automatically.
+
+### Deviations (PR #40)
+
+1. Cloud-agent VM alone could not pull GHCR or provide systemd/ext4; proof used
+   an isolated dockerd + `*-proof` paths on a disposable Ubuntu 24.04 host that
+   shares metal with a live demo on `:8080`. Production `/opt/ifilm` and
+   `/var/lib/ifilm` were never used as proof data.
+2. Host-only `_rewrite_proof_volume_sources` keeps container paths canonical
+   while binding proof host directories (not shipped in git).
+3. Forced-health used iptables REJECT against a valid signed candidate rather
+   than publishing a separate failhealth tag (allowed: “publish **or** use”).
+4. First DROP-based health attempt hung on curl timeout before `e1b94da`;
+   re-run used REJECT + timeout→124 mapping.
+
+---
+
+## Historical record (PR #14 / earlier candidates)
+
+Earlier disposable proofs (`v0.1.x-test`, Actions-signed `v0.1.4-candidate` /
+`v0.1.5-candidate`) remain valid history for installer bootstrap evolution.
+Summary:
+
+- Signing scheme: Ed25519 (`openssl pkeyutl` with `-rawin`)
+- Trust anchor fingerprint: `e7b365230a5b360f417532cba134fdb91eaa73b814163f3175a3f13d28286612`
+- Revoked fingerprint (do not trust): `8c04b9141a9fe72346edf9e1f6bc27b0fbef3dc728d6e61124fb897e74ac1e26`
+  — see `KEY_ROTATION_EMERGENCY_2026-08-01.md`
+- Overlay/no-systemd disposable runs required `IFILM_ALLOW_OVERLAY_FS=1` and are
+  **not** the normal production deployment path
+
+### Supported OS matrix
+
+| Platform | Claim | Evidence |
+| --- | --- | --- |
+| Ubuntu 24.04 x86_64 | **Verified / supported** | PR #40 ext4+systemd proof + earlier disposable runs |
+| Ubuntu 22.04 | **Experimental / unverified** | Requires `IFILM_ALLOW_UNVERIFIED_OS=1` |
+| Debian 12 | **Experimental / unverified** | Requires `IFILM_ALLOW_UNVERIFIED_OS=1` |
+| Other OS/arch | Rejected | Installer hard-fail |
+| Overlay FS / no-systemd | Explicit opt-in only | Not normal production deployment |
 
 ## Rollback classification reminder
 

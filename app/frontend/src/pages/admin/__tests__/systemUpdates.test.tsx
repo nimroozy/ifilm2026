@@ -171,4 +171,56 @@ describe('SystemUpdatesPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Check for Updates/i }));
     expect(await screen.findByText(/No update available/i)).toBeInTheDocument();
   });
+
+  it('shows integrity HIGH alert and blocks install on digest mismatch', async () => {
+    me.mockResolvedValue({
+      id: 1,
+      username: 'admin',
+      email: 'a@test',
+      full_name: 'Admin',
+      is_active: true,
+      permissions: ['system_updates.read', 'system_updates.manage'],
+    });
+    getSystemVersion.mockResolvedValue({
+      version: '1.2.0',
+      build_commit: 'abc12345',
+      deployment_mode: 'production',
+      update_channel: 'stable',
+      maintenance_mode: false,
+      migration_head: '014_tmdb_demo_metadata',
+      update_blocked: true,
+      integrity: {
+        ok: false,
+        installed_version: '1.2.0',
+        release_manifest_verified: true,
+        configured_digests_match: false,
+        running_digests_match: false,
+        migration_head: '014_tmdb_demo_metadata',
+        health_status: 'healthy',
+        rollback_target: '1.2.0-rc.1',
+        digest_mismatch: true,
+        digest_summary: {
+          backend: 'aaaaaaaaaaaa',
+          frontend: 'bbbbbbbbbbbb',
+          running_backend: 'cccccccccccc',
+          running_frontend: 'dddddddddddd',
+        },
+      },
+    });
+    listSystemUpdateHistory.mockResolvedValue({ items: [], total: 0 });
+    checkSystemUpdates.mockResolvedValue({
+      update_available: true,
+      channel: 'stable',
+      current: { version: '1.2.0' },
+      latest: { version: '1.2.1', notes: 'n' },
+    });
+
+    wrap(<SystemUpdatesPage />);
+    expect(await screen.findByText(/Installation integrity/i)).toBeInTheDocument();
+    expect(screen.getByText(/HIGH/i)).toBeInTheDocument();
+    expect(screen.getByText(/digests differ/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Check for Updates/i }));
+    await screen.findByText('1.2.1');
+    expect(screen.getByRole('button', { name: /Install Update/i })).toBeDisabled();
+  });
 });
