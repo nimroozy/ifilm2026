@@ -106,38 +106,45 @@ export function PlayerControls({
 
   return (
     <div
-      className={`absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-10 transition-opacity duration-normal ${
-        visible ? 'opacity-100' : 'opacity-0 pointer-events-none'
+      className={`absolute inset-x-0 bottom-0 z-20 px-3 pb-[max(0.85rem,env(safe-area-inset-bottom))] pt-16 transition-all duration-normal ${
+        visible ? 'opacity-100 translate-y-0' : 'pointer-events-none translate-y-2 opacity-0'
       }`}
       data-testid="player-controls"
     >
-      <div className="relative h-1.5 mb-3 cursor-pointer group" data-testid="seek-bar">
-        <div className="absolute inset-0 rounded-full bg-white/20" />
-        <div
-          className="absolute inset-y-0 left-0 rounded-full bg-white/35"
-          style={{ width: `${bufferedPct}%` }}
-        />
-        <div
-          className="absolute inset-y-0 left-0 rounded-full bg-primary"
-          style={{ width: `${progressPct}%` }}
-        />
-        <input
-          type="range"
-          min={0}
-          max={Math.max(duration, 0.1)}
-          step={0.1}
-          value={currentTime}
-          aria-label="Seek"
-          className="absolute inset-0 w-full opacity-0 cursor-pointer"
-          onChange={(e) => onSeek(Number(e.target.value))}
-        />
-      </div>
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-black via-black/70 to-transparent" />
 
-      <div className="flex flex-wrap items-center gap-1.5 text-white sm:gap-2">
+      <div className="relative mx-auto max-w-6xl space-y-3">
+        <div className="relative h-2 cursor-pointer group/seek" data-testid="seek-bar">
+          <div className="absolute inset-0 rounded-full bg-white/20" />
+          <div
+            className="absolute inset-y-0 left-0 rounded-full bg-white/40"
+            style={{ width: `${bufferedPct}%` }}
+          />
+          <div
+            className="absolute inset-y-0 left-0 rounded-full bg-primary shadow-[0_0_12px_hsl(var(--primary)/0.55)]"
+            style={{ width: `${progressPct}%` }}
+          />
+          <div
+            className="absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full border-2 border-white bg-primary opacity-0 shadow-lg transition-opacity group-hover/seek:opacity-100"
+            style={{ left: `calc(${progressPct}% - 0.4rem)` }}
+          />
+          <input
+            type="range"
+            min={0}
+            max={Math.max(duration, 0.1)}
+            step={0.1}
+            value={currentTime}
+            aria-label="Seek"
+            className="absolute inset-0 w-full cursor-pointer opacity-0"
+            onChange={(e) => onSeek(Number(e.target.value))}
+          />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1 rounded-2xl border border-white/10 bg-black/45 px-2 py-1.5 text-white shadow-xl backdrop-blur-xl supports-[backdrop-filter]:bg-black/35 sm:gap-1.5 sm:px-3">
         <Button
           variant="ghost"
           size="icon"
-          className="text-white hover:bg-white/10 h-10 w-10"
+          className="h-10 w-10 text-white hover:bg-white/10"
           onClick={onTogglePlay}
           aria-label={playing ? 'Pause' : 'Play'}
         >
@@ -148,7 +155,7 @@ export function PlayerControls({
           <Button
             variant="ghost"
             size="icon"
-            className="text-white hover:bg-white/10 h-10 w-10"
+            className="h-10 w-10 text-white hover:bg-white/10"
             onClick={onPreviousEpisode}
             aria-label="Previous episode"
             data-testid="previous-episode"
@@ -160,7 +167,7 @@ export function PlayerControls({
         <Button
           variant="ghost"
           size="icon"
-          className="text-white hover:bg-white/10 h-10 w-10"
+          className="h-10 w-10 text-white hover:bg-white/10"
           onClick={() => onSeekBy?.(-10)}
           aria-label="Skip back 10 seconds"
           data-testid="skip-back"
@@ -170,7 +177,7 @@ export function PlayerControls({
         <Button
           variant="ghost"
           size="icon"
-          className="text-white hover:bg-white/10 h-10 w-10"
+          className="h-10 w-10 text-white hover:bg-white/10"
           onClick={() => onSeekBy?.(10)}
           aria-label="Skip forward 10 seconds"
           data-testid="skip-forward"
@@ -182,7 +189,7 @@ export function PlayerControls({
           <Button
             variant="ghost"
             size="icon"
-            className="text-white hover:bg-white/10 h-10 w-10"
+            className="h-10 w-10 text-white hover:bg-white/10"
             onClick={onNextEpisode}
             aria-label="Next episode"
             data-testid="next-episode"
@@ -195,7 +202,7 @@ export function PlayerControls({
           <Button
             variant="ghost"
             size="icon"
-            className="text-white hover:bg-white/10 h-10 w-10"
+            className="h-10 w-10 text-white hover:bg-white/10"
             onClick={onStartOver}
             aria-label="Start over"
             data-testid="start-over"
@@ -207,14 +214,14 @@ export function PlayerControls({
         <Button
           variant="ghost"
           size="icon"
-          className="text-white hover:bg-white/10 h-10 w-10"
+          className="h-10 w-10 text-white hover:bg-white/10"
           onClick={onToggleMute}
           aria-label={muted ? 'Unmute' : 'Mute'}
         >
           {muted || volume === 0 ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
         </Button>
 
-        <div className="w-24 max-sm:w-16">
+        <div className="w-24 max-sm:w-16 [&_[role=slider]]:bg-primary">
           <Slider
             value={[muted ? 0 : volume * 100]}
             max={100}
@@ -224,7 +231,7 @@ export function PlayerControls({
           />
         </div>
 
-        <span className="text-xs text-white/80 tabular-nums min-w-[5.5rem]">
+        <span className="min-w-[5.5rem] text-xs tabular-nums text-white/85">
           {formatTime(currentTime)} / {formatTime(duration)}
         </span>
 
@@ -248,13 +255,13 @@ export function PlayerControls({
         />
 
         <select
-          className="h-8 rounded-md bg-black/40 border border-white/20 text-xs px-2"
+          className="h-8 rounded-md border border-white/15 bg-white/10 px-2 text-xs text-white backdrop-blur-sm"
           aria-label="Playback speed"
           value={playbackRate}
           onChange={(e) => onRate(Number(e.target.value))}
         >
           {[0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
-            <option key={rate} value={rate}>
+            <option key={rate} value={rate} className="bg-zinc-900 text-white">
               {rate}x
             </option>
           ))}
@@ -264,7 +271,7 @@ export function PlayerControls({
           <Button
             variant="ghost"
             size="icon"
-            className="text-white hover:bg-white/10 h-10 w-10"
+            className="h-10 w-10 text-white hover:bg-white/10"
             onClick={onAirPlay}
             aria-label="AirPlay"
             data-testid="airplay-button"
@@ -276,7 +283,7 @@ export function PlayerControls({
         <Button
           variant="ghost"
           size="icon"
-          className="text-white/40 hover:bg-white/10 h-10 w-10 cursor-not-allowed"
+          className="h-10 w-10 cursor-not-allowed text-white/40 hover:bg-white/10"
           disabled
           aria-label="Google Cast unavailable"
           title="Google Cast requires a protected receiver and is not enabled in this release"
@@ -289,7 +296,7 @@ export function PlayerControls({
           <Button
             variant="ghost"
             size="icon"
-            className="text-white hover:bg-white/10 h-10 w-10"
+            className="h-10 w-10 text-white hover:bg-white/10"
             onClick={onPiP}
             aria-label="Picture in picture"
             data-testid="pip-button"
@@ -301,12 +308,13 @@ export function PlayerControls({
         <Button
           variant="ghost"
           size="icon"
-          className="text-white hover:bg-white/10 h-10 w-10"
+          className="h-10 w-10 text-white hover:bg-white/10"
           onClick={onFullscreen}
           aria-label={isFs ? 'Exit fullscreen' : 'Enter fullscreen'}
         >
           {isFs ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
         </Button>
+        </div>
       </div>
     </div>
   );
