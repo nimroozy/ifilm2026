@@ -18,7 +18,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { adminApi, ApiError, type GenreDto, type MovieDto } from '@/lib/api';
-import { EmptyState, ErrorState, LoadingBlock, PosterThumb, StatusBadge } from './adminShared';
+import { EmptyState, ErrorState, LoadingBlock, PageHeader, PosterThumb, StatusBadge } from './adminShared';
 
 export default function MoviesListPage() {
   const [items, setItems] = useState<MovieDto[]>([]);
@@ -86,18 +86,18 @@ export default function MoviesListPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-semibold text-foreground">Movies</h2>
-          <p className="text-sm text-muted-foreground">{total} total</p>
-        </div>
-        <Button asChild className="bg-primary text-primary-foreground gap-2">
-          <Link to="/admin/movies/new">
-            <Plus className="h-4 w-4" />
-            Add Movie
-          </Link>
-        </Button>
-      </div>
+      <PageHeader
+        title="Movies"
+        description={`${total} total`}
+        actions={
+          <Button asChild className="gap-2">
+            <Link to="/admin/movies/new">
+              <Plus className="h-4 w-4" />
+              Add Movie
+            </Link>
+          </Button>
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[200px] max-w-sm">
@@ -178,7 +178,17 @@ export default function MoviesListPage() {
       ) : error ? (
         <ErrorState message={error} onRetry={load} />
       ) : items.length === 0 ? (
-        <EmptyState message="No movies found." />
+        <EmptyState
+          message="No movies found."
+          action={
+            <Button asChild size="sm">
+              <Link to="/admin/movies/new">
+                <Plus className="h-4 w-4" />
+                Add Movie
+              </Link>
+            </Button>
+          }
+        />
       ) : (
         <Card className="bg-card border-border">
           <CardContent className="p-0">

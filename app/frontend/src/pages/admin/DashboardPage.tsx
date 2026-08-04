@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Film, Tv, Layers, Clapperboard, Tags, FileText, CheckCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { adminApi, ApiError, type DashboardStatsDto } from '@/lib/api';
-import { ErrorState, LoadingBlock } from './adminShared';
+import { ErrorState, LoadingBlock, PageHeader } from './adminShared';
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStatsDto | null>(null);
@@ -44,24 +44,29 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold text-foreground">Dashboard</h2>
-        <p className="text-sm text-muted-foreground mt-1">Catalog counts from the live admin API.</p>
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4" data-testid="dashboard-stats">
+      <PageHeader
+        title="Dashboard"
+        description="Catalog counts from the live admin API."
+      />
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4" data-testid="dashboard-stats">
         {cards.map((stat) => (
-          <Card key={stat.label} className="bg-card border-border">
-            <CardContent className="pt-4 pb-3">
+          <Card
+            key={stat.label}
+            className="border-border/80 bg-card/80 shadow-sm transition-shadow hover:shadow-md"
+          >
+            <CardContent className="pb-3 pt-4">
               <div className="flex items-center justify-between">
-                <stat.icon className={`h-5 w-5 ${stat.color}`} />
-                <span className="text-2xl font-bold text-foreground">{stat.value}</span>
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted/80">
+                  <stat.icon className={`h-4 w-4 ${stat.color}`} />
+                </div>
+                <span className="font-display text-2xl font-bold text-foreground">{stat.value}</span>
               </div>
-              <p className="text-xs text-muted-foreground mt-2">{stat.label}</p>
+              <p className="mt-3 text-xs font-medium text-muted-foreground">{stat.label}</p>
             </CardContent>
           </Card>
         ))}
       </div>
-      <Card className="bg-card border-border">
+      <Card className="border-border/80 bg-card/80 shadow-sm">
         <CardHeader>
           <CardTitle className="text-base">Operations</CardTitle>
         </CardHeader>
