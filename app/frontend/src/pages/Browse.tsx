@@ -31,6 +31,7 @@ import { ApiError } from '@/lib/api';
 import { canPlayFullMovie, fullMovieUnavailableLabel, hasDemoClip, isDemoCatalogItem } from '@/lib/catalogPresentation';
 import { trailerEmbedUrl } from '@/lib/trailers';
 import { MediaCard } from '@/design-system';
+import { MovieDetailView } from '@/components/MovieDetailView';
 
 function PageLoading() {
   return (
@@ -395,8 +396,6 @@ export function SeriesPage() {
 // ============ MOVIE DETAILS PAGE ============
 export function MovieDetailsPage() {
   const { id } = useParams();
-  const { t } = useLang();
-  const navigate = useNavigate();
   const [movie, setMovie] = useState<CatalogMovie | null>(null);
   const [related, setRelated] = useState<CatalogMovie[]>([]);
   const [loading, setLoading] = useState(true);
@@ -430,178 +429,7 @@ export function MovieDetailsPage() {
   if (loading) return <PageLoading />;
   if (error || !movie) return <PageError message={error || 'Movie not found'} onRetry={load} />;
 
-  const movieTrailerEmbed = trailerEmbedUrl(movie);
-  const movieIsDemo = isDemoCatalogItem(movie);
-
-  return (
-    <div className="min-h-screen">
-      <div className="relative h-[50vh] md:h-[60vh]">
-        <img src={movie.backdrop} alt={movie.title} className="w-full h-full object-cover" />
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
-      </div>
-
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 -mt-32 relative z-10 pb-12">
-        <div className="flex flex-col md:flex-row gap-6 md:gap-8">
-          <div className="flex-shrink-0 w-[180px] md:w-[220px] mx-auto md:mx-0">
-            <img src={movie.poster} alt={movie.title} className="w-full rounded-lg shadow-xl" />
-          </div>
-
-          <div className="flex-1 space-y-4">
-            <h1 className="text-2xl md:text-4xl font-serif font-bold text-foreground">{movie.title}</h1>
-            <p className="text-sm text-muted-foreground">{movie.originalTitle}</p>
-
-            <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-              <Badge variant="outline" className="border-primary/50 text-primary">
-                {movie.ageRating}
-              </Badge>
-              <span>{movie.year}</span>
-              <span className="flex items-center gap-1">
-                <Clock className="h-3.5 w-3.5" />
-                {movie.duration} {t.common.min}
-              </span>
-              <span className="flex items-center gap-1">
-                <Star className="h-4 w-4 text-primary fill-primary" />
-                {movie.rating}/10
-              </span>
-              <span>{movie.country}</span>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              {movie.genres.map((g) => (
-                <Badge key={g} variant="secondary">
-                  {g}
-                </Badge>
-              ))}
-            </div>
-
-            <p className="text-sm md:text-base text-foreground/80 leading-relaxed">{movie.description}</p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-              <div>
-                <span className="text-muted-foreground">{t.movie.director}:</span>{' '}
-                <span className="text-foreground">{movie.director}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">{t.movie.cast}:</span>{' '}
-                <span className="text-foreground">{movie.cast.join(', ')}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">{t.movie.audio}:</span>{' '}
-                <span className="text-foreground">{movie.audio.join(', ')}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">{t.movie.subtitles}:</span>{' '}
-                <span className="text-foreground">{movie.subtitles.join(', ')}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">{t.movie.quality}:</span>{' '}
-                <span className="text-foreground">{movie.qualities.join(', ')}</span>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3 pt-2" aria-label="Movie actions">
-              {movieTrailerEmbed && (
-                <Button variant="outline" size="lg" asChild className="gap-2">
-                  <a href={movieTrailerEmbed} target="_blank" rel="noreferrer" aria-label={`Watch trailer for ${movie.title}`}>
-                    <ExternalLink className="h-5 w-5" />
-                    Watch Trailer
-                  </a>
-                </Button>
-              )}
-              {canPlayFullMovie(movie) ? (
-                <Button
-                  size="lg"
-                  onClick={() => navigate(`/player/movie/${movie.id}`)}
-                  className="gap-2 font-semibold"
-                  aria-label={`Watch full movie ${movie.title}`}
-                >
-                  <Play className="h-5 w-5 fill-current" />
-                  Watch Full Movie
-                </Button>
-              ) : null}
-              {hasDemoClip(movie) ? (
-                <Button
-                  size="lg"
-                  variant={canPlayFullMovie(movie) ? 'secondary' : 'default'}
-                  onClick={() => navigate(`/player/movie/${movie.id}`)}
-                  className="gap-2 font-semibold"
-                  aria-label={`Play demo clip for ${movie.title}`}
-                >
-                  <Play className="h-5 w-5 fill-current" />
-                  Play Demo Clip
-                </Button>
-              ) : null}
-              {!canPlayFullMovie(movie) ? (
-                <Badge variant="secondary" className="px-3 py-2 text-sm" data-testid="full-movie-unavailable">
-                  {fullMovieUnavailableLabel()}
-                </Badge>
-              ) : null}
-              <Button
-                variant="outline"
-                size="lg"
-                disabled
-                title="Watchlist sync is not available yet"
-                className="gap-2 opacity-70"
-                data-testid="watchlist-deferred"
-              >
-                <Plus className="h-5 w-5" />
-                Watchlist (soon)
-              </Button>
-            </div>
-            {movieIsDemo && (
-              <p className="text-xs text-muted-foreground">
-                Demo catalog item: trailer and demo clip access do not indicate full commercial film availability.
-              </p>
-            )}
-          </div>
-        </div>
-
-        {movieTrailerEmbed && (
-          <section className="mt-10 space-y-3" aria-labelledby="movie-trailer-heading">
-            <h2 id="movie-trailer-heading" className="text-xl font-serif font-bold text-foreground">
-              Watch Trailer
-            </h2>
-            <div className="aspect-video overflow-hidden rounded-lg border border-border bg-black">
-              <iframe
-                src={movieTrailerEmbed}
-                title={`${movie.title} trailer`}
-                className="h-full w-full"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowFullScreen
-                loading="lazy"
-                data-testid="youtube-trailer-embed"
-              />
-            </div>
-          </section>
-        )}
-
-        {related.length > 0 && (
-          <div className="mt-12">
-            <h2 className="text-xl font-serif font-bold text-foreground mb-4">{t.movie.related}</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              {related.map((m) => (
-                <div key={m.id} onClick={() => navigate(`/movie/${m.id}`)} className="cursor-pointer group">
-                  <div className="relative aspect-[2/3] rounded-lg overflow-hidden bg-muted mb-2">
-                    <img
-                      src={m.poster}
-                      alt={m.title}
-                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                    />
-                    {hasDemoClip(m) && (
-                      <div className="absolute top-2 right-2">
-                        <DemoClipBadge item={m} />
-                      </div>
-                    )}
-                  </div>
-                  <h3 className="text-xs font-medium text-foreground truncate">{m.title}</h3>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  return <MovieDetailView movie={movie} related={related} />;
 }
 
 // ============ SERIES DETAILS PAGE ============
