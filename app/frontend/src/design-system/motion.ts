@@ -1,6 +1,10 @@
 import { cn } from '@/lib/utils';
 
-/** Shared motion class presets — respect prefers-reduced-motion via global CSS. */
+/**
+ * Shared motion class presets — minimal, reusable.
+ * Global `prefers-reduced-motion` in index.css collapses animation/transition durations.
+ * Do not pair these with a sticky `opacity-0` that can leave content invisible if animation never runs.
+ */
 export const motionPresets = {
   fadeIn: 'animate-fade-in',
   slideUp: 'animate-slide-up',
@@ -9,7 +13,8 @@ export const motionPresets = {
   press: 'active:scale-[0.98] transition-transform duration-fast',
   hoverLift: 'transition-transform duration-normal ease-out hover:-translate-y-1',
   hoverGlow: 'transition-shadow duration-normal hover:shadow-xl',
-  softEnter: 'animate-lift-in motion-safe:opacity-0',
+  /** Opacity-only enter — visible by default if animation does not run. */
+  softEnter: 'animate-fade-in',
 } as const;
 
 export function motionClass(

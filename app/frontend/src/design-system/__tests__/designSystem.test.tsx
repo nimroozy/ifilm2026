@@ -77,6 +77,8 @@ describe('design system', () => {
   it('exposes motion presets', async () => {
     const { motionClass, motionPresets } = await import('@/design-system');
     expect(motionPresets.fadeIn).toContain('fade-in');
+    expect(motionPresets.softEnter).toContain('fade-in');
+    expect(motionPresets.softEnter).not.toContain('opacity-0');
     expect(motionClass('fadeIn', 'hoverLift')).toContain('animate-fade-in');
   });
 });

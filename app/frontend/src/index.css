@@ -226,30 +226,15 @@
   }
 }
 
-/* Page / overlay enter helpers (disabled under reduced motion by global rule) */
-@keyframes ifilm-lift-in {
-  from { transform: translateY(16px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}
-
-@keyframes ifilm-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
+/*
+ * Optional enter helpers reuse Tailwind keyframe names (no duplicate @keyframes,
+ * no infinite loops). Global reduced-motion rule collapses durations.
+ * Content stays visible if animation never starts (no sticky opacity-0).
+ */
 .ifilm-enter {
-  animation: ifilm-lift-in 0.45s ease-out both;
+  animation: lift-in 0.45s ease-out both;
 }
 
-.ifilm-enter-slow {
-  animation: ifilm-fade-in 0.6s ease-out both;
-}
-
-@keyframes ifilm-pulse-soft {
-  0%, 100% { opacity: 0.55; }
-  50% { opacity: 1; }
-}
-
-.ifilm-pulse-soft {
-  animation: ifilm-pulse-soft 1.6s ease-in-out infinite;
+.ifilm-enter-fade {
+  animation: fade-in 0.5s ease-out both;
 }
