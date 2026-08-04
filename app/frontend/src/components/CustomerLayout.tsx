@@ -9,7 +9,6 @@ import { api, tokenStore } from '@/lib/api';
 import { isMockMode } from '@/lib/dataMode';
 import {
   type AppLocale,
-  applyDocumentLocale,
   localeDir,
   readStoredLocale,
   writeStoredLocale,
@@ -42,17 +41,13 @@ export function LangProvider({ children }: { children: React.ReactNode }) {
   const setLang = useCallback((next: Lang) => {
     writeStoredLocale(next);
     setLangState(next);
-    // Keep document in sync immediately for public routes; DocumentLangSync
-    // still owns admin forcing so it can override on /admin.
-    applyDocumentLocale(next);
   }, []);
 
-  // Document lang/dir for route changes are owned by DocumentLangSync.
-  // On mount, re-apply so the first paint matches persisted locale.
+  // Document lang/dir are owned exclusively by DocumentLangSync (router-aware)
+  // so /admin stays LTR without racing window.location vs MemoryRouter.
   useEffect(() => {
     document.documentElement.classList.add('dark');
-    applyDocumentLocale(lang);
-  }, [lang]);
+  }, []);
 
   return (
     <LangContext.Provider value={{ lang, setLang, t, dir }}>

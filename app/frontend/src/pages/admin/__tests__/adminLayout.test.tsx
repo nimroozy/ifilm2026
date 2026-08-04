@@ -67,13 +67,15 @@ describe('admin LTR layout', () => {
   beforeEach(() => {
     tokenStore.clearAdmin();
     localStorage.clear();
-    document.documentElement.setAttribute('dir', 'rtl');
-    document.documentElement.setAttribute('lang', 'fa');
+    document.cookie = `${LOCALE_STORAGE_KEY}=; path=/; max-age=0`;
+    document.documentElement.setAttribute('dir', 'ltr');
+    document.documentElement.setAttribute('lang', 'en');
   });
 
   afterEach(() => {
     cleanup();
     localStorage.clear();
+    document.cookie = `${LOCALE_STORAGE_KEY}=; path=/; max-age=0`;
   });
 
   it('admin root has dir=ltr and lang=en', async () => {

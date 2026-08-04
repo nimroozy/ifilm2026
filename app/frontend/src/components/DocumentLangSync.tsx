@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useLayoutEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useLang } from '@/components/CustomerLayout';
 import { applyDocumentLocale } from '@/lib/locale';
@@ -13,7 +13,7 @@ export default function DocumentLangSync() {
   const { pathname } = useLocation();
   const { lang } = useLang();
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     applyDocumentLocale(lang, pathname);
     document.documentElement.classList.add('dark');
   }, [pathname, lang]);
