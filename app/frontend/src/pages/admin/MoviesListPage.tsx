@@ -178,7 +178,17 @@ export default function MoviesListPage() {
       ) : error ? (
         <ErrorState message={error} onRetry={load} />
       ) : items.length === 0 ? (
-        <EmptyState message="No movies found." />
+        <EmptyState
+          message="No movies found."
+          action={
+            <Button asChild size="sm">
+              <Link to="/admin/movies/new">
+                <Plus className="h-4 w-4" />
+                Add Movie
+              </Link>
+            </Button>
+          }
+        />
       ) : (
         <Card className="bg-card border-border">
           <CardContent className="p-0">

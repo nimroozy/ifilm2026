@@ -73,7 +73,7 @@ export function ErrorState({
   );
 }
 
-export function EmptyState({ message }: { message: string }) {
+export function EmptyState({ message, action }: { message: string; action?: ReactNode }) {
   return (
     <div
       className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border/80 bg-card/40 px-6 py-16 text-center"
@@ -83,6 +83,7 @@ export function EmptyState({ message }: { message: string }) {
         <Film className="h-5 w-5" />
       </div>
       <p className="max-w-sm text-sm text-muted-foreground">{message}</p>
+      {action ? <div className="mt-1">{action}</div> : null}
     </div>
   );
 }
