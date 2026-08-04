@@ -148,7 +148,8 @@ def _sanitize_integrity(raw: dict[str, Any] | None) -> dict[str, Any] | None:
                 "detail": detail[:160],
             }
         )
-    digest_summary = raw.get("digest_summary") if isinstance(raw.get("digest_summary"), dict) else {}
+    digest_raw = raw.get("digest_summary")
+    digest_summary: dict[str, Any] = digest_raw if isinstance(digest_raw, dict) else {}
     return {
         "ok": bool(raw.get("ok")),
         "installed_version": raw.get("installed_version"),
