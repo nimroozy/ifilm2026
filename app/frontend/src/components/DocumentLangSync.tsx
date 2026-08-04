@@ -1,27 +1,22 @@
-import { useEffect } from 'react';
+import { useLayoutEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useLang } from '@/components/CustomerLayout';
+import { applyDocumentLocale } from '@/lib/locale';
 
 /**
  * Owns documentElement lang/dir.
  * Admin routes always force LTR English document attributes so portaled
  * dialogs/drawers stay LTR. Public routes follow the customer language.
+ * Never writes to storage and never overwrites the saved public locale.
  */
 export default function DocumentLangSync() {
   const { pathname } = useLocation();
-  const { lang, dir } = useLang();
-  const isAdminRoute = pathname === '/admin' || pathname.startsWith('/admin/');
+  const { lang } = useLang();
 
-  useEffect(() => {
-    if (isAdminRoute) {
-      document.documentElement.setAttribute('dir', 'ltr');
-      document.documentElement.setAttribute('lang', 'en');
-    } else {
-      document.documentElement.setAttribute('dir', dir);
-      document.documentElement.setAttribute('lang', lang);
-    }
+  useLayoutEffect(() => {
+    applyDocumentLocale(lang, pathname);
     document.documentElement.classList.add('dark');
-  }, [isAdminRoute, dir, lang]);
+  }, [pathname, lang]);
 
   return null;
 }
