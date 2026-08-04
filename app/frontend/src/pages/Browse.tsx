@@ -30,6 +30,7 @@ import {
 import { ApiError } from '@/lib/api';
 import { canPlayFullMovie, fullMovieUnavailableLabel, hasDemoClip, isDemoCatalogItem } from '@/lib/catalogPresentation';
 import { trailerEmbedUrl } from '@/lib/trailers';
+import { MediaCard } from '@/design-system';
 
 function PageLoading() {
   return (
@@ -217,35 +218,20 @@ export function MoviesPage({ audience = 'all' }: { audience?: 'all' | 'children'
             <p className="text-lg">{t.search.noResults}</p>
           </div>
         ) : view === 'grid' ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
             {items.map((movie) => (
-              <div key={movie.id} onClick={() => navigate(`/movie/${movie.id}`)} className="cursor-pointer group">
-                <div className="relative aspect-[2/3] rounded-lg overflow-hidden bg-muted mb-2">
-                  <img
-                    src={movie.poster}
-                    alt={movie.title}
-                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
-                    <Play className="h-10 w-10 text-white fill-white" />
-                  </div>
-                  <Badge className="absolute top-2 left-2 bg-primary/90 text-primary-foreground text-[10px]">
-                    {movie.qualities[0] || 'HD'}
-                  </Badge>
-                  {hasDemoClip(movie) && (
-                    <div className="absolute top-2 right-2">
-                      <DemoClipBadge item={movie} />
-                    </div>
-                  )}
-                </div>
-                <h3 className="text-sm font-medium text-foreground truncate">{movie.title}</h3>
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <span>{movie.year}</span>
-                  <span>•</span>
-                  <Star className="h-3 w-3 text-primary fill-primary" />
-                  <span>{movie.rating}</span>
-                </div>
-              </div>
+              <MediaCard
+                key={movie.id}
+                className="!w-full max-w-none"
+                title={movie.title}
+                imageUrl={movie.poster}
+                year={movie.year}
+                rating={movie.rating}
+                runtime={movie.duration ? `${movie.duration} min` : undefined}
+                quality={movie.qualities?.[0] || 'HD'}
+                showDemo={hasDemoClip(movie)}
+                onActivate={() => navigate(`/movie/${movie.id}`)}
+              />
             ))}
           </div>
         ) : (
