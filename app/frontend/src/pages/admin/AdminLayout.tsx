@@ -219,7 +219,7 @@ export default function AdminLayout() {
             )}
           </div>
         </header>
-        <main className="p-4 lg:p-6">
+        <main className="p-5 lg:p-8">
           <Outlet />
         </main>
       </div>
