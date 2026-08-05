@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
@@ -132,8 +133,6 @@ def create_movie(
     db: DbSession,
     admin: Annotated[AdminUser, Depends(require_permissions("movies.manage"))],
 ) -> MovieOut:
-    import logging
-
     data = payload.model_dump(exclude={"genre_ids", "slug"})
     data["status"] = "draft"
     slug = make_slug_for_movie(db, payload.title, payload.slug)
