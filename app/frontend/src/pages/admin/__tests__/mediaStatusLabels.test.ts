@@ -23,10 +23,15 @@ describe('mediaAssetStatusLabels', () => {
       asset({
         source_type: 'external',
         external_url: 'https://cdn.example/a.mp4',
+        external_url_masked: 'https://cdn.example/a.mp4',
         external_validated_at: '2026-01-01T00:00:00Z',
+        external_is_primary: true,
+        external_protection_mode: 'unprotected_direct',
       }),
       []
     );
+    expect(labels).toContain('External source');
+    expect(labels).toContain('Unprotected direct');
     expect(labels).toContain('External Validated');
     expect(labels).toContain('Ready');
     expect(labels).not.toContain('Not Playable');

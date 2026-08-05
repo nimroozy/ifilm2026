@@ -86,6 +86,7 @@ def test_attach_external_media_sets_playable(client, admin_headers, db_session, 
             "url": "https://cdn.example.com/movie/master.m3u8",
             "owner_type": "movie",
             "owner_id": movie_id,
+            "acknowledge_unprotected_external": True,
         },
     )
     assert attach.status_code == 201, attach.text
@@ -95,8 +96,15 @@ def test_attach_external_media_sets_playable(client, admin_headers, db_session, 
 
     detail = client.get(f"/api/admin/movies/{movie_id}", headers=admin_headers)
     assert detail.status_code == 200
-    assert detail.json()["playable"] is True
-    assert detail.json()["has_external_media"] is True
+    body = detail.json()
+    assert body["has_external_media"] is True
+    # Option A: non-demo external is not customer-playable
+    assert body["playable"] is False
+    assert body["has_playable_package"] is False
+    asset_detail = attach.json()
+    assert asset_detail["external_is_primary"] is True
+    assert asset_detail["external_protection_mode"] == "unprotected_direct"
+    assert "token=" not in (asset_detail.get("external_url") or "")
 
 
 def test_uploaded_package_marks_playable(client, admin_headers, db_session) -> None:
@@ -231,6 +239,27 @@ def test_season_and_episode_uniqueness(client, admin_headers) -> None:
     assert dup_ep.status_code == 409
 
 
+def test_attach_requires_acknowledgement(client, admin_headers) -> None:
+    created = client.post(
+        "/api/admin/movies",
+        headers=admin_headers,
+        json={"title": "Need Ack", "description": "x", "genre_ids": []},
+    )
+    movie_id = created.json()["id"]
+    attach = client.post(
+        "/api/admin/media/external",
+        headers=admin_headers,
+        json={
+            "url": "https://cdn.example.com/film.mp4",
+            "owner_type": "movie",
+            "owner_id": movie_id,
+            "acknowledge_unprotected_external": False,
+        },
+    )
+    assert attach.status_code == 400
+    assert "acknowledge" in attach.json()["detail"].lower()
+
+
 def test_external_validation_failure_does_not_attach(client, admin_headers, monkeypatch) -> None:
     created = client.post(
         "/api/admin/movies",
@@ -252,6 +281,7 @@ def test_external_validation_failure_does_not_attach(client, admin_headers, monk
             "url": "https://cdn.example.com/missing.mp4",
             "owner_type": "movie",
             "owner_id": movie_id,
+            "acknowledge_unprotected_external": True,
         },
     )
     assert attach.status_code == 400

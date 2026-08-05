@@ -43,6 +43,14 @@ class PlaybackSessionCreated(BaseModel):
     master_playlist_url: str
     source_type: Literal["package", "external"] = "package"
     playback_url: str | None = None
+    # Explicit capabilities — player must not infer security from the URL.
+    protection_level: Literal["session_proxied", "unprotected_direct"] = "session_proxied"
+    supports_seek: bool = True
+    supports_range: bool = True
+    supports_quality_selection: bool = True
+    supports_revocation: bool = True
+    is_demo_only: bool = False
+    external_kind: str | None = None
 
 
 class PlaybackSessionOut(ORMModel):

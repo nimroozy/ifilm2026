@@ -34,15 +34,38 @@ def utcnow() -> datetime:
 def content_playability(
     db: Session | None, *, movie_id: int | None = None, episode_id: int | None = None
 ) -> tuple[bool, bool, bool]:
-    """Return (playable, has_playable_package, has_external_media)."""
+    """Return (playable, has_playable_package, has_external_media).
+
+    Option A: validated primary external counts as has_external_media, but public
+    ``playable`` is true for external only when the linked catalog item is demo-owned.
+    Packaged HLS remains fully playable for production.
+    """
     if db is None:
         return False, False, False
-    playable, _package_id, package_status, _issues = evaluate_playable_package(
+    playable_pkg, _package_id, package_status, _issues = evaluate_playable_package(
         db, movie_id=movie_id, episode_id=episode_id
     )
-    has_external = playable and package_status == "external"
-    has_package = playable and not has_external
-    return playable, has_package, has_external
+    has_external = package_status == "external" and playable_pkg
+    has_package = playable_pkg and not has_external
+    if has_package:
+        return True, True, False
+    if has_external:
+        demo = False
+        if movie_id is not None:
+            from app.models.content import Movie
+
+            movie = db.get(Movie, movie_id)
+            demo = bool(movie and getattr(movie, "demo_owned", False))
+        elif episode_id is not None:
+            from app.models.content import Episode, Series
+
+            episode = db.get(Episode, episode_id)
+            demo = bool(episode and getattr(episode, "demo_owned", False))
+            if not demo and episode and episode.series_id:
+                series = db.get(Series, episode.series_id)
+                demo = bool(series and getattr(series, "demo_owned", False))
+        return demo, False, True
+    return False, False, False
 
 
 def not_deleted(query, model):

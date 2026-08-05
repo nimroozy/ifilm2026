@@ -79,26 +79,37 @@ Subscriber **entitlement** (plans, payment, Radius packages) is **deferred** —
 | GET | `/api/admin/playback/sessions` | `streaming.read` |
 | POST | `/api/admin/playback/sessions/{id}/revoke` | `streaming.manage` |
 
-## External media playback (limitation)
+## External media playback (Option A — admin / demo only)
 
-Validated external HTTPS MP4/HLS assets can create a playback session **without** an active
-local package. Session creation still enforces:
+Validated external HTTPS MP4/HLS assets may be attached for **admin preview** and
+**demo-owned** catalog items. They are **not** equivalent to packaged HLS protection.
+
+### Policy
+
+| Concern | Behavior |
+| --- | --- |
+| Protection level | `unprotected_direct` — player receives the CDN URL after session authorization |
+| Who may play | Admins (ops bypass); subscribers **only** when linked content is `demo_owned` |
+| Production publish | Blocked when the only playable source is unprotected external (non-demo) |
+| Primary source | Exactly one `external_is_primary` per movie/episode; attaching activates the new primary and deactivates the previous |
+| URL in admin APIs | Masked (no query string / credentials); raw URL not returned in list/detail |
+| Session revoke | Does **not** revoke CDN access to the returned URL |
+| Expiry | Session `expires_at` gates *new* session creation; existing CDN URL may remain usable |
+
+Session creation still enforces:
 
 - local streaming enabled
-- principal eligibility (admin bypass / subscriber published + entitlement)
-- external URL previously validated and attached
+- principal eligibility (admin bypass / subscriber published + entitlement + demo gate for external)
+- primary external previously validated and acknowledged
 
-**Contract:** the player uses `playback_url` / `source_type` from `PlaybackSessionCreated`.
-For `source_type=external`, `playback_url` is the validated CDN URL (also mirrored on
-`master_playlist_url` for compatibility).
+**Contract:** the player uses `playback_url` / `source_type` / capability fields from
+`PlaybackSessionCreated`. Capability flags (`protection_level`, `supports_revocation`,
+`is_demo_only`, …) must not be inferred from the URL.
 
-**Limitation (not parity with packaged HLS):** iFilm does **not** proxy or rewrite external
-segments. After the session is authorized and the URL is returned, subsequent fetches go
-directly to the external host. Session expiry/revocation does not revoke CDN access to that
-URL. Do not claim tokenized `/api/stream/{token}/…` protection for external sources.
+**Do not claim** tokenized `/api/stream/{token}/…` protection for external sources.
 
-Packaged HLS remains the protected path: playlists and segments are rewritten through the
-session token.
+Packaged HLS remains the protected production path: playlists and segments are rewritten
+through the session token; revoke/expire apply.
 
 ## Legacy removal
 

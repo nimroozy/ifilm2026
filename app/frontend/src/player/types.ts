@@ -69,4 +69,7 @@ export interface LivePlaybackSession {
   masterPlaylistUrl: string;
   sourceType?: 'package' | 'external' | string;
   playbackUrl?: string | null;
+  protectionLevel?: 'session_proxied' | 'unprotected_direct' | string;
+  supportsRevocation?: boolean;
+  isDemoOnly?: boolean;
 }

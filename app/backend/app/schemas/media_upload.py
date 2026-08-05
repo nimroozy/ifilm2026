@@ -76,12 +76,17 @@ class MediaAssetOut(ORMModel):
     probe_version: str | None = None
     probed_at: datetime | None = None
     source_type: str = "uploaded"
+    # Masked display URL only — never return raw query/credentials in list/detail APIs.
     external_url: str | None = None
+    external_url_masked: str | None = None
     external_kind: str | None = None
     external_content_type: str | None = None
     external_content_length: int | None = None
     external_accept_ranges: bool = False
     external_validated_at: datetime | None = None
+    external_is_primary: bool = False
+    external_protection_mode: str = "unprotected_direct"
+    external_acknowledged_at: datetime | None = None
     created_by_admin_id: int | None
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -120,12 +125,13 @@ class MediaAssetDetachRequest(BaseModel):
 
 
 class ExternalMediaAttachRequest(BaseModel):
-    """Validate and attach an HTTPS MP4/HLS URL to a movie or episode."""
+    """Validate and attach an HTTPS MP4/HLS URL to a movie or episode (Option A)."""
 
     url: str = Field(min_length=8, max_length=2048)
     owner_type: str = Field(pattern="^(movie|episode)$")
     owner_id: int = Field(gt=0)
     category: str = "originals"
+    acknowledge_unprotected_external: bool = False
 
     @field_validator("category")
     @classmethod

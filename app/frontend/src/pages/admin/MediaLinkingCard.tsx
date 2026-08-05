@@ -92,6 +92,10 @@ export function mediaAssetStatusLabels(
   const processing = (asset.processing_status || '').toLowerCase();
 
   if (external) {
+    if (asset.external_is_primary) labels.push('External source');
+    if (asset.external_protection_mode === 'unprotected_direct' || !asset.external_protection_mode) {
+      labels.push('Unprotected direct');
+    }
     if (asset.external_validated_at) {
       labels.push('External Validated');
       labels.push('Ready');
@@ -318,12 +322,42 @@ export default function MediaLinkingCard({
                         <Badge variant="outline">{asset.external_kind.toUpperCase()}</Badge>
                       ) : null}
                     </div>
-                    {external && asset.external_url ? (
+                    {external ? (
+                      <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted-foreground sm:grid-cols-4">
+                        <div>
+                          <dt className="inline">Kind </dt>
+                          <dd className="inline">{asset.external_kind || '—'}</dd>
+                        </div>
+                        <div>
+                          <dt className="inline">Protection </dt>
+                          <dd className="inline">
+                            {asset.external_protection_mode === 'unprotected_direct'
+                              ? 'Unprotected direct'
+                              : asset.external_protection_mode || '—'}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="inline">Primary </dt>
+                          <dd className="inline">{asset.external_is_primary ? 'Yes' : 'No'}</dd>
+                        </div>
+                        <div>
+                          <dt className="inline">Validated </dt>
+                          <dd className="inline">{formatDate(asset.external_validated_at)}</dd>
+                        </div>
+                      </dl>
+                    ) : null}
+                    {external && (asset.external_url_masked || asset.external_url) ? (
                       <p
                         className="mt-1 truncate text-xs text-muted-foreground"
-                        title={asset.external_url}
+                        title={asset.external_url_masked || asset.external_url || undefined}
                       >
-                        {truncateUrl(asset.external_url)}
+                        {truncateUrl(asset.external_url_masked || asset.external_url || '')}
+                      </p>
+                    ) : null}
+                    {external ? (
+                      <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                        Direct URL exposure: session revoke does not stop CDN playback. Admin/demo only — not
+                        packaged-HLS protection.
                       </p>
                     ) : null}
                     {!external ? (
@@ -345,18 +379,7 @@ export default function MediaLinkingCard({
                           <dd className="inline">{formatDate(asset.created_at)}</dd>
                         </div>
                       </dl>
-                    ) : (
-                      <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted-foreground sm:grid-cols-4">
-                        <div>
-                          <dt className="inline">Kind </dt>
-                          <dd className="inline">{asset.external_kind || '—'}</dd>
-                        </div>
-                        <div>
-                          <dt className="inline">Created </dt>
-                          <dd className="inline">{formatDate(asset.created_at)}</dd>
-                        </div>
-                      </dl>
-                    )}
+                    ) : null}
                     {active?.id ? (
                       <p className="mt-1 truncate text-xs text-muted-foreground" title={active.id}>
                         Active package: {active.id}
@@ -517,11 +540,13 @@ function ExternalUrlDialog({
   onAttached: () => Promise<void>;
 }) {
   const [url, setUrl] = useState('');
+  const [acknowledged, setAcknowledged] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!open) {
       setUrl('');
+      setAcknowledged(false);
       setSubmitting(false);
     }
   }, [open]);
@@ -532,14 +557,19 @@ function ExternalUrlDialog({
       toast.error('URL must start with https://');
       return;
     }
+    if (!acknowledged) {
+      toast.error('Acknowledge the unprotected external media warning to continue');
+      return;
+    }
     setSubmitting(true);
     try {
       await adminApi.attachExternalMedia({
         url: trimmed,
         owner_type: ownerType,
         owner_id: ownerId,
+        acknowledge_unprotected_external: true,
       });
-      toast.success('External media attached');
+      toast.success('External media attached as primary source');
       onOpenChange(false);
       await onAttached();
     } catch (err) {
@@ -555,20 +585,42 @@ function ExternalUrlDialog({
         <DialogHeader>
           <DialogTitle>Attach external URL</DialogTitle>
           <DialogDescription>
-            Provide an HTTPS URL to an external video (direct file or HLS playlist). The URL is validated before linking.
+            Option A — admin / demo only. The player receives the CDN URL directly after session authorization.
+            This is not packaged-HLS protection: revoke does not stop CDN playback, and the URL may appear in
+            browser network tools. Attaching activates this source as the sole primary external and deactivates
+            any previous primary.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-2">
-          <Label htmlFor="external-media-url">HTTPS URL</Label>
-          <Input
-            id="external-media-url"
-            type="url"
-            placeholder="https://..."
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            data-testid="external-media-url-input"
-            disabled={submitting}
-          />
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <Label htmlFor="external-media-url">HTTPS URL</Label>
+            <Input
+              id="external-media-url"
+              type="url"
+              placeholder="https://..."
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              data-testid="external-media-url-input"
+              disabled={submitting}
+              autoComplete="off"
+            />
+            <p className="text-xs text-muted-foreground">
+              After save, only a masked host/path is shown. Query tokens are never returned in admin APIs.
+            </p>
+          </div>
+          <label className="flex items-start gap-2 text-sm" data-testid="external-media-ack">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={acknowledged}
+              onChange={(e) => setAcknowledged(e.target.checked)}
+              disabled={submitting}
+            />
+            <span>
+              I understand this is an unprotected direct external source for admin/demo use, not equivalent to
+              session-proxied packaged HLS, and production publish requires a packaged HLS source.
+            </span>
+          </label>
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" disabled={submitting} onClick={() => onOpenChange(false)}>
@@ -576,12 +628,12 @@ function ExternalUrlDialog({
           </Button>
           <Button
             type="button"
-            disabled={submitting || !url.trim()}
+            disabled={submitting || !url.trim() || !acknowledged}
             onClick={() => void submit()}
             data-testid="external-media-submit"
           >
             {submitting ? <Loader2 className="me-1 h-3.5 w-3.5 animate-spin" /> : null}
-            Attach
+            Attach primary external
           </Button>
         </DialogFooter>
       </DialogContent>

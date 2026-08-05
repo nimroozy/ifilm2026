@@ -254,6 +254,8 @@ def test_movie_out_marks_playable_from_external(db_session: Session) -> None:
         external_url="https://cdn.example.com/film.mp4",
         external_kind="mp4",
         external_validated_at=datetime.now(UTC),
+        external_is_primary=True,
+        external_protection_mode="unprotected_direct",
     )
     db_session.add(asset)
     db_session.commit()
@@ -265,9 +267,17 @@ def test_movie_out_marks_playable_from_external(db_session: Session) -> None:
     assert issues == []
 
     out = movie_out(movie, db_session)
-    assert out.playable is True
+    # Non-demo: has_external_media but not customer-playable under Option A
     assert out.has_external_media is True
     assert out.has_playable_package is False
+    assert out.playable is False
+
+    movie.demo_owned = True
+    db_session.add(movie)
+    db_session.commit()
+    out_demo = movie_out(movie, db_session)
+    assert out_demo.playable is True
+    assert out_demo.has_external_media is True
 
 
 def test_legacy_hls_path_alone_not_playable(db_session: Session) -> None:
@@ -377,6 +387,7 @@ def test_external_not_validated_not_playable(db_session: Session) -> None:
             external_url="https://cdn.example.com/x.mp4",
             external_kind="mp4",
             external_validated_at=None,
+            external_is_primary=True,
         )
     )
     db_session.commit()
@@ -384,3 +395,66 @@ def test_external_not_validated_not_playable(db_session: Session) -> None:
     assert playable is False
     assert status == "external"
     assert any(i.code == "external_not_validated" for i in issues)
+
+
+def test_mask_external_url_strips_query() -> None:
+    from app.services.media_external_attach import mask_external_url
+
+    masked = mask_external_url("https://cdn.example.com/path/film.mp4?token=secret")
+    assert masked is not None
+    assert "token=" not in masked
+    assert "cdn.example.com" in masked
+
+
+def test_primary_external_activation_deactivates_previous(db_session: Session) -> None:
+    movie = Movie(title="Primary Swap", slug="primary-swap", status="draft", description="d")
+    db_session.add(movie)
+    db_session.commit()
+    db_session.refresh(movie)
+    older = MediaAsset(
+        movie_id=movie.id,
+        original_filename="old.mp4",
+        stored_filename="",
+        mime_type="video/mp4",
+        extension="mp4",
+        size_bytes=1,
+        storage_backend="external",
+        category="originals",
+        upload_status="completed",
+        processing_status="ready",
+        source_type="external",
+        external_url="https://cdn.example.com/old.mp4",
+        external_kind="mp4",
+        external_validated_at=datetime.now(UTC),
+        external_is_primary=True,
+        external_protection_mode="unprotected_direct",
+    )
+    db_session.add(older)
+    db_session.commit()
+
+    from unittest import mock
+
+    from app.services.media_external import ExternalMediaValidation
+    from app.services.media_external_attach import attach_external_media
+
+    with mock.patch(
+        "app.services.media_external_attach.validate_external_media_url",
+        return_value=ExternalMediaValidation(
+            url="https://cdn.example.com/new.mp4",
+            kind="mp4",
+            content_type="video/mp4",
+            content_length=10,
+            accept_ranges=True,
+            validated_at=datetime.now(UTC),
+        ),
+    ):
+        newer = attach_external_media(
+            db_session,
+            url="https://cdn.example.com/new.mp4",
+            movie_id=movie.id,
+            admin_id=1,
+            acknowledge_unprotected_external=True,
+        )
+    db_session.refresh(older)
+    assert newer.external_is_primary is True
+    assert older.external_is_primary is False

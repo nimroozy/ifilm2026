@@ -70,6 +70,7 @@ def _created_response(session: MediaPlaybackSession, raw_token: str) -> Playback
     settings = get_settings()
     from sqlalchemy.orm import object_session
 
+    from app.models.content import Episode, Movie, Series
     from app.models.media_assets import MediaAsset
 
     db = object_session(session)
@@ -92,6 +93,13 @@ def _created_response(session: MediaPlaybackSession, raw_token: str) -> Playback
             master_playlist_url=url,
             source_type="external",
             playback_url=url,
+            protection_level="unprotected_direct",
+            supports_seek=True,
+            supports_range=bool(getattr(media_asset, "external_accept_ranges", False)),
+            supports_quality_selection=getattr(media_asset, "external_kind", None) == "hls",
+            supports_revocation=False,
+            is_demo_only=True,
+            external_kind=getattr(media_asset, "external_kind", None),
         )
 
     url = master_playlist_url(api_prefix=settings.api_prefix, token=raw_token)
@@ -104,6 +112,13 @@ def _created_response(session: MediaPlaybackSession, raw_token: str) -> Playback
         master_playlist_url=url,
         source_type="package",
         playback_url=url,
+        protection_level="session_proxied",
+        supports_seek=True,
+        supports_range=True,
+        supports_quality_selection=True,
+        supports_revocation=True,
+        is_demo_only=False,
+        external_kind=None,
     )
 
 router = APIRouter(tags=["streaming"])
@@ -139,9 +154,10 @@ def streaming_status():
         supported_principals=["admin", "subscriber"],
         subscriber_entitlement=(
             "active account + entitlement + published catalog + "
-            "(active HLS package OR validated external media); "
-            "admins retain operational bypass. "
-            "External media returns a session-gated CDN URL — segment fetches are not proxied."
+            "active HLS package (session-proxied). "
+            "External media is Option A admin/demo-only (unprotected direct CDN URL); "
+            "subscribers cannot play non-demo external sources. "
+            "Session revoke does not revoke CDN access for external URLs."
         ),
     )
 

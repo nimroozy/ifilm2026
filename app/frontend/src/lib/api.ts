@@ -496,12 +496,17 @@ export interface MediaAssetDto {
   probe_version?: string | null;
   probed_at?: string | null;
   source_type?: 'uploaded' | 'external' | string;
+  /** Masked display URL only (no query tokens). */
   external_url?: string | null;
+  external_url_masked?: string | null;
   external_kind?: string | null;
   external_content_type?: string | null;
   external_content_length?: number | null;
   external_accept_ranges?: boolean;
   external_validated_at?: string | null;
+  external_is_primary?: boolean;
+  external_protection_mode?: string;
+  external_acknowledged_at?: string | null;
   created_by_admin_id: number | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -619,6 +624,13 @@ export interface PlaybackSessionCreatedDto {
   master_playlist_url: string;
   source_type?: 'package' | 'external' | string;
   playback_url?: string | null;
+  protection_level?: 'session_proxied' | 'unprotected_direct' | string;
+  supports_seek?: boolean;
+  supports_range?: boolean;
+  supports_quality_selection?: boolean;
+  supports_revocation?: boolean;
+  is_demo_only?: boolean;
+  external_kind?: string | null;
 }
 
 export type TmdbMediaType = 'movie' | 'series';
@@ -1584,6 +1596,7 @@ export const adminApi = {
     owner_type: 'movie' | 'episode';
     owner_id: number;
     category?: MediaCategory;
+    acknowledge_unprotected_external: boolean;
   }) {
     const { data } = await adminHttp.post<MediaAssetDto>('/admin/media/external', payload);
     return data;

@@ -247,6 +247,7 @@ export default function PublishingPanel({
                   'no_active_hls_package',
                   'media_asset_unusable',
                   'external_not_validated',
+                  'external_unprotected_production',
                 ].includes(i.code)
               ) ? (
                 <div className="mt-3 flex flex-wrap gap-2">

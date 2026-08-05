@@ -1008,10 +1008,15 @@ def test_external_media_playability_migration_roundtrip(postgres_url):
         "external_content_length",
         "external_accept_ranges",
         "external_validated_at",
+        "external_is_primary",
+        "external_protection_mode",
+        "external_acknowledged_at",
+        "external_acknowledged_by_admin_id",
     }.issubset(media_cols)
     assert {"producer", "writer", "studio"}.issubset(movie_cols)
     assert session_nullable == "YES"
     assert "ix_media_assets_source_type" in indexes
+    assert "ix_media_assets_external_is_primary" in indexes
 
     assert _run_alembic(postgres_url, "downgrade", "014_tmdb_demo_metadata").returncode == 0
     engine = create_engine(postgres_url)

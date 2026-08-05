@@ -81,7 +81,7 @@ class MediaAsset(Base):
     upload_status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
     processing_status: Mapped[str] = mapped_column(String(32), default="none", index=True)
 
-    # uploaded = local file; external = validated HTTPS MP4/HLS URL
+    # uploaded = local file; external = validated HTTPS MP4/HLS URL (Option A: unprotected direct)
     source_type: Mapped[str] = mapped_column(String(32), default="uploaded", index=True)
     external_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     external_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
@@ -89,6 +89,14 @@ class MediaAsset(Base):
     external_content_length: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     external_accept_ranges: Mapped[bool] = mapped_column(Boolean, default=False)
     external_validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    external_is_primary: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    external_protection_mode: Mapped[str] = mapped_column(
+        String(64), default="unprotected_direct"
+    )
+    external_acknowledged_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    external_acknowledged_by_admin_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Probed metadata (ffprobe). Null until a successful probe completes.
     container_format: Mapped[str | None] = mapped_column(String(64), nullable=True)

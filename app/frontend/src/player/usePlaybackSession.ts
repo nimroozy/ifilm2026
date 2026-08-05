@@ -23,6 +23,9 @@ async function createSessionForTarget(target: PlayerTarget): Promise<LivePlaybac
     master_playlist_url: string;
     source_type?: string;
     playback_url?: string | null;
+    protection_level?: string;
+    supports_revocation?: boolean;
+    is_demo_only?: boolean;
   }): LivePlaybackSession => ({
     id: created.id,
     mediaAssetId: created.media_asset_id,
@@ -31,6 +34,9 @@ async function createSessionForTarget(target: PlayerTarget): Promise<LivePlaybac
     masterPlaylistUrl: created.master_playlist_url,
     sourceType: created.source_type,
     playbackUrl: created.playback_url ?? created.master_playlist_url,
+    protectionLevel: created.protection_level,
+    supportsRevocation: created.supports_revocation,
+    isDemoOnly: created.is_demo_only,
   });
 
   if (target.kind === 'asset') {
