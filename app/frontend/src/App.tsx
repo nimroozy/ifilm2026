@@ -1,7 +1,7 @@
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, Outlet } from 'react-router-dom';
 import CustomerLayout, { LangProvider, AuthProvider } from '@/components/CustomerLayout';
 import DocumentLangSync from '@/components/DocumentLangSync';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -44,63 +44,73 @@ function CustomerRoute({ children }: { children: React.ReactNode }) {
   return <CustomerLayout>{children}</CustomerLayout>;
 }
 
-const AppRoutes = () => (
-  <Routes>
-    {/* Customer Routes */}
-    <Route path="/" element={<CustomerRoute><Index /></CustomerRoute>} />
-    <Route path="/movies" element={<CustomerRoute><MoviesPage /></CustomerRoute>} />
-    <Route path="/series" element={<CustomerRoute><SeriesPage /></CustomerRoute>} />
-    <Route path="/children" element={<CustomerRoute><ChildrenPage /></CustomerRoute>} />
-    <Route path="/movie/:id" element={<CustomerRoute><MovieDetailsPage /></CustomerRoute>} />
-    <Route path="/series/:id" element={<CustomerRoute><SeriesDetailsPage /></CustomerRoute>} />
-    <Route path="/search" element={<CustomerRoute><SearchPage /></CustomerRoute>} />
-    <Route path="/about" element={<CustomerRoute><AboutPage /></CustomerRoute>} />
-    <Route path="/credits" element={<CustomerRoute><AboutPage /></CustomerRoute>} />
-    <Route path="/login" element={<LoginPage />} />
-    <Route path="/profile" element={<CustomerRoute><ProfilePage /></CustomerRoute>} />
-    <Route path="/devices" element={<CustomerRoute><DevicesPage /></CustomerRoute>} />
-    <Route path="/watchlist" element={<CustomerRoute><WatchlistPage /></CustomerRoute>} />
-    <Route path="/history" element={<CustomerRoute><HistoryPage /></CustomerRoute>} />
-    {/* Player - fullscreen, no layout */}
-    <Route path="/player/movie/:id" element={<PlayerPage />} />
-    <Route path="/player/episode/:id" element={<PlayerPage />} />
-    <Route path="/player/asset/:assetId" element={<PlayerPage />} />
-    <Route path="/player/:id" element={<PlayerPage />} />
+function RootLayout() {
+  return (
+    <>
+      <DocumentLangSync />
+      <Outlet />
+    </>
+  );
+}
 
-    {/* Admin */}
-    <Route path="/admin/login" element={<AdminLoginPage />} />
-    <Route
-      path="/admin"
-      element={
-        <RequireAdmin>
-          <AdminLayout />
-        </RequireAdmin>
-      }
-    >
-      <Route index element={<DashboardPage />} />
-      <Route path="movies" element={<MoviesListPage />} />
-      <Route path="movies/new" element={<MovieFormPage />} />
-      <Route path="movies/:id/edit" element={<MovieFormPage />} />
-      <Route path="series" element={<SeriesListPage />} />
-      <Route path="series/new" element={<SeriesFormPage />} />
-      <Route path="series/:id/edit" element={<SeriesFormPage />} />
-      <Route path="series/:id/seasons" element={<SeasonsPage />} />
-      <Route path="seasons/:id/edit" element={<SeasonFormPage />} />
-      <Route path="seasons/:id/episodes" element={<EpisodesPage />} />
-      <Route path="episodes/:id/edit" element={<EpisodeFormPage />} />
-      <Route path="genres" element={<GenresPage />} />
-      <Route path="tools/upload" element={<MediaUploadPage />} />
-      <Route path="tools/tmdb" element={<TmdbToolsPage />} />
-      <Route path="media/processing" element={<MediaProcessingJobsPage />} />
-      <Route path="media/playback-sessions" element={<PlaybackSessionsPage />} />
-      <Route path="media/:assetId" element={<MediaAssetDetailPage />} />
-      <Route path="system/updates" element={<SystemUpdatesPage />} />
-      <Route path="tools/encoding" element={<AdminPlaceholderPage section="encoding" />} />
-      <Route path="tools/cdn" element={<AdminPlaceholderPage section="cdn" />} />
-      <Route path="tools/users" element={<AdminPlaceholderPage section="users" />} />
-    </Route>
-  </Routes>
-);
+/** Data router required for useBlocker (unsaved-change guard on MovieFormPage). */
+const router = createBrowserRouter([
+  {
+    element: <RootLayout />,
+    children: [
+      { path: '/', element: <CustomerRoute><Index /></CustomerRoute> },
+      { path: '/movies', element: <CustomerRoute><MoviesPage /></CustomerRoute> },
+      { path: '/series', element: <CustomerRoute><SeriesPage /></CustomerRoute> },
+      { path: '/children', element: <CustomerRoute><ChildrenPage /></CustomerRoute> },
+      { path: '/movie/:id', element: <CustomerRoute><MovieDetailsPage /></CustomerRoute> },
+      { path: '/series/:id', element: <CustomerRoute><SeriesDetailsPage /></CustomerRoute> },
+      { path: '/search', element: <CustomerRoute><SearchPage /></CustomerRoute> },
+      { path: '/about', element: <CustomerRoute><AboutPage /></CustomerRoute> },
+      { path: '/credits', element: <CustomerRoute><AboutPage /></CustomerRoute> },
+      { path: '/login', element: <LoginPage /> },
+      { path: '/profile', element: <CustomerRoute><ProfilePage /></CustomerRoute> },
+      { path: '/devices', element: <CustomerRoute><DevicesPage /></CustomerRoute> },
+      { path: '/watchlist', element: <CustomerRoute><WatchlistPage /></CustomerRoute> },
+      { path: '/history', element: <CustomerRoute><HistoryPage /></CustomerRoute> },
+      { path: '/player/movie/:id', element: <PlayerPage /> },
+      { path: '/player/episode/:id', element: <PlayerPage /> },
+      { path: '/player/asset/:assetId', element: <PlayerPage /> },
+      { path: '/player/:id', element: <PlayerPage /> },
+      { path: '/admin/login', element: <AdminLoginPage /> },
+      {
+        path: '/admin',
+        element: (
+          <RequireAdmin>
+            <AdminLayout />
+          </RequireAdmin>
+        ),
+        children: [
+          { index: true, element: <DashboardPage /> },
+          { path: 'movies', element: <MoviesListPage /> },
+          { path: 'movies/new', element: <MovieFormPage /> },
+          { path: 'movies/:id/edit', element: <MovieFormPage /> },
+          { path: 'series', element: <SeriesListPage /> },
+          { path: 'series/new', element: <SeriesFormPage /> },
+          { path: 'series/:id/edit', element: <SeriesFormPage /> },
+          { path: 'series/:id/seasons', element: <SeasonsPage /> },
+          { path: 'seasons/:id/edit', element: <SeasonFormPage /> },
+          { path: 'seasons/:id/episodes', element: <EpisodesPage /> },
+          { path: 'episodes/:id/edit', element: <EpisodeFormPage /> },
+          { path: 'genres', element: <GenresPage /> },
+          { path: 'tools/upload', element: <MediaUploadPage /> },
+          { path: 'tools/tmdb', element: <TmdbToolsPage /> },
+          { path: 'media/processing', element: <MediaProcessingJobsPage /> },
+          { path: 'media/playback-sessions', element: <PlaybackSessionsPage /> },
+          { path: 'media/:assetId', element: <MediaAssetDetailPage /> },
+          { path: 'system/updates', element: <SystemUpdatesPage /> },
+          { path: 'tools/encoding', element: <AdminPlaceholderPage section="encoding" /> },
+          { path: 'tools/cdn', element: <AdminPlaceholderPage section="cdn" /> },
+          { path: 'tools/users', element: <AdminPlaceholderPage section="users" /> },
+        ],
+      },
+    ],
+  },
+]);
 
 const App = () => (
   <ErrorBoundary>
@@ -109,10 +119,7 @@ const App = () => (
         <AuthProvider>
           <TooltipProvider>
             <Toaster />
-            <BrowserRouter>
-              <DocumentLangSync />
-              <AppRoutes />
-            </BrowserRouter>
+            <RouterProvider router={router} />
           </TooltipProvider>
         </AuthProvider>
       </LangProvider>
@@ -121,4 +128,3 @@ const App = () => (
 );
 
 export default App;
-export { AppRoutes };
