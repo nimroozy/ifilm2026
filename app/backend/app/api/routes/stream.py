@@ -69,6 +69,7 @@ def get_playback_principal(
 def _created_response(session: MediaPlaybackSession, raw_token: str) -> PlaybackSessionCreated:
     settings = get_settings()
     from sqlalchemy.orm import object_session
+
     from app.models.media_assets import MediaAsset
 
     db = object_session(session)

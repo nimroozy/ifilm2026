@@ -19,10 +19,10 @@ from app.models.media_playback import (
     MediaPlaybackSession,
 )
 from app.models.user import Subscriber
+from app.services.media_external_attach import is_external_playable
 from app.services.streaming.activation import require_active_completed_package
 from app.services.streaming.audit import record_session_event
 from app.services.streaming.eligibility import playback_eligibility
-from app.services.media_external_attach import is_external_playable
 from app.services.streaming.tokens import (
     generate_playback_token,
     hash_playback_token,

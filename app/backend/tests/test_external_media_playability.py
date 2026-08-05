@@ -5,15 +5,18 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy.orm import Session
-
 from app.models.content import Movie
 from app.models.media_assets import MediaAsset
 from app.models.media_encoding import PACKAGE_TYPE_HLS_VOD, MediaPackage, MediaRendition
 from app.services.catalog import movie_out
-from app.services.media_external import ExternalMediaError, assert_safe_external_url, validate_external_media_url
+from app.services.media_external import (
+    ExternalMediaError,
+    assert_safe_external_url,
+    validate_external_media_url,
+)
 from app.services.publishing.readiness import evaluate_playable_package
 from app.services.storage import media_root
+from sqlalchemy.orm import Session
 
 
 def test_reject_non_https_and_ssrf_hosts() -> None:
