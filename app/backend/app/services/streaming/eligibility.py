@@ -27,6 +27,7 @@ DENY_NO_OWNER = "ownership_undetermined"
 DENY_OWNER_MISSING = "owner_missing"
 DENY_ASSET_MISSING = "asset_missing"
 DENY_ENTITLEMENT = "entitlement_denied"
+DENY_EXTERNAL_UNPROTECTED = "external_unprotected"
 
 
 @dataclass(frozen=True)
@@ -76,11 +77,32 @@ class PlaybackEligibilityService:
                     entitlement.denial_code or DENY_ENTITLEMENT,
                     entitlement.safe_reason or "Playback not allowed by entitlement",
                 )
+            # Option A: unprotected external CDN URLs are admin/demo only.
+            if getattr(media_asset, "source_type", "uploaded") == "external":
+                if not self._linked_content_is_demo(db, media_asset):
+                    return EligibilityResult.deny(
+                        DENY_EXTERNAL_UNPROTECTED,
+                        "External media is admin/demo-only (unprotected direct URL); "
+                        "packaged HLS is required for subscriber playback",
+                    )
             return self._subscriber_catalog_visibility(db, media_asset)
 
         return EligibilityResult.deny(
             DENY_UNSUPPORTED_PRINCIPAL, "Unsupported principal type"
         )
+
+    def _linked_content_is_demo(self, db: Session, asset: MediaAsset) -> bool:
+        if asset.movie_id is not None:
+            movie = db.get(Movie, asset.movie_id)
+            return bool(movie and getattr(movie, "demo_owned", False))
+        if asset.episode_id is not None:
+            episode = db.get(Episode, asset.episode_id)
+            if episode and getattr(episode, "demo_owned", False):
+                return True
+            if episode and episode.series_id:
+                series = db.get(Series, episode.series_id)
+                return bool(series and getattr(series, "demo_owned", False))
+        return False
 
     def _subscriber_catalog_visibility(
         self, db: Session, asset: MediaAsset

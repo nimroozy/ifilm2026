@@ -171,7 +171,7 @@ def list_public_episodes(
     season: int | None = None,
 ) -> list[EpisodeOut]:
     series = resolve_series(db, id_or_slug, published_only=True)
-    return [episode_out(e) for e in _public_episodes(series, season)]
+    return [episode_out(e, db) for e in _public_episodes(series, season)]
 
 
 @router.get("/admin/series", response_model=Envelope[SeriesOut])

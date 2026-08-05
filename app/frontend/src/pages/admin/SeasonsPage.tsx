@@ -132,7 +132,7 @@ export default function SeasonsPage() {
                   <FormItem>
                     <FormLabel>Number</FormLabel>
                     <FormControl>
-                      <Input type="number" className="w-24" {...field} data-testid="season-number" />
+                      <Input type="number" className="w-24" id="season-number" {...field} data-testid="season-number" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -161,7 +161,21 @@ export default function SeasonsPage() {
       </Card>
 
       {seasons.length === 0 ? (
-        <EmptyState message="No seasons yet." />
+        <EmptyState
+          message="No seasons yet."
+          action={
+            <Button
+              type="button"
+              size="sm"
+              className="gap-2"
+              data-testid="add-first-season"
+              onClick={() => document.getElementById('season-number')?.focus()}
+            >
+              <Plus className="h-4 w-4" />
+              Add First Season
+            </Button>
+          }
+        />
       ) : (
         <Card className="bg-card border-border">
           <CardContent className="p-0">

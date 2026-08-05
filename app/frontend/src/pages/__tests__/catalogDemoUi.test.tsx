@@ -72,7 +72,7 @@ describe('demo catalog movie UI', () => {
     fetchGenres.mockResolvedValue([]);
   });
 
-  it('distinguishes trailer, demo clip, and unavailable full movie actions', async () => {
+  it('distinguishes trailer and demo clip; hides full play for demo-owned titles', async () => {
     fetchMovie.mockResolvedValue(movie());
 
     renderMovieDetails();
@@ -82,7 +82,8 @@ describe('demo catalog movie UI', () => {
       'href',
       'https://www.youtube-nocookie.com/embed/abc123XYZ'
     );
-    expect(screen.getByTestId('full-movie-unavailable')).toHaveTextContent('Full Movie Unavailable');
+    // Demo clip present → do not show Full Movie Unavailable (Play Demo takes priority).
+    expect(screen.queryByTestId('full-movie-unavailable')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Watch Full Movie/i })).not.toBeInTheDocument();
     expect(screen.getByTestId('youtube-trailer-embed')).toHaveAttribute(
       'src',
@@ -90,6 +91,48 @@ describe('demo catalog movie UI', () => {
     );
   });
 
+  it('shows Full Movie Unavailable when neither playable nor demo clip exists', async () => {
+    fetchMovie.mockResolvedValue(
+      movie({
+        demoOwned: false,
+        hasDemoClip: false,
+        playable: false,
+        hasPlayablePackage: false,
+        hasExternalMedia: false,
+        trailerProvider: '',
+        trailerKey: '',
+        trailerUrl: '',
+      })
+    );
+
+    renderMovieDetails();
+
+    expect(await screen.findByTestId('full-movie-unavailable')).toHaveTextContent('Full Movie Unavailable');
+    expect(screen.queryByRole('button', { name: /Watch Full Movie/i })).not.toBeInTheDocument();
+  });
+
+  it('shows Play when backend marks package playable (Killer Man regression)', async () => {
+    fetchMovie.mockResolvedValue(
+      movie({
+        title: 'The Killer Man',
+        demoOwned: false,
+        hasDemoClip: false,
+        playable: true,
+        hasPlayablePackage: true,
+        hasExternalMedia: false,
+        hlsPath: null,
+        trailerProvider: '',
+        trailerKey: '',
+        trailerUrl: '',
+      })
+    );
+
+    renderMovieDetails();
+
+    expect(await screen.findByRole('button', { name: /Play The Killer Man/i })).toBeInTheDocument();
+    expect(screen.queryByTestId('full-movie-unavailable')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Play demo clip/i })).not.toBeInTheDocument();
+  });
   it('rejects non-HTTPS trailer embeds', async () => {
     fetchMovie.mockResolvedValue(
       movie({

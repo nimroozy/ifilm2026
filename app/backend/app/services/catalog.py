@@ -17,6 +17,7 @@ from app.schemas.content import (
     SeasonOut,
     SeriesOut,
 )
+from app.services.publishing.readiness import evaluate_playable_package
 from app.services.publishing.visibility import (
     apply_public_visibility,
     public_episode_count_for_season,
@@ -28,6 +29,43 @@ from app.utils.slug import slug_or_from_title
 
 def utcnow() -> datetime:
     return datetime.now(UTC)
+
+
+def content_playability(
+    db: Session | None, *, movie_id: int | None = None, episode_id: int | None = None
+) -> tuple[bool, bool, bool]:
+    """Return (playable, has_playable_package, has_external_media).
+
+    Option A: validated primary external counts as has_external_media, but public
+    ``playable`` is true for external only when the linked catalog item is demo-owned.
+    Packaged HLS remains fully playable for production.
+    """
+    if db is None:
+        return False, False, False
+    playable_pkg, _package_id, package_status, _issues = evaluate_playable_package(
+        db, movie_id=movie_id, episode_id=episode_id
+    )
+    has_external = package_status == "external" and playable_pkg
+    has_package = playable_pkg and not has_external
+    if has_package:
+        return True, True, False
+    if has_external:
+        demo = False
+        if movie_id is not None:
+            from app.models.content import Movie
+
+            movie = db.get(Movie, movie_id)
+            demo = bool(movie and getattr(movie, "demo_owned", False))
+        elif episode_id is not None:
+            from app.models.content import Episode, Series
+
+            episode = db.get(Episode, episode_id)
+            demo = bool(episode and getattr(episode, "demo_owned", False))
+            if not demo and episode and episode.series_id:
+                series = db.get(Series, episode.series_id)
+                demo = bool(series and getattr(series, "demo_owned", False))
+        return demo, False, True
+    return False, False, False
 
 
 def not_deleted(query, model):
@@ -49,8 +87,9 @@ def genre_out(genre: Genre, *, movie_count: int | None = None, series_count: int
     )
 
 
-def movie_out(movie: Movie) -> MovieOut:
+def movie_out(movie: Movie, db: Session | None = None) -> MovieOut:
     genres = [genre_out(g, movie_count=0, series_count=0) for g in (movie.genre_links or [])]
+    playable, has_package, has_external = content_playability(db, movie_id=movie.id)
     return MovieOut(
         id=movie.id,
         title=movie.title,
@@ -90,6 +129,9 @@ def movie_out(movie: Movie) -> MovieOut:
         updated_at=movie.updated_at,
         genres=genres,
         director=movie.director or "",
+        producer=getattr(movie, "producer", "") or "",
+        writer=getattr(movie, "writer", "") or "",
+        studio=getattr(movie, "studio", "") or "",
         cast=movie.cast or [],
         audio=movie.audio or [],
         subtitles=movie.subtitles or [],
@@ -98,6 +140,9 @@ def movie_out(movie: Movie) -> MovieOut:
         views=movie.views or 0,
         type="movie",
         hls_path=movie.hls_path,
+        playable=playable,
+        has_playable_package=has_package,
+        has_external_media=has_external,
         year=movie.release_year,
         duration=movie.duration_minutes,
         rating=movie.imdb_rating,
@@ -194,7 +239,8 @@ def season_out(season: Season, *, public_counts: bool = False) -> SeasonOut:
     )
 
 
-def episode_out(episode: Episode) -> EpisodeOut:
+def episode_out(episode: Episode, db: Session | None = None) -> EpisodeOut:
+    playable, has_package, has_external = content_playability(db, episode_id=episode.id)
     return EpisodeOut(
         id=episode.id,
         season_id=episode.season_id,
@@ -215,6 +261,9 @@ def episode_out(episode: Episode) -> EpisodeOut:
         created_at=episode.created_at,
         updated_at=episode.updated_at,
         hls_path=episode.hls_path,
+        playable=playable,
+        has_playable_package=has_package,
+        has_external_media=has_external,
         season=episode.season.season_number if episode.season else None,
         episode=episode.episode_number,
         duration=episode.duration_minutes,

@@ -12,9 +12,11 @@ const apiMocks = vi.hoisted(() => ({
 const playbackSession = vi.hoisted(() => ({
   id: 'session-1',
   mediaAssetId: 'asset-1',
-  mediaPackageId: 'package-1',
+  mediaPackageId: 'package-1' as string | null,
   expiresAt: '2026-08-01T00:00:00Z',
   masterPlaylistUrl: '/api/stream/redacted/master.m3u8',
+  sourceType: 'package',
+  playbackUrl: '/api/stream/redacted/master.m3u8',
 }));
 
 vi.mock('@/lib/api', async () => {

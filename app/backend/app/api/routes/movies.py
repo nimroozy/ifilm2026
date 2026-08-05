@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
@@ -86,12 +87,12 @@ def list_movies(
     )
     total = query.count()
     items = query.offset((page - 1) * page_size).limit(page_size).all()
-    return paginated([movie_out(m) for m in items], total=total, page=page, page_size=page_size)
+    return paginated([movie_out(m, db) for m in items], total=total, page=page, page_size=page_size)
 
 
 @router.get("/movies/{id_or_slug}", response_model=MovieOut)
 def get_public_movie(id_or_slug: str, db: DbSession) -> MovieOut:
-    return movie_out(resolve_movie(db, id_or_slug, published_only=True))
+    return movie_out(resolve_movie(db, id_or_slug, published_only=True), db)
 
 
 @router.get("/admin/movies", response_model=Envelope[MovieOut])
@@ -123,14 +124,14 @@ def admin_list_movies(
     )
     total = query.count()
     items = query.offset((page - 1) * page_size).limit(page_size).all()
-    return paginated([movie_out(m) for m in items], total=total, page=page, page_size=page_size)
+    return paginated([movie_out(m, db) for m in items], total=total, page=page, page_size=page_size)
 
 
 @router.post("/admin/movies", response_model=MovieOut, status_code=status.HTTP_201_CREATED)
 def create_movie(
     payload: MovieCreate,
     db: DbSession,
-    _: Annotated[AdminUser, Depends(require_permissions("movies.manage"))],
+    admin: Annotated[AdminUser, Depends(require_permissions("movies.manage"))],
 ) -> MovieOut:
     data = payload.model_dump(exclude={"genre_ids", "slug"})
     data["status"] = "draft"
@@ -141,7 +142,17 @@ def create_movie(
     movie.genre_links = genres
     db.add(movie)
     db.commit()
-    return movie_out(get_movie(db, movie.id))
+    logging.getLogger("app.catalog.audit").info(
+        "catalog_audit event=movie_created details=%s",
+        {
+            "movie_id": movie.id,
+            "slug": movie.slug,
+            "status": movie.status,
+            "admin_id": admin.id,
+            "tmdb_id": getattr(movie, "tmdb_id", None),
+        },
+    )
+    return movie_out(get_movie(db, movie.id), db)
 
 
 @router.get("/admin/movies/{movie_id}", response_model=MovieOut)
@@ -150,7 +161,7 @@ def admin_get_movie(
     db: DbSession,
     _: Annotated[AdminUser, Depends(require_permissions("movies.read"))],
 ) -> MovieOut:
-    return movie_out(get_movie(db, movie_id))
+    return movie_out(get_movie(db, movie_id), db)
 
 
 @router.patch("/admin/movies/{movie_id}", response_model=MovieOut)
@@ -176,7 +187,7 @@ def update_movie(
     movie.updated_at = utcnow()
     db.add(movie)
     db.commit()
-    return movie_out(get_movie(db, movie.id))
+    return movie_out(get_movie(db, movie.id), db)
 
 
 @router.delete("/admin/movies/{movie_id}", response_model=Message)

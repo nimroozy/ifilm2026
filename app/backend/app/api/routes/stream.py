@@ -68,15 +68,56 @@ def get_playback_principal(
 
 def _created_response(session: MediaPlaybackSession, raw_token: str) -> PlaybackSessionCreated:
     settings = get_settings()
+    from sqlalchemy.orm import object_session
+
+    from app.models.media_assets import MediaAsset
+
+    db = object_session(session)
+    media_asset = session.media_asset
+    if media_asset is None and db is not None:
+        media_asset = db.get(MediaAsset, session.media_asset_id)
+
+    if (
+        media_asset is not None
+        and getattr(media_asset, "source_type", "uploaded") == "external"
+        and media_asset.external_url
+    ):
+        url = media_asset.external_url
+        return PlaybackSessionCreated(
+            id=session.id,
+            media_asset_id=session.media_asset_id,
+            media_package_id=None,
+            expires_at=session.expires_at,
+            playback_token=raw_token,
+            master_playlist_url=url,
+            source_type="external",
+            playback_url=url,
+            protection_level="unprotected_direct",
+            supports_seek=True,
+            supports_range=bool(getattr(media_asset, "external_accept_ranges", False)),
+            supports_quality_selection=getattr(media_asset, "external_kind", None) == "hls",
+            supports_revocation=False,
+            is_demo_only=True,
+            external_kind=getattr(media_asset, "external_kind", None),
+        )
+
+    url = master_playlist_url(api_prefix=settings.api_prefix, token=raw_token)
     return PlaybackSessionCreated(
         id=session.id,
         media_asset_id=session.media_asset_id,
         media_package_id=session.media_package_id,
         expires_at=session.expires_at,
         playback_token=raw_token,
-        master_playlist_url=master_playlist_url(
-            api_prefix=settings.api_prefix, token=raw_token
-        ),
+        master_playlist_url=url,
+        source_type="package",
+        playback_url=url,
+        protection_level="session_proxied",
+        supports_seek=True,
+        supports_range=True,
+        supports_quality_selection=True,
+        supports_revocation=True,
+        is_demo_only=False,
+        external_kind=None,
     )
 
 router = APIRouter(tags=["streaming"])
@@ -111,8 +152,11 @@ def streaming_status():
         enabled=bool(settings.enable_local_streaming),
         supported_principals=["admin", "subscriber"],
         subscriber_entitlement=(
-            "active account + active package entitlement + published catalog + active HLS; "
-            "admins retain operational bypass"
+            "active account + entitlement + published catalog + "
+            "active HLS package (session-proxied). "
+            "External media is Option A admin/demo-only (unprotected direct CDN URL); "
+            "subscribers cannot play non-demo external sources. "
+            "Session revoke does not revoke CDN access for external URLs."
         ),
     )
 

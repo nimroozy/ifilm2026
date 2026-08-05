@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { createMemoryRouter, RouterProvider, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import RequireAdmin from '../RequireAdmin';
 import AdminLoginPage from '../AdminLoginPage';
@@ -60,11 +60,18 @@ vi.mock('@/lib/api', async () => {
 
 function wrap(ui: React.ReactNode, initial = '/admin') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const router = createMemoryRouter(
+    [
+      {
+        path: '*',
+        element: <LangProvider>{ui}</LangProvider>,
+      },
+    ],
+    { initialEntries: [initial] }
+  );
   return render(
     <QueryClientProvider client={client}>
-      <LangProvider>
-        <MemoryRouter initialEntries={[initial]}>{ui}</MemoryRouter>
-      </LangProvider>
+      <RouterProvider router={router} />
     </QueryClientProvider>
   );
 }

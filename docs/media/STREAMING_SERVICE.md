@@ -79,6 +79,38 @@ Subscriber **entitlement** (plans, payment, Radius packages) is **deferred** —
 | GET | `/api/admin/playback/sessions` | `streaming.read` |
 | POST | `/api/admin/playback/sessions/{id}/revoke` | `streaming.manage` |
 
+## External media playback (Option A — admin / demo only)
+
+Validated external HTTPS MP4/HLS assets may be attached for **admin preview** and
+**demo-owned** catalog items. They are **not** equivalent to packaged HLS protection.
+
+### Policy
+
+| Concern | Behavior |
+| --- | --- |
+| Protection level | `unprotected_direct` — player receives the CDN URL after session authorization |
+| Who may play | Admins (ops bypass); subscribers **only** when linked content is `demo_owned` |
+| Production publish | Blocked when the only playable source is unprotected external (non-demo) |
+| Primary source | Exactly one `external_is_primary` per movie/episode; attaching activates the new primary and deactivates the previous |
+| URL in admin APIs | Masked (no query string / credentials); raw URL not returned in list/detail |
+| Session revoke | Does **not** revoke CDN access to the returned URL |
+| Expiry | Session `expires_at` gates *new* session creation; existing CDN URL may remain usable |
+
+Session creation still enforces:
+
+- local streaming enabled
+- principal eligibility (admin bypass / subscriber published + entitlement + demo gate for external)
+- primary external previously validated and acknowledged
+
+**Contract:** the player uses `playback_url` / `source_type` / capability fields from
+`PlaybackSessionCreated`. Capability flags (`protection_level`, `supports_revocation`,
+`is_demo_only`, …) must not be inferred from the URL.
+
+**Do not claim** tokenized `/api/stream/{token}/…` protection for external sources.
+
+Packaged HLS remains the protected production path: playlists and segments are rewritten
+through the session token; revoke/expire apply.
+
 ## Legacy removal
 
 - Public `StaticFiles` mount of `MEDIA_ROOT` at `/media` **removed** (404 with explanation)

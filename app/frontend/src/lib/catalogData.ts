@@ -172,6 +172,9 @@ export async function fetchSeriesDetail(idOrSlug: number | string): Promise<Seri
         demoOwned: false,
         hasDemoClip: false,
         hlsPath: null as string | null,
+        playable: false,
+        hasPlayablePackage: false,
+        hasExternalMedia: false,
       }));
     const seasonNumbers = Array.from(new Set(eps.map((e) => e.season))).sort((a, b) => a - b);
     const seasons =

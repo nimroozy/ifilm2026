@@ -18,15 +18,25 @@ async function createSessionForTarget(target: PlayerTarget): Promise<LivePlaybac
   const toLive = (created: {
     id: string;
     media_asset_id: string;
-    media_package_id: string;
+    media_package_id: string | null;
     expires_at: string;
     master_playlist_url: string;
+    source_type?: string;
+    playback_url?: string | null;
+    protection_level?: string;
+    supports_revocation?: boolean;
+    is_demo_only?: boolean;
   }): LivePlaybackSession => ({
     id: created.id,
     mediaAssetId: created.media_asset_id,
     mediaPackageId: created.media_package_id,
     expiresAt: created.expires_at,
     masterPlaylistUrl: created.master_playlist_url,
+    sourceType: created.source_type,
+    playbackUrl: created.playback_url ?? created.master_playlist_url,
+    protectionLevel: created.protection_level,
+    supportsRevocation: created.supports_revocation,
+    isDemoOnly: created.is_demo_only,
   });
 
   if (target.kind === 'asset') {

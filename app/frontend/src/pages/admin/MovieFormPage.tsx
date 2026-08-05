@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
+import { Link, useBlocker, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useForm, type UseFormReturn } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
@@ -10,10 +10,19 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { adminApi, ApiError, type CatalogStatus, type GenreDto } from '@/lib/api';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { adminApi, ApiError, type CatalogStatus, type GenreDto, type PublicationHistoryEventDto } from '@/lib/api';
 import { csvToList, ErrorState, listToCsv, LoadingBlock, POSTER_FALLBACK } from './adminShared';
 import PublishingPanel from './PublishingPanel';
 import MediaLinkingCard from './MediaLinkingCard';
+
+const MOVIE_TABS = ['general', 'metadata', 'artwork', 'media', 'publishing', 'seo', 'history'] as const;
+type MovieTab = (typeof MOVIE_TABS)[number];
+
+function tabFromSearch(raw: string | null): MovieTab {
+  if (raw && (MOVIE_TABS as readonly string[]).includes(raw)) return raw as MovieTab;
+  return 'general';
+}
 
 export const movieFormSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -26,6 +35,14 @@ export const movieFormSchema = z.object({
   language: z.string().optional(),
   country: z.string().optional(),
   imdb_rating: z.coerce.number().min(0).max(10).optional().or(z.literal('')),
+  imdb_id: z.string().optional(),
+  tmdb_id: z.coerce.number().int().optional().or(z.literal('')),
+  trailer_url: z
+    .string()
+    .optional()
+    .refine((v) => !v || v.startsWith('http://') || v.startsWith('https://'), {
+      message: 'Trailer URL must start with http:// or https://',
+    }),
   poster_url: z
     .string()
     .optional()
@@ -41,6 +58,9 @@ export const movieFormSchema = z.object({
   is_featured: z.boolean().default(false),
   is_trending: z.boolean().default(false),
   director: z.string().optional(),
+  producer: z.string().optional(),
+  writer: z.string().optional(),
+  studio: z.string().optional(),
   cast: z.string().optional(),
   audio: z.string().optional(),
   subtitles: z.string().optional(),
@@ -50,6 +70,36 @@ export const movieFormSchema = z.object({
 });
 
 export type MovieFormValues = z.infer<typeof movieFormSchema>;
+
+const FIELD_TAB: Partial<Record<keyof MovieFormValues, MovieTab>> = {
+  title: 'general',
+  original_title: 'general',
+  slug: 'general',
+  description: 'general',
+  release_year: 'general',
+  duration_minutes: 'general',
+  language: 'general',
+  country: 'general',
+  age_rating: 'general',
+  director: 'metadata',
+  producer: 'metadata',
+  writer: 'metadata',
+  studio: 'metadata',
+  cast: 'metadata',
+  genre_ids: 'metadata',
+  imdb_rating: 'metadata',
+  imdb_id: 'metadata',
+  tmdb_id: 'metadata',
+  audio: 'metadata',
+  subtitles: 'metadata',
+  qualities: 'metadata',
+  dubbed: 'metadata',
+  is_featured: 'metadata',
+  is_trending: 'metadata',
+  poster_url: 'artwork',
+  backdrop_url: 'artwork',
+  trailer_url: 'artwork',
+};
 
 function emptyValues(): MovieFormValues {
   return {
@@ -63,11 +113,17 @@ function emptyValues(): MovieFormValues {
     language: '',
     country: '',
     imdb_rating: '' as unknown as number,
+    imdb_id: '',
+    tmdb_id: '' as unknown as number,
+    trailer_url: '',
     poster_url: '',
     backdrop_url: '',
     is_featured: false,
     is_trending: false,
     director: '',
+    producer: '',
+    writer: '',
+    studio: '',
     cast: '',
     audio: '',
     subtitles: '',
@@ -77,16 +133,447 @@ function emptyValues(): MovieFormValues {
   };
 }
 
+function GeneralFields({
+  form,
+}: {
+  form: UseFormReturn<MovieFormValues>;
+}) {
+  return (
+    <Card className="bg-card border-border">
+      <CardHeader>
+        <CardTitle className="text-base">General</CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-4 sm:grid-cols-2">
+        <FormField
+          control={form.control}
+          name="title"
+          render={({ field }) => (
+            <FormItem className="sm:col-span-2">
+              <FormLabel>Title</FormLabel>
+              <FormControl>
+                <Input {...field} data-testid="movie-title" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="original_title"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Original title</FormLabel>
+              <FormControl>
+                <Input {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="slug"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Slug</FormLabel>
+              <FormControl>
+                <Input {...field} placeholder="auto from title if empty" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="description"
+          render={({ field }) => (
+            <FormItem className="sm:col-span-2">
+              <FormLabel>Description</FormLabel>
+              <FormControl>
+                <Textarea rows={4} {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="release_year"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Release year</FormLabel>
+              <FormControl>
+                <Input type="number" {...field} value={field.value ?? ''} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="duration_minutes"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Duration (minutes)</FormLabel>
+              <FormControl>
+                <Input type="number" {...field} value={field.value ?? ''} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="language"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Language</FormLabel>
+              <FormControl>
+                <Input {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="country"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Country</FormLabel>
+              <FormControl>
+                <Input {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="age_rating"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Age rating</FormLabel>
+              <FormControl>
+                <Input {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <div className="flex flex-wrap items-center gap-6 sm:col-span-2">
+          <FormField
+            control={form.control}
+            name="is_featured"
+            render={({ field }) => (
+              <FormItem className="flex items-center gap-2 space-y-0">
+                <FormControl>
+                  <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                </FormControl>
+                <FormLabel className="!mt-0">Featured</FormLabel>
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="is_trending"
+            render={({ field }) => (
+              <FormItem className="flex items-center gap-2 space-y-0">
+                <FormControl>
+                  <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                </FormControl>
+                <FormLabel className="!mt-0">Trending</FormLabel>
+              </FormItem>
+            )}
+          />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function MetadataFields({
+  form,
+  genres,
+}: {
+  form: UseFormReturn<MovieFormValues>;
+  genres: GenreDto[];
+}) {
+  return (
+    <Card className="bg-card border-border">
+      <CardHeader>
+        <CardTitle className="text-base">Metadata</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField
+            control={form.control}
+            name="director"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Director</FormLabel>
+                <FormControl>
+                  <Input {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="producer"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Producer</FormLabel>
+                <FormControl>
+                  <Input {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="writer"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Writer</FormLabel>
+                <FormControl>
+                  <Input {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="studio"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Studio</FormLabel>
+                <FormControl>
+                  <Input {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="imdb_id"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>IMDb ID</FormLabel>
+                <FormControl>
+                  <Input {...field} placeholder="tt1234567" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="tmdb_id"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>TMDB ID</FormLabel>
+                <FormControl>
+                  <Input type="number" {...field} value={field.value ?? ''} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="imdb_rating"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>IMDb rating</FormLabel>
+                <FormControl>
+                  <Input type="number" step="0.1" {...field} value={field.value ?? ''} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="trailer_url"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Trailer URL</FormLabel>
+                <FormControl>
+                  <Input {...field} placeholder="https://..." />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+        <FormField
+          control={form.control}
+          name="cast"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Cast (comma-separated)</FormLabel>
+              <FormControl>
+                <Input {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="genre_ids"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Genres</FormLabel>
+              <div className="flex flex-wrap gap-3">
+                {genres.map((g) => {
+                  const checked = field.value.includes(g.id);
+                  return (
+                    <label key={g.id} className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(v) => {
+                          if (v) field.onChange([...field.value, g.id]);
+                          else field.onChange(field.value.filter((id) => id !== g.id));
+                        }}
+                      />
+                      {g.name}
+                    </label>
+                  );
+                })}
+                {genres.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No genres yet.</p>
+                )}
+              </div>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        {(
+          [
+            ['audio', 'Audio (comma-separated)'],
+            ['subtitles', 'Subtitles (comma-separated)'],
+            ['qualities', 'Qualities (comma-separated)'],
+            ['dubbed', 'Dubbed (comma-separated)'],
+          ] as const
+        ).map(([name, label]) => (
+          <FormField
+            key={name}
+            control={form.control}
+            name={name}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{label}</FormLabel>
+                <FormControl>
+                  <Input {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ArtworkFields({
+  form,
+  previewSrc,
+  onPreviewError,
+}: {
+  form: UseFormReturn<MovieFormValues>;
+  previewSrc: string;
+  onPreviewError: () => void;
+}) {
+  return (
+    <Card className="bg-card border-border">
+      <CardHeader>
+        <CardTitle className="text-base">Artwork</CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-4 sm:grid-cols-[120px_1fr]">
+        <img
+          src={previewSrc}
+          alt="Poster preview"
+          className="w-[100px] h-[150px] rounded object-cover bg-muted"
+          onError={onPreviewError}
+        />
+        <div className="space-y-4">
+          <FormField
+            control={form.control}
+            name="poster_url"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Poster URL</FormLabel>
+                <FormControl>
+                  <Input {...field} placeholder="https://..." data-testid="movie-poster-url" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="backdrop_url"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Backdrop URL</FormLabel>
+                <FormControl>
+                  <Input {...field} placeholder="https://..." />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function FormActions({
+  form,
+  isEdit,
+}: {
+  form: UseFormReturn<MovieFormValues>;
+  isEdit: boolean;
+}) {
+  return (
+    <div className="flex gap-3">
+      <Button
+        type="submit"
+        className="bg-primary text-primary-foreground"
+        disabled={form.formState.isSubmitting}
+        data-testid="movie-save"
+      >
+        {form.formState.isSubmitting ? 'Saving…' : isEdit ? 'Save changes' : 'Create movie'}
+      </Button>
+      <Button type="button" variant="outline" asChild>
+        <Link to="/admin/movies">Cancel</Link>
+      </Button>
+    </div>
+  );
+}
+
 export default function MovieFormPage() {
   const { id } = useParams();
   const isEdit = Boolean(id);
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = tabFromSearch(searchParams.get('tab'));
   const [genres, setGenres] = useState<GenreDto[]>([]);
   const [loading, setLoading] = useState(isEdit);
   const [error, setError] = useState<string | null>(null);
   const [previewBroken, setPreviewBroken] = useState(false);
   const [currentStatus, setCurrentStatus] = useState<CatalogStatus | string>('draft');
   const [mediaRefreshToken, setMediaRefreshToken] = useState(0);
+  const [history, setHistory] = useState<PublicationHistoryEventDto[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const form = useForm<MovieFormValues>({
     resolver: zodResolver(movieFormSchema),
@@ -94,6 +581,40 @@ export default function MovieFormPage() {
   });
 
   const posterUrl = form.watch('poster_url');
+  const slugValue = form.watch('slug');
+  const isDirty = form.formState.isDirty;
+
+  const blocker = useBlocker(isDirty);
+
+  useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!isDirty) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [isDirty]);
+
+  useEffect(() => {
+    if (blocker.state !== 'blocked') return;
+    const leave = window.confirm('You have unsaved changes. Leave this page?');
+    if (leave) blocker.proceed();
+    else blocker.reset();
+  }, [blocker]);
+
+  function setActiveTab(tab: string) {
+    const next = tabFromSearch(tab);
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        if (next === 'general') params.delete('tab');
+        else params.set('tab', next);
+        return params;
+      },
+      { replace: true }
+    );
+  }
 
   useEffect(() => {
     setPreviewBroken(false);
@@ -127,11 +648,17 @@ export default function MovieFormPage() {
           language: movie.language || '',
           country: movie.country || '',
           imdb_rating: (movie.imdb_rating ?? movie.rating ?? '') as unknown as number,
+          imdb_id: movie.imdb_id || '',
+          tmdb_id: (movie.tmdb_id ?? '') as unknown as number,
+          trailer_url: movie.trailer_url || '',
           poster_url: movie.poster_url || movie.poster || '',
           backdrop_url: movie.backdrop_url || movie.backdrop || '',
           is_featured: movie.is_featured ?? movie.featured ?? false,
           is_trending: movie.is_trending ?? false,
           director: movie.director || '',
+          producer: movie.producer || '',
+          writer: movie.writer || '',
+          studio: movie.studio || '',
           cast: listToCsv(movie.cast),
           audio: listToCsv(movie.audio),
           subtitles: listToCsv(movie.subtitles),
@@ -153,6 +680,26 @@ export default function MovieFormPage() {
       cancelled = true;
     };
   }, [id, isEdit, form]);
+
+  useEffect(() => {
+    if (!isEdit || !id || activeTab !== 'history') return;
+    let cancelled = false;
+    setHistoryLoading(true);
+    adminApi
+      .getPublicationHistory('movie', Number(id))
+      .then((events) => {
+        if (!cancelled) setHistory(events);
+      })
+      .catch(() => {
+        if (!cancelled) setHistory([]);
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, id, isEdit, mediaRefreshToken, currentStatus]);
 
   const previewSrc = useMemo(() => {
     if (!posterUrl || previewBroken) return POSTER_FALLBACK;
@@ -178,11 +725,18 @@ export default function MovieFormPage() {
       country: values.country || '',
       imdb_rating:
         values.imdb_rating === '' || values.imdb_rating == null ? null : Number(values.imdb_rating),
+      imdb_id: values.imdb_id || null,
+      tmdb_id:
+        values.tmdb_id === '' || values.tmdb_id == null ? null : Number(values.tmdb_id),
+      trailer_url: values.trailer_url || '',
       poster_url: values.poster_url || '',
       backdrop_url: values.backdrop_url || '',
       is_featured: values.is_featured,
       is_trending: values.is_trending,
       director: values.director || '',
+      producer: values.producer || '',
+      writer: values.writer || '',
+      studio: values.studio || '',
       cast: csvToList(values.cast || ''),
       audio: csvToList(values.audio || ''),
       subtitles: csvToList(values.subtitles || ''),
@@ -194,6 +748,7 @@ export default function MovieFormPage() {
     try {
       if (isEdit && id) {
         await adminApi.updateMovie(Number(id), payload);
+        form.reset(values);
         toast.success('Movie updated');
       } else {
         const created = await adminApi.createMovie(payload);
@@ -201,9 +756,19 @@ export default function MovieFormPage() {
         navigate(`/admin/movies/${created.id}/edit`, { replace: true });
         return;
       }
-      navigate('/admin/movies');
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Save failed');
+      const message = err instanceof ApiError ? err.message : 'Save failed';
+      toast.error(message);
+      if (message.toLowerCase().includes('slug')) {
+        setActiveTab('general');
+      }
+    }
+  }
+
+  function onInvalid(errors: Record<string, unknown>) {
+    const first = Object.keys(errors)[0] as keyof MovieFormValues | undefined;
+    if (first && FIELD_TAB[first]) {
+      setActiveTab(FIELD_TAB[first]!);
     }
   }
 
@@ -211,7 +776,7 @@ export default function MovieFormPage() {
   if (error) return <ErrorState message={error} onRetry={() => window.location.reload()} />;
 
   return (
-    <div className="space-y-4 max-w-4xl">
+    <div className="space-y-4 max-w-4xl" dir="ltr" lang="en" data-testid="movie-form-page">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold text-foreground">{isEdit ? 'Edit Movie' : 'New Movie'}</h2>
@@ -222,321 +787,127 @@ export default function MovieFormPage() {
         </Button>
       </div>
 
-      {isEdit && id && (
-        <PublishingPanel
-          entityType="movie"
-          entityId={Number(id)}
-          currentStatus={currentStatus}
-          onChanged={setCurrentStatus}
-          refreshToken={mediaRefreshToken}
-        />
-      )}
-
-      {isEdit && id && (
-        <MediaLinkingCard
-          ownerType="movie"
-          ownerId={Number(id)}
-          contentStatus={String(currentStatus)}
-          onChanged={() => setMediaRefreshToken((n) => n + 1)}
-        />
-      )}
-
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6" noValidate>
-          <Card className="bg-card border-border">
-            <CardHeader>
-              <CardTitle className="text-base">Basics</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-4 sm:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="title"
-                render={({ field }) => (
-                  <FormItem className="sm:col-span-2">
-                    <FormLabel>Title</FormLabel>
-                    <FormControl>
-                      <Input {...field} data-testid="movie-title" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="original_title"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Original title</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="slug"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Slug</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder="auto from title if empty" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="release_year"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Release year</FormLabel>
-                    <FormControl>
-                      <Input type="number" {...field} value={field.value ?? ''} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="duration_minutes"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Duration (minutes)</FormLabel>
-                    <FormControl>
-                      <Input type="number" {...field} value={field.value ?? ''} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="imdb_rating"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>IMDb rating</FormLabel>
-                    <FormControl>
-                      <Input type="number" step="0.1" {...field} value={field.value ?? ''} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="age_rating"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Age rating</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="language"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Language</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="country"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Country</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="director"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Director</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem className="sm:col-span-2">
-                    <FormLabel>Description</FormLabel>
-                    <FormControl>
-                      <Textarea rows={4} {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </CardContent>
-          </Card>
+        <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-6" noValidate>
+          {isEdit && id ? (
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+              <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 overflow-x-auto">
+                <TabsTrigger value="general">General</TabsTrigger>
+                <TabsTrigger value="metadata">Metadata</TabsTrigger>
+                <TabsTrigger value="artwork">Artwork</TabsTrigger>
+                <TabsTrigger value="media">Media</TabsTrigger>
+                <TabsTrigger value="publishing">Publishing</TabsTrigger>
+                <TabsTrigger value="seo">SEO</TabsTrigger>
+                <TabsTrigger value="history">History</TabsTrigger>
+              </TabsList>
 
-          <Card className="bg-card border-border">
-            <CardHeader>
-              <CardTitle className="text-base">Artwork & flags</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-4 sm:grid-cols-[120px_1fr]">
-              <img
-                src={previewSrc}
-                alt="Poster preview"
-                className="w-[100px] h-[150px] rounded object-cover bg-muted"
-                onError={() => setPreviewBroken(true)}
-              />
-              <div className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="poster_url"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Poster URL</FormLabel>
-                      <FormControl>
-                        <Input {...field} placeholder="https://..." data-testid="movie-poster-url" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+              <TabsContent value="general" className="space-y-4">
+                <GeneralFields form={form} />
+              </TabsContent>
+
+              <TabsContent value="metadata" className="space-y-4">
+                <MetadataFields form={form} genres={genres} />
+              </TabsContent>
+
+              <TabsContent value="artwork" className="space-y-4">
+                <ArtworkFields
+                  form={form}
+                  previewSrc={previewSrc}
+                  onPreviewError={() => setPreviewBroken(true)}
                 />
-                <FormField
-                  control={form.control}
-                  name="backdrop_url"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Backdrop URL</FormLabel>
-                      <FormControl>
-                        <Input {...field} placeholder="https://..." />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+              </TabsContent>
+
+              <TabsContent value="media" className="space-y-4">
+                <MediaLinkingCard
+                  ownerType="movie"
+                  ownerId={Number(id)}
+                  contentStatus={String(currentStatus)}
+                  onChanged={() => setMediaRefreshToken((n) => n + 1)}
                 />
-                <div className="flex flex-wrap gap-6">
-                  <FormField
-                    control={form.control}
-                    name="is_featured"
-                    render={({ field }) => (
-                      <FormItem className="flex items-center gap-2 space-y-0">
-                        <FormControl>
-                          <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                        </FormControl>
-                        <FormLabel className="!mt-0">Featured</FormLabel>
-                      </FormItem>
+              </TabsContent>
+
+              <TabsContent value="publishing" className="space-y-4">
+                <PublishingPanel
+                  entityType="movie"
+                  entityId={Number(id)}
+                  currentStatus={currentStatus}
+                  onChanged={setCurrentStatus}
+                  refreshToken={mediaRefreshToken}
+                  onOpenMediaTab={() => setActiveTab('media')}
+                />
+              </TabsContent>
+
+              <TabsContent value="seo" className="space-y-4">
+                <Card className="bg-card border-border">
+                  <CardHeader>
+                    <CardTitle className="text-base">SEO</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3 text-sm text-muted-foreground">
+                    <p>
+                      Public URL slug:{' '}
+                      <span className="font-mono text-foreground">{slugValue || '(auto from title)'}</span>
+                    </p>
+                    <p>
+                      Edit the slug on the General tab. Keep it stable after publish so catalog and share links stay
+                      consistent.
+                    </p>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setActiveTab('general')}>
+                      Edit slug on General
+                    </Button>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="history" className="space-y-4">
+                <Card className="bg-card border-border">
+                  <CardHeader>
+                    <CardTitle className="text-base">History</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3 text-sm">
+                    {historyLoading ? (
+                      <LoadingBlock rows={3} />
+                    ) : history.length === 0 ? (
+                      <p className="text-muted-foreground">No publication history yet.</p>
+                    ) : (
+                      <ul className="space-y-2" data-testid="movie-history-list">
+                        {history.map((event) => (
+                          <li key={event.id} className="rounded-md border border-border p-2">
+                            <div className="font-medium text-foreground">{event.event_type}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {event.created_at
+                                ? new Intl.DateTimeFormat(undefined, {
+                                    dateStyle: 'medium',
+                                    timeStyle: 'short',
+                                  }).format(new Date(event.created_at))
+                                : '—'}
+                              {event.from_status || event.to_status
+                                ? ` · ${event.from_status || '—'} → ${event.to_status || '—'}`
+                                : null}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
                     )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="is_trending"
-                    render={({ field }) => (
-                      <FormItem className="flex items-center gap-2 space-y-0">
-                        <FormControl>
-                          <Checkbox checked={field.value} onCheckedChange={field.onChange} />
-                        </FormControl>
-                        <FormLabel className="!mt-0">Trending</FormLabel>
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-card border-border">
-            <CardHeader>
-              <CardTitle className="text-base">Genres & metadata</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <FormField
-                control={form.control}
-                name="genre_ids"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Genres</FormLabel>
-                    <div className="flex flex-wrap gap-3">
-                      {genres.map((g) => {
-                        const checked = field.value.includes(g.id);
-                        return (
-                          <label key={g.id} className="flex items-center gap-2 text-sm">
-                            <Checkbox
-                              checked={checked}
-                              onCheckedChange={(v) => {
-                                if (v) field.onChange([...field.value, g.id]);
-                                else field.onChange(field.value.filter((id) => id !== g.id));
-                              }}
-                            />
-                            {g.name}
-                          </label>
-                        );
-                      })}
-                      {genres.length === 0 && (
-                        <p className="text-sm text-muted-foreground">No genres yet.</p>
-                      )}
-                    </div>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                    <Button type="button" variant="outline" size="sm" onClick={() => setActiveTab('publishing')}>
+                      Open Publishing
+                    </Button>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          ) : (
+            <>
+              <GeneralFields form={form} />
+              <MetadataFields form={form} genres={genres} />
+              <ArtworkFields
+                form={form}
+                previewSrc={previewSrc}
+                onPreviewError={() => setPreviewBroken(true)}
               />
-              {(
-                [
-                  ['cast', 'Cast (comma-separated)'],
-                  ['audio', 'Audio (comma-separated)'],
-                  ['subtitles', 'Subtitles (comma-separated)'],
-                  ['qualities', 'Qualities (comma-separated)'],
-                  ['dubbed', 'Dubbed (comma-separated)'],
-                ] as const
-              ).map(([name, label]) => (
-                <FormField
-                  key={name}
-                  control={form.control}
-                  name={name}
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{label}</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              ))}
-            </CardContent>
-          </Card>
+            </>
+          )}
 
-          <div className="flex gap-3">
-            <Button
-              type="submit"
-              className="bg-primary text-primary-foreground"
-              disabled={form.formState.isSubmitting}
-              data-testid="movie-save"
-            >
-              {form.formState.isSubmitting ? 'Saving…' : isEdit ? 'Save changes' : 'Create movie'}
-            </Button>
-            <Button type="button" variant="outline" asChild>
-              <Link to="/admin/movies">Cancel</Link>
-            </Button>
-          </div>
+          <FormActions form={form} isEdit={isEdit} />
         </form>
       </Form>
     </div>

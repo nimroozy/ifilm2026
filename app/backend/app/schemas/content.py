@@ -162,11 +162,15 @@ class MovieCreate(CatalogFieldsMixin):
     release_date: date | None = None
     duration_minutes: int | None = Field(default=None, ge=0, le=10000)
     director: str = ""
+    producer: str = ""
+    writer: str = ""
+    studio: str = ""
     cast: list[str] = Field(default_factory=list)
     audio: list[str] = Field(default_factory=list)
     subtitles: list[str] = Field(default_factory=list)
     qualities: list[str] = Field(default_factory=list)
     dubbed: list[str] = Field(default_factory=list)
+    tmdb_id: int | None = None
 
 
 class MovieUpdate(BaseModel):
@@ -190,12 +194,16 @@ class MovieUpdate(BaseModel):
     is_trending: bool | None = None
     genre_ids: list[int] | None = None
     director: str | None = None
+    producer: str | None = None
+    writer: str | None = None
+    studio: str | None = None
     cast: list[str] | None = None
     audio: list[str] | None = None
     subtitles: list[str] | None = None
     qualities: list[str] | None = None
     dubbed: list[str] | None = None
     hls_path: str | None = None
+    tmdb_id: int | None = None
 
     @field_validator(
         "title",
@@ -211,6 +219,9 @@ class MovieUpdate(BaseModel):
         "backdrop_url",
         "trailer_url",
         "director",
+        "producer",
+        "writer",
+        "studio",
         mode="before",
     )
     @classmethod
@@ -309,6 +320,12 @@ class MovieOut(ORMModel):
     views: int = 0
     type: str = "movie"
     hls_path: str | None = None
+    playable: bool = False
+    has_playable_package: bool = False
+    has_external_media: bool = False
+    producer: str = ""
+    writer: str = ""
+    studio: str = ""
 
     # Compatibility aliases for existing frontend mappers
     year: int | None = None
@@ -564,6 +581,9 @@ class EpisodeOut(ORMModel):
     created_at: datetime | None = None
     updated_at: datetime | None = None
     hls_path: str | None = None
+    playable: bool = False
+    has_playable_package: bool = False
+    has_external_media: bool = False
 
     # Compatibility
     season: int | None = None

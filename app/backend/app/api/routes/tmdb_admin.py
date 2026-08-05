@@ -132,7 +132,7 @@ def import_tmdb_draft(payload: ImportRequest, db: DbSession, _: TMDBAdmin):
             movie = db.get(Movie, result.entity_id)
             if movie is None:
                 raise HTTPException(status_code=404, detail="Movie not found after import")
-            item = movie_out(movie)
+            item = movie_out(movie, db)
         else:
             result = import_series(db, settings, payload.tmdb_id, client=client, force=payload.force)
             db.commit()

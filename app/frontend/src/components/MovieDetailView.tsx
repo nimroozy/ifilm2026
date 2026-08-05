@@ -165,10 +165,11 @@ export function MovieDetailView({
                       variant="play"
                       className="gap-2"
                       onClick={() => navigate(`/player/movie/${movie.id}`)}
-                      aria-label={`Watch full movie ${movie.title}`}
+                      aria-label={`Play ${movie.title}`}
+                      data-testid="movie-play-button"
                     >
                       <Play className="h-5 w-5 fill-current" />
-                      Watch Full Movie
+                      Play
                     </Button>
                   ) : null}
                   {demo ? (
@@ -178,22 +179,14 @@ export function MovieDetailView({
                       className="gap-2"
                       onClick={() => navigate(`/player/movie/${movie.id}`)}
                       aria-label={`Play demo clip for ${movie.title}`}
+                      data-testid="movie-demo-button"
                     >
                       <Play className="h-5 w-5 fill-current" />
                       Play Demo Clip
                     </Button>
                   ) : null}
-                  {!playable ? (
-                    <Badge
-                      variant="secondary"
-                      className="px-3 py-2 text-sm"
-                      data-testid="full-movie-unavailable"
-                    >
-                      {fullMovieUnavailableLabel()}
-                    </Badge>
-                  ) : null}
                   {trailer ? (
-                    <Button size="lg" variant="glass" asChild className="gap-2">
+                    <Button size="lg" variant="glass" asChild className="gap-2" data-testid="movie-trailer-button">
                       <a
                         href={trailer}
                         target="_blank"
@@ -204,6 +197,15 @@ export function MovieDetailView({
                         Watch Trailer
                       </a>
                     </Button>
+                  ) : null}
+                  {!playable && !demo ? (
+                    <Badge
+                      variant="secondary"
+                      className="px-3 py-2 text-sm"
+                      data-testid="full-movie-unavailable"
+                    >
+                      {fullMovieUnavailableLabel()}
+                    </Badge>
                   ) : null}
                   <Button
                     size="lg"

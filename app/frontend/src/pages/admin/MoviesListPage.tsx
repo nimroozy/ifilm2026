@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Edit, Trash2, Eye } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Eye, Database } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -90,12 +90,20 @@ export default function MoviesListPage() {
         title="Movies"
         description={`${total} total`}
         actions={
-          <Button asChild className="gap-2">
-            <Link to="/admin/movies/new">
-              <Plus className="h-4 w-4" />
-              Add Movie
-            </Link>
-          </Button>
+          <>
+            <Button asChild className="gap-2">
+              <Link to="/admin/movies/new">
+                <Plus className="h-4 w-4" />
+                + New Movie
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="gap-2">
+              <Link to="/admin/tools/tmdb">
+                <Database className="h-4 w-4" />
+                Import TMDB
+              </Link>
+            </Button>
+          </>
         }
       />
 
@@ -181,12 +189,20 @@ export default function MoviesListPage() {
         <EmptyState
           message="No movies found."
           action={
-            <Button asChild size="sm">
-              <Link to="/admin/movies/new">
-                <Plus className="h-4 w-4" />
-                Add Movie
-              </Link>
-            </Button>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button asChild size="sm" className="gap-2">
+                <Link to="/admin/movies/new">
+                  <Plus className="h-4 w-4" />
+                  + New Movie
+                </Link>
+              </Button>
+              <Button asChild size="sm" variant="outline" className="gap-2">
+                <Link to="/admin/tools/tmdb">
+                  <Database className="h-4 w-4" />
+                  Import TMDB
+                </Link>
+              </Button>
+            </div>
           }
         />
       ) : (
@@ -199,6 +215,9 @@ export default function MoviesListPage() {
                   <TableHead>Title</TableHead>
                   <TableHead>Year</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Playable</TableHead>
+                  <TableHead>Source</TableHead>
+                  <TableHead>Updated</TableHead>
                   <TableHead>Flags</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
@@ -214,6 +233,23 @@ export default function MoviesListPage() {
                     <TableCell>
                       <StatusBadge status={m.status} />
                     </TableCell>
+                    <TableCell>
+                      <StatusBadge status={m.playable ? 'playable' : 'unavailable'} />
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {m.has_external_media
+                        ? 'External'
+                        : m.has_playable_package
+                          ? 'Package'
+                          : m.tmdb_id
+                            ? 'TMDB meta'
+                            : '—'}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                      {m.updated_at
+                        ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(m.updated_at))
+                        : '—'}
+                    </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {[m.is_featured || m.featured ? 'Featured' : null, m.is_trending ? 'Trending' : null]
                         .filter(Boolean)
@@ -227,7 +263,7 @@ export default function MoviesListPage() {
                           </Link>
                         </Button>
                         <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
-                          <Link to={`/admin/movies/${m.id}/edit`} aria-label="Manage movie publishing">
+                          <Link to={`/admin/movies/${m.id}/edit?tab=publishing`} aria-label="Manage movie publishing">
                             <Eye className="h-3.5 w-3.5" />
                           </Link>
                         </Button>

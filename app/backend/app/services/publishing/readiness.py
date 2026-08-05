@@ -101,14 +101,20 @@ def _package_integrity(db: Session, package: MediaPackage) -> list[ReadinessIssu
 def evaluate_playable_package(
     db: Session, *, movie_id: int | None = None, episode_id: int | None = None
 ) -> tuple[bool, str | None, str | None, list[ReadinessIssue]]:
-    """Return playable flag, package id, package status, and issues for linked content."""
+    """Return playable flag, package id, package status, and issues for linked content.
+
+    Playable when an uploaded active HLS package exists OR a validated *primary*
+    external URL exists (Option A: unprotected direct — admin/demo policy).
+    """
     assets = _find_linked_assets(db, movie_id=movie_id, episode_id=episode_id)
     if not assets:
         return False, None, None, [ReadinessIssue("no_media_asset", "No linked media asset")]
 
-    # Prefer an asset that already has an active completed package.
+    # Prefer packaged HLS.
     for asset in assets:
         if asset.upload_status in {"failed", "cancelled", "deleted"}:
+            continue
+        if getattr(asset, "source_type", "uploaded") == "external":
             continue
         if getattr(asset, "deleted_at", None) is not None:
             continue
@@ -120,8 +126,37 @@ def evaluate_playable_package(
             return False, package.id, package.status, integrity
         return True, package.id, package.status, []
 
+    # Primary validated external (exactly one active primary per owner).
+    for asset in assets:
+        if asset.upload_status in {"failed", "cancelled", "deleted"}:
+            continue
+        if getattr(asset, "source_type", "uploaded") != "external":
+            continue
+        if not getattr(asset, "external_is_primary", False):
+            continue
+        if asset.external_url and asset.external_validated_at:
+            return True, None, "external", []
+        return (
+            False,
+            None,
+            "external",
+            [ReadinessIssue("external_not_validated", "External media URL is not validated")],
+        )
+
     # Surface the most useful failure from the newest asset.
     asset = assets[0]
+    if getattr(asset, "source_type", "uploaded") == "external":
+        return (
+            False,
+            None,
+            "external",
+            [
+                ReadinessIssue(
+                    "external_not_primary",
+                    "No primary validated external media source",
+                )
+            ],
+        )
     if asset.upload_status in {"failed", "cancelled", "deleted"}:
         return (
             False,
@@ -176,6 +211,14 @@ def assess_movie_readiness(db: Session, movie: Movie, *, for_publish: bool = Tru
         for issue in issues:
             result.issues.append(issue)
             result.ready = False
+        # Option A: unprotected external alone cannot publish production (non-demo) titles.
+        if package_status == "external" and playable and not getattr(movie, "demo_owned", False):
+            result.add(
+                "external_unprotected_production",
+                "External media is admin/demo-only (unprotected direct URL). "
+                "Upload and activate a packaged HLS source before publishing production content.",
+                field="media",
+            )
     elif not playable:
         # Still report playability for admin UI without blocking non-publish transitions.
         result.playable = False
@@ -209,6 +252,16 @@ def assess_episode_readiness(db: Session, episode: Episode, *, for_publish: bool
         for issue in issues:
             result.issues.append(issue)
             result.ready = False
+        demo = bool(getattr(episode, "demo_owned", False))
+        if not demo and series is not None:
+            demo = bool(getattr(series, "demo_owned", False))
+        if package_status == "external" and playable and not demo:
+            result.add(
+                "external_unprotected_production",
+                "External media is admin/demo-only (unprotected direct URL). "
+                "Upload and activate a packaged HLS source before publishing production content.",
+                field="media",
+            )
     return result
 
 
