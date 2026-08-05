@@ -143,7 +143,7 @@ export default function EpisodesPage() {
                   <FormItem>
                     <FormLabel>Number</FormLabel>
                     <FormControl>
-                      <Input type="number" className="w-24" {...field} data-testid="episode-number" />
+                      <Input type="number" className="w-24" id="episode-number" {...field} data-testid="episode-number" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -185,7 +185,21 @@ export default function EpisodesPage() {
       </Card>
 
       {episodes.length === 0 ? (
-        <EmptyState message="No episodes yet." />
+        <EmptyState
+          message="No episodes yet."
+          action={
+            <Button
+              type="button"
+              size="sm"
+              className="gap-2"
+              data-testid="add-first-episode"
+              onClick={() => document.getElementById('episode-number')?.focus()}
+            >
+              <Plus className="h-4 w-4" />
+              Add First Episode
+            </Button>
+          }
+        />
       ) : (
         <Card className="bg-card border-border">
           <CardContent className="p-0">

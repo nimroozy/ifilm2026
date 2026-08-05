@@ -40,7 +40,10 @@ def postgres_components():
 
 def _run_alembic_without_database_url(components: dict[str, str], *args: str) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
+    # Force POSTGRES_* resolution: clear URL overrides from the parent process / .env.
     env.pop("DATABASE_URL", None)
+    env.pop("TEST_DATABASE_URL", None)
+    env["DATABASE_URL"] = ""
     env.update(components)
     env["PYTHONPATH"] = str(ROOT)
     # Ensure settings don't pull a stale DATABASE_URL from .env

@@ -595,7 +595,7 @@ export interface MediaPackageDto {
 export interface PlaybackSessionDto {
   id: string;
   media_asset_id: string;
-  media_package_id: string;
+  media_package_id: string | null;
   principal_type: string;
   principal_id: string;
   status: string;
@@ -613,10 +613,12 @@ export interface PlaybackSessionDto {
 export interface PlaybackSessionCreatedDto {
   id: string;
   media_asset_id: string;
-  media_package_id: string;
+  media_package_id: string | null;
   expires_at: string;
   playback_token: string;
   master_playlist_url: string;
+  source_type?: 'package' | 'external' | string;
+  playback_url?: string | null;
 }
 
 export type TmdbMediaType = 'movie' | 'series';

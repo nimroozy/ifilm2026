@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useBlocker, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useForm, type UseFormReturn } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -11,10 +11,18 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { adminApi, ApiError, type CatalogStatus, type GenreDto } from '@/lib/api';
+import { adminApi, ApiError, type CatalogStatus, type GenreDto, type PublicationHistoryEventDto } from '@/lib/api';
 import { csvToList, ErrorState, listToCsv, LoadingBlock, POSTER_FALLBACK } from './adminShared';
 import PublishingPanel from './PublishingPanel';
 import MediaLinkingCard from './MediaLinkingCard';
+
+const MOVIE_TABS = ['general', 'metadata', 'artwork', 'media', 'publishing', 'seo', 'history'] as const;
+type MovieTab = (typeof MOVIE_TABS)[number];
+
+function tabFromSearch(raw: string | null): MovieTab {
+  if (raw && (MOVIE_TABS as readonly string[]).includes(raw)) return raw as MovieTab;
+  return 'general';
+}
 
 export const movieFormSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -62,6 +70,36 @@ export const movieFormSchema = z.object({
 });
 
 export type MovieFormValues = z.infer<typeof movieFormSchema>;
+
+const FIELD_TAB: Partial<Record<keyof MovieFormValues, MovieTab>> = {
+  title: 'general',
+  original_title: 'general',
+  slug: 'general',
+  description: 'general',
+  release_year: 'general',
+  duration_minutes: 'general',
+  language: 'general',
+  country: 'general',
+  age_rating: 'general',
+  director: 'metadata',
+  producer: 'metadata',
+  writer: 'metadata',
+  studio: 'metadata',
+  cast: 'metadata',
+  genre_ids: 'metadata',
+  imdb_rating: 'metadata',
+  imdb_id: 'metadata',
+  tmdb_id: 'metadata',
+  audio: 'metadata',
+  subtitles: 'metadata',
+  qualities: 'metadata',
+  dubbed: 'metadata',
+  is_featured: 'metadata',
+  is_trending: 'metadata',
+  poster_url: 'artwork',
+  backdrop_url: 'artwork',
+  trailer_url: 'artwork',
+};
 
 function emptyValues(): MovieFormValues {
   return {
@@ -526,12 +564,16 @@ export default function MovieFormPage() {
   const { id } = useParams();
   const isEdit = Boolean(id);
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = tabFromSearch(searchParams.get('tab'));
   const [genres, setGenres] = useState<GenreDto[]>([]);
   const [loading, setLoading] = useState(isEdit);
   const [error, setError] = useState<string | null>(null);
   const [previewBroken, setPreviewBroken] = useState(false);
   const [currentStatus, setCurrentStatus] = useState<CatalogStatus | string>('draft');
   const [mediaRefreshToken, setMediaRefreshToken] = useState(0);
+  const [history, setHistory] = useState<PublicationHistoryEventDto[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const form = useForm<MovieFormValues>({
     resolver: zodResolver(movieFormSchema),
@@ -540,6 +582,39 @@ export default function MovieFormPage() {
 
   const posterUrl = form.watch('poster_url');
   const slugValue = form.watch('slug');
+  const isDirty = form.formState.isDirty;
+
+  const blocker = useBlocker(isDirty);
+
+  useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!isDirty) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [isDirty]);
+
+  useEffect(() => {
+    if (blocker.state !== 'blocked') return;
+    const leave = window.confirm('You have unsaved changes. Leave this page?');
+    if (leave) blocker.proceed();
+    else blocker.reset();
+  }, [blocker]);
+
+  function setActiveTab(tab: string) {
+    const next = tabFromSearch(tab);
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        if (next === 'general') params.delete('tab');
+        else params.set('tab', next);
+        return params;
+      },
+      { replace: true }
+    );
+  }
 
   useEffect(() => {
     setPreviewBroken(false);
@@ -606,6 +681,26 @@ export default function MovieFormPage() {
     };
   }, [id, isEdit, form]);
 
+  useEffect(() => {
+    if (!isEdit || !id || activeTab !== 'history') return;
+    let cancelled = false;
+    setHistoryLoading(true);
+    adminApi
+      .getPublicationHistory('movie', Number(id))
+      .then((events) => {
+        if (!cancelled) setHistory(events);
+      })
+      .catch(() => {
+        if (!cancelled) setHistory([]);
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, id, isEdit, mediaRefreshToken, currentStatus]);
+
   const previewSrc = useMemo(() => {
     if (!posterUrl || previewBroken) return POSTER_FALLBACK;
     return posterUrl;
@@ -653,6 +748,7 @@ export default function MovieFormPage() {
     try {
       if (isEdit && id) {
         await adminApi.updateMovie(Number(id), payload);
+        form.reset(values);
         toast.success('Movie updated');
       } else {
         const created = await adminApi.createMovie(payload);
@@ -660,9 +756,19 @@ export default function MovieFormPage() {
         navigate(`/admin/movies/${created.id}/edit`, { replace: true });
         return;
       }
-      navigate('/admin/movies');
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Save failed');
+      const message = err instanceof ApiError ? err.message : 'Save failed';
+      toast.error(message);
+      if (message.toLowerCase().includes('slug')) {
+        setActiveTab('general');
+      }
+    }
+  }
+
+  function onInvalid(errors: Record<string, unknown>) {
+    const first = Object.keys(errors)[0] as keyof MovieFormValues | undefined;
+    if (first && FIELD_TAB[first]) {
+      setActiveTab(FIELD_TAB[first]!);
     }
   }
 
@@ -670,7 +776,7 @@ export default function MovieFormPage() {
   if (error) return <ErrorState message={error} onRetry={() => window.location.reload()} />;
 
   return (
-    <div className="space-y-4 max-w-4xl">
+    <div className="space-y-4 max-w-4xl" dir="ltr" lang="en" data-testid="movie-form-page">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold text-foreground">{isEdit ? 'Edit Movie' : 'New Movie'}</h2>
@@ -682,10 +788,10 @@ export default function MovieFormPage() {
       </div>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6" noValidate>
+        <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-6" noValidate>
           {isEdit && id ? (
-            <Tabs defaultValue="general" className="space-y-4">
-              <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+              <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 overflow-x-auto">
                 <TabsTrigger value="general">General</TabsTrigger>
                 <TabsTrigger value="metadata">Metadata</TabsTrigger>
                 <TabsTrigger value="artwork">Artwork</TabsTrigger>
@@ -727,6 +833,7 @@ export default function MovieFormPage() {
                   currentStatus={currentStatus}
                   onChanged={setCurrentStatus}
                   refreshToken={mediaRefreshToken}
+                  onOpenMediaTab={() => setActiveTab('media')}
                 />
               </TabsContent>
 
@@ -744,6 +851,9 @@ export default function MovieFormPage() {
                       Edit the slug on the General tab. Keep it stable after publish so catalog and share links stay
                       consistent.
                     </p>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setActiveTab('general')}>
+                      Edit slug on General
+                    </Button>
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -753,8 +863,34 @@ export default function MovieFormPage() {
                   <CardHeader>
                     <CardTitle className="text-base">History</CardTitle>
                   </CardHeader>
-                  <CardContent className="text-sm text-muted-foreground">
-                    Publication history is available under Publishing.
+                  <CardContent className="space-y-3 text-sm">
+                    {historyLoading ? (
+                      <LoadingBlock rows={3} />
+                    ) : history.length === 0 ? (
+                      <p className="text-muted-foreground">No publication history yet.</p>
+                    ) : (
+                      <ul className="space-y-2" data-testid="movie-history-list">
+                        {history.map((event) => (
+                          <li key={event.id} className="rounded-md border border-border p-2">
+                            <div className="font-medium text-foreground">{event.event_type}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {event.created_at
+                                ? new Intl.DateTimeFormat(undefined, {
+                                    dateStyle: 'medium',
+                                    timeStyle: 'short',
+                                  }).format(new Date(event.created_at))
+                                : '—'}
+                              {event.from_status || event.to_status
+                                ? ` · ${event.from_status || '—'} → ${event.to_status || '—'}`
+                                : null}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <Button type="button" variant="outline" size="sm" onClick={() => setActiveTab('publishing')}>
+                      Open Publishing
+                    </Button>
                   </CardContent>
                 </Card>
               </TabsContent>

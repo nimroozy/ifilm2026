@@ -959,6 +959,113 @@ def test_subscriber_entitlements_migration_roundtrip(postgres_url):
     assert version == "010_subscriber_entitlements"
 
 
+def test_external_media_playability_migration_roundtrip(postgres_url):
+    """014 → 015 → 014 → 015 round-trip for external media + credit fields."""
+    _reset_schema(postgres_url)
+    assert _run_alembic(postgres_url, "upgrade", "014_tmdb_demo_metadata").returncode == 0
+    assert _run_alembic(postgres_url, "upgrade", "015_external_media_playability").returncode == 0
+
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        media_cols = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='media_assets'"
+                )
+            )
+        }
+        movie_cols = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='movies'"
+                )
+            )
+        }
+        session_nullable = conn.execute(
+            text(
+                "SELECT is_nullable FROM information_schema.columns "
+                "WHERE table_name='media_playback_sessions' AND column_name='media_package_id'"
+            )
+        ).scalar_one()
+        indexes = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT indexname FROM pg_indexes WHERE schemaname='public'")
+            )
+        }
+    engine.dispose()
+    assert version == "015_external_media_playability"
+    assert {
+        "source_type",
+        "external_url",
+        "external_kind",
+        "external_content_type",
+        "external_content_length",
+        "external_accept_ranges",
+        "external_validated_at",
+    }.issubset(media_cols)
+    assert {"producer", "writer", "studio"}.issubset(movie_cols)
+    assert session_nullable == "YES"
+    assert "ix_media_assets_source_type" in indexes
+
+    assert _run_alembic(postgres_url, "downgrade", "014_tmdb_demo_metadata").returncode == 0
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        media_cols = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='media_assets'"
+                )
+            )
+        }
+        movie_cols = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='movies'"
+                )
+            )
+        }
+        session_nullable = conn.execute(
+            text(
+                "SELECT is_nullable FROM information_schema.columns "
+                "WHERE table_name='media_playback_sessions' AND column_name='media_package_id'"
+            )
+        ).scalar_one()
+    engine.dispose()
+    assert version == "014_tmdb_demo_metadata"
+    assert "source_type" not in media_cols
+    assert "external_url" not in media_cols
+    assert "producer" not in movie_cols
+    assert session_nullable == "NO"
+
+    assert _run_alembic(postgres_url, "upgrade", "015_external_media_playability").returncode == 0
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        media_cols = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='media_assets'"
+                )
+            )
+        }
+    engine.dispose()
+    assert version == "015_external_media_playability"
+    assert "source_type" in media_cols
+
+
 def test_alembic_heads_single(postgres_url):
     result = _run_alembic(postgres_url, "heads")
     assert result.returncode == 0, result.stdout + result.stderr

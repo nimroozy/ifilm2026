@@ -20,7 +20,9 @@ export function hasDemoClip(item: unknown): boolean {
 }
 
 /**
- * Full-title playability. Prefer package/external flags from the API.
+ * Full-title playability. Backend-authoritative flags only
+ * (`playable` / `hasPlayablePackage` / `hasExternalMedia`).
+ * Do not infer from legacy `hlsPath`.
  * Demo-owned catalog items intentionally do not offer commercial full playback.
  */
 export function canPlayFullMovie(item: unknown): boolean {
@@ -28,8 +30,6 @@ export function canPlayFullMovie(item: unknown): boolean {
   if (field<boolean>(item, 'playable') === true) return true;
   if (field<boolean>(item, 'hasPlayablePackage') === true) return true;
   if (field<boolean>(item, 'hasExternalMedia') === true) return true;
-  const hlsPath = field<string | null>(item, 'hlsPath');
-  if (typeof hlsPath === 'string' && hlsPath.trim().length > 0) return true;
   return false;
 }
 

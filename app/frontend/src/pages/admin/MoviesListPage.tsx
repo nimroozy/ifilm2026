@@ -215,6 +215,9 @@ export default function MoviesListPage() {
                   <TableHead>Title</TableHead>
                   <TableHead>Year</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Playable</TableHead>
+                  <TableHead>Source</TableHead>
+                  <TableHead>Updated</TableHead>
                   <TableHead>Flags</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
@@ -230,6 +233,23 @@ export default function MoviesListPage() {
                     <TableCell>
                       <StatusBadge status={m.status} />
                     </TableCell>
+                    <TableCell>
+                      <StatusBadge status={m.playable ? 'playable' : 'unavailable'} />
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {m.has_external_media
+                        ? 'External'
+                        : m.has_playable_package
+                          ? 'Package'
+                          : m.tmdb_id
+                            ? 'TMDB meta'
+                            : '—'}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                      {m.updated_at
+                        ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(m.updated_at))
+                        : '—'}
+                    </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {[m.is_featured || m.featured ? 'Featured' : null, m.is_trending ? 'Trending' : null]
                         .filter(Boolean)
@@ -243,7 +263,7 @@ export default function MoviesListPage() {
                           </Link>
                         </Button>
                         <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
-                          <Link to={`/admin/movies/${m.id}/edit`} aria-label="Manage movie publishing">
+                          <Link to={`/admin/movies/${m.id}/edit?tab=publishing`} aria-label="Manage movie publishing">
                             <Eye className="h-3.5 w-3.5" />
                           </Link>
                         </Button>

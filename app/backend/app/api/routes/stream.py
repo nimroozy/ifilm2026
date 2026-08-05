@@ -137,8 +137,10 @@ def streaming_status():
         enabled=bool(settings.enable_local_streaming),
         supported_principals=["admin", "subscriber"],
         subscriber_entitlement=(
-            "active account + active package entitlement + published catalog + active HLS; "
-            "admins retain operational bypass"
+            "active account + entitlement + published catalog + "
+            "(active HLS package OR validated external media); "
+            "admins retain operational bypass. "
+            "External media returns a session-gated CDN URL — segment fetches are not proxied."
         ),
     )
 

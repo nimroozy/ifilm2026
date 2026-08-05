@@ -79,6 +79,27 @@ Subscriber **entitlement** (plans, payment, Radius packages) is **deferred** —
 | GET | `/api/admin/playback/sessions` | `streaming.read` |
 | POST | `/api/admin/playback/sessions/{id}/revoke` | `streaming.manage` |
 
+## External media playback (limitation)
+
+Validated external HTTPS MP4/HLS assets can create a playback session **without** an active
+local package. Session creation still enforces:
+
+- local streaming enabled
+- principal eligibility (admin bypass / subscriber published + entitlement)
+- external URL previously validated and attached
+
+**Contract:** the player uses `playback_url` / `source_type` from `PlaybackSessionCreated`.
+For `source_type=external`, `playback_url` is the validated CDN URL (also mirrored on
+`master_playlist_url` for compatibility).
+
+**Limitation (not parity with packaged HLS):** iFilm does **not** proxy or rewrite external
+segments. After the session is authorized and the URL is returned, subsequent fetches go
+directly to the external host. Session expiry/revocation does not revoke CDN access to that
+URL. Do not claim tokenized `/api/stream/{token}/…` protection for external sources.
+
+Packaged HLS remains the protected path: playlists and segments are rewritten through the
+session token.
+
 ## Legacy removal
 
 - Public `StaticFiles` mount of `MEDIA_ROOT` at `/media` **removed** (404 with explanation)

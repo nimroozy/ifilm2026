@@ -37,6 +37,8 @@ interface PublishingPanelProps {
   onChanged: (status: CatalogStatus) => void;
   /** Increment to force a readiness reload after media link/detach. */
   refreshToken?: number;
+  /** Switch parent movie editor to the Media tab when remediation needs it. */
+  onOpenMediaTab?: () => void;
 }
 
 const actionLabels: Record<WorkflowAction, string> = {
@@ -64,6 +66,7 @@ export default function PublishingPanel({
   currentStatus,
   onChanged,
   refreshToken = 0,
+  onOpenMediaTab,
 }: PublishingPanelProps) {
   const [readiness, setReadiness] = useState<PublicationReadinessDto | null>(null);
   const [history, setHistory] = useState<PublicationHistoryEventDto[]>([]);
@@ -205,7 +208,11 @@ export default function PublishingPanel({
           <div className="rounded-md border border-border p-3">
             <div className="flex items-center gap-2 text-sm font-medium">
               <PackageCheck className="h-4 w-4 text-muted-foreground" />
-              {readiness?.playable ? 'Playable package available' : 'No playable package'}
+              {readiness?.playable
+                ? readiness.package_status === 'external'
+                  ? 'External media playable'
+                  : 'Playable package available'
+                : 'Not playable'}
             </div>
             <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-2 text-xs text-muted-foreground">
               <dt>Package</dt>
@@ -235,7 +242,12 @@ export default function PublishingPanel({
               </ul>
               {(entityType === 'movie' || entityType === 'episode') &&
               readiness.issues.some((i) =>
-                ['no_media_asset', 'no_active_hls_package', 'media_asset_unusable'].includes(i.code)
+                [
+                  'no_media_asset',
+                  'no_active_hls_package',
+                  'media_asset_unusable',
+                  'external_not_validated',
+                ].includes(i.code)
               ) ? (
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button type="button" size="sm" variant="secondary" asChild>
@@ -246,9 +258,29 @@ export default function PublishingPanel({
                       Upload and Link
                     </Link>
                   </Button>
-                  <Button type="button" size="sm" variant="outline" asChild>
-                    <a href="#media-linking-title">Open Media card</a>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    data-testid="readiness-open-media"
+                    onClick={() => {
+                      if (onOpenMediaTab) onOpenMediaTab();
+                      else document.getElementById('media-linking-title')?.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                  >
+                    Open Media tab
                   </Button>
+                  {readiness.issues.some((i) => i.code === 'external_not_validated' || i.code === 'no_media_asset') ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      data-testid="readiness-external-media"
+                      onClick={() => onOpenMediaTab?.()}
+                    >
+                      Validate external media
+                    </Button>
+                  ) : null}
                   <Button type="button" size="sm" variant="outline" asChild>
                     <Link to="/admin/media/processing">View Processing</Link>
                   </Button>

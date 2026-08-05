@@ -130,8 +130,10 @@ def admin_list_movies(
 def create_movie(
     payload: MovieCreate,
     db: DbSession,
-    _: Annotated[AdminUser, Depends(require_permissions("movies.manage"))],
+    admin: Annotated[AdminUser, Depends(require_permissions("movies.manage"))],
 ) -> MovieOut:
+    import logging
+
     data = payload.model_dump(exclude={"genre_ids", "slug"})
     data["status"] = "draft"
     slug = make_slug_for_movie(db, payload.title, payload.slug)
@@ -141,6 +143,16 @@ def create_movie(
     movie.genre_links = genres
     db.add(movie)
     db.commit()
+    logging.getLogger("app.catalog.audit").info(
+        "catalog_audit event=movie_created details=%s",
+        {
+            "movie_id": movie.id,
+            "slug": movie.slug,
+            "status": movie.status,
+            "admin_id": admin.id,
+            "tmdb_id": getattr(movie, "tmdb_id", None),
+        },
+    )
     return movie_out(get_movie(db, movie.id), db)
 
 

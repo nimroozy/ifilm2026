@@ -20,10 +20,14 @@ const STATUS_STYLES: Record<string, string> = {
   uploading: 'bg-sky-500/15 text-sky-400 ring-1 ring-sky-500/25',
   failed: 'bg-destructive/15 text-destructive ring-1 ring-destructive/25',
   cancelled: 'bg-muted text-muted-foreground ring-1 ring-border',
+  playable: 'bg-success/15 text-success ring-1 ring-success/25',
+  unavailable: 'bg-destructive/15 text-destructive ring-1 ring-destructive/25',
 };
 
 const STATUS_LABELS: Record<string, string> = {
   in_review: 'In review',
+  playable: 'Playable',
+  unavailable: 'Unavailable',
 };
 
 export function StatusBadge({ status }: { status: string }) {

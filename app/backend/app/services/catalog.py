@@ -67,9 +67,6 @@ def genre_out(genre: Genre, *, movie_count: int | None = None, series_count: int
 def movie_out(movie: Movie, db: Session | None = None) -> MovieOut:
     genres = [genre_out(g, movie_count=0, series_count=0) for g in (movie.genre_links or [])]
     playable, has_package, has_external = content_playability(db, movie_id=movie.id)
-    # Legacy hls_path also counts as playable evidence for older records.
-    if not playable and movie.hls_path and str(movie.hls_path).strip():
-        playable = True
     return MovieOut(
         id=movie.id,
         title=movie.title,
@@ -221,8 +218,6 @@ def season_out(season: Season, *, public_counts: bool = False) -> SeasonOut:
 
 def episode_out(episode: Episode, db: Session | None = None) -> EpisodeOut:
     playable, has_package, has_external = content_playability(db, episode_id=episode.id)
-    if not playable and episode.hls_path and str(episode.hls_path).strip():
-        playable = True
     return EpisodeOut(
         id=episode.id,
         season_id=episode.season_id,

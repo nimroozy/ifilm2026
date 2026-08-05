@@ -43,7 +43,7 @@ import {
   type MediaAssetDto,
   type MediaPackageDto,
 } from '@/lib/api';
-import { EmptyState, ErrorState, LoadingBlock, StatusBadge } from './adminShared';
+import { EmptyState, ErrorState, LoadingBlock } from './adminShared';
 
 type OwnerType = 'movie' | 'episode';
 
@@ -78,6 +78,47 @@ function formatDate(value?: string | null): string {
 
 function isExternalAsset(asset: MediaAssetDto): boolean {
   return asset.source_type === 'external' || Boolean(asset.external_url);
+}
+
+/** Product playability/status labels for the Media tab (avoid conflicting raw states). */
+export function mediaAssetStatusLabels(
+  asset: MediaAssetDto,
+  packages: MediaPackageDto[]
+): string[] {
+  const labels: string[] = [];
+  const external = isExternalAsset(asset);
+  const active = packages.find((p) => p.is_active && p.status === 'completed') ?? packages.find((p) => p.is_active);
+  const upload = (asset.upload_status || '').toLowerCase();
+  const processing = (asset.processing_status || '').toLowerCase();
+
+  if (external) {
+    if (asset.external_validated_at) {
+      labels.push('External Validated');
+      labels.push('Ready');
+    } else {
+      labels.push('Validation Failed');
+      labels.push('Not Playable');
+    }
+    return labels;
+  }
+
+  if (['failed', 'cancelled', 'deleted'].includes(upload)) {
+    labels.push('Not Playable');
+    return labels;
+  }
+  if (upload === 'completed' && (processing === 'ready' || processing === 'completed' || asset.probed_at)) {
+    labels.push('Ready');
+  } else if (['pending', 'queued', 'running', 'probing', 'encoding', 'processing'].includes(processing) || upload === 'uploading') {
+    labels.push('Processing');
+  }
+
+  if (active && active.status === 'completed') {
+    labels.push('Package Ready');
+  } else if (!labels.includes('Processing')) {
+    labels.push('Not Playable');
+  }
+
+  return labels.length > 0 ? labels : ['Not Playable'];
 }
 
 function truncateUrl(url: string, max = 48): string {
@@ -253,27 +294,29 @@ export default function MediaLinkingCard({
                     <div className="flex flex-wrap gap-1.5">
                       {external ? <Badge variant="secondary">External</Badge> : null}
                       <Badge variant="outline">{asset.category}</Badge>
-                      <StatusBadge status={asset.upload_status} />
-                      {!external ? (
-                        <>
-                          <Badge variant="secondary">probe: {asset.probed_at ? 'done' : asset.processing_status}</Badge>
-                          <Badge variant="secondary">encode: {asset.processing_status}</Badge>
-                        </>
-                      ) : null}
+                      {mediaAssetStatusLabels(asset, packages).map((label) => (
+                        <Badge
+                          key={label}
+                          variant={
+                            label === 'Not Playable' || label === 'Validation Failed'
+                              ? 'destructive'
+                              : label === 'Package Ready' || label === 'External Validated' || label === 'Ready'
+                                ? 'default'
+                                : 'secondary'
+                          }
+                          className={
+                            label === 'Package Ready' || label === 'External Validated' || label === 'Ready'
+                              ? 'bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/20'
+                              : undefined
+                          }
+                          data-testid={`media-status-${label.toLowerCase().replace(/\s+/g, '-')}`}
+                        >
+                          {label}
+                        </Badge>
+                      ))}
                       {external && asset.external_kind ? (
-                        <Badge variant="outline">{asset.external_kind}</Badge>
+                        <Badge variant="outline">{asset.external_kind.toUpperCase()}</Badge>
                       ) : null}
-                      {active ? (
-                        <Badge className="bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/20">
-                          package: {active.status}
-                        </Badge>
-                      ) : external ? (
-                        <Badge className="bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/20">
-                          external playable
-                        </Badge>
-                      ) : (
-                        <Badge variant="destructive">no active package</Badge>
-                      )}
                     </div>
                     {external && asset.external_url ? (
                       <p

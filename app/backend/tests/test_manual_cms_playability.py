@@ -37,6 +37,26 @@ def test_manual_movie_create_draft(client, admin_headers) -> None:
     assert body["status"] == "draft"
     assert body["slug"]
     assert body["playable"] is False
+    assert body["producer"] == "A Producer"
+    assert body["writer"] == "A Writer"
+    assert body["studio"] == "iFilm Studio"
+    assert body.get("tmdb_id") in (None, 0) or body.get("tmdb_id") is None
+
+
+def test_manual_movie_duplicate_slug(client, admin_headers) -> None:
+    first = client.post(
+        "/api/admin/movies",
+        headers=admin_headers,
+        json={"title": "Dup Slug One", "slug": "manual-dup-slug", "genre_ids": []},
+    )
+    assert first.status_code == 201, first.text
+    second = client.post(
+        "/api/admin/movies",
+        headers=admin_headers,
+        json={"title": "Dup Slug Two", "slug": "manual-dup-slug", "genre_ids": []},
+    )
+    assert second.status_code == 409
+    assert "slug" in second.json()["detail"].lower()
 
 
 def test_attach_external_media_sets_playable(client, admin_headers, db_session, monkeypatch) -> None:
@@ -172,3 +192,69 @@ def test_manual_series_season_episode(client, admin_headers) -> None:
     assert body["title"] == "Manual Episode Nine CMS"
     assert body["playable"] is False
     assert body["status"] == "draft"
+
+
+def test_season_and_episode_uniqueness(client, admin_headers) -> None:
+    series = client.post(
+        "/api/admin/series",
+        headers=admin_headers,
+        json={"title": "Unique Hierarchy CMS", "description": "x", "genre_ids": []},
+    )
+    series_id = series.json()["id"]
+    season = client.post(
+        f"/api/admin/series/{series_id}/seasons",
+        headers=admin_headers,
+        json={"season_number": 1, "title": "S1"},
+    )
+    assert season.status_code == 201
+    season_id = season.json()["id"]
+    dup_season = client.post(
+        f"/api/admin/series/{series_id}/seasons",
+        headers=admin_headers,
+        json={"season_number": 1, "title": "S1 again"},
+    )
+    assert dup_season.status_code == 409
+
+    ep = client.post(
+        f"/api/admin/seasons/{season_id}/episodes",
+        headers=admin_headers,
+        json={"episode_number": 1, "title": "E1", "description": "d"},
+    )
+    assert ep.status_code == 201
+    assert ep.json()["series_id"] == series_id
+    assert ep.json().get("movie_id") in (None, 0) or "movie_id" not in ep.json()
+    dup_ep = client.post(
+        f"/api/admin/seasons/{season_id}/episodes",
+        headers=admin_headers,
+        json={"episode_number": 1, "title": "E1 again", "description": "d"},
+    )
+    assert dup_ep.status_code == 409
+
+
+def test_external_validation_failure_does_not_attach(client, admin_headers, monkeypatch) -> None:
+    created = client.post(
+        "/api/admin/movies",
+        headers=admin_headers,
+        json={"title": "Fail Ext", "description": "x", "genre_ids": []},
+    )
+    movie_id = created.json()["id"]
+
+    def _boom(url: str):
+        from app.services.media_external import ExternalMediaError
+
+        raise ExternalMediaError("unreachable", "External media URL is unreachable")
+
+    monkeypatch.setattr("app.services.media_external_attach.validate_external_media_url", _boom)
+    attach = client.post(
+        "/api/admin/media/external",
+        headers=admin_headers,
+        json={
+            "url": "https://cdn.example.com/missing.mp4",
+            "owner_type": "movie",
+            "owner_id": movie_id,
+        },
+    )
+    assert attach.status_code == 400
+    detail = client.get(f"/api/admin/movies/{movie_id}", headers=admin_headers)
+    assert detail.json()["playable"] is False
+
