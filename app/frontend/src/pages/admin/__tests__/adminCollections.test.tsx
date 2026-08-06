@@ -3,7 +3,8 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { LangProvider } from '@/components/CustomerLayout';
 import CollectionsListPage from '../CollectionsListPage';
-import CollectionFormPage, { collectionFormSchema } from '../CollectionFormPage';
+import CollectionFormPage from '../CollectionFormPage';
+import { collectionFormSchema } from '../collectionsShared';
 import { ApiError } from '@/lib/api';
 
 const listCollections = vi.fn();

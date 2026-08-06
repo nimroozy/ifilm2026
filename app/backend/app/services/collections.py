@@ -335,7 +335,7 @@ def publish_collection(
     _check_optimistic(collection, expected_updated_at)
     if collection.status == "archived":
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Archived collections cannot be published; restore to draft first",
         )
     now = utcnow()
@@ -427,7 +427,7 @@ def add_item(
         movie = db.get(Movie, payload.movie_id)
         if movie is None or movie.deleted_at is not None:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Movie not found"
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Movie not found"
             )
         existing = (
             db.query(CollectionItem)
@@ -445,7 +445,7 @@ def add_item(
         series = db.get(Series, payload.series_id)
         if series is None or series.deleted_at is not None:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Series not found"
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Series not found"
             )
         existing = (
             db.query(CollectionItem)
@@ -558,12 +558,12 @@ def reorder_items(
     by_id = {item.id: item for item in items}
     if set(payload.item_ids) != set(by_id.keys()):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="item_ids must include every collection item exactly once",
         )
     if len(payload.item_ids) != len(set(payload.item_ids)):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="item_ids must not contain duplicates",
         )
 
@@ -604,7 +604,7 @@ def list_admin_collections(
     if collection_type:
         if collection_type not in COLLECTION_TYPES:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=f"collection_type must be one of {COLLECTION_TYPES}",
             )
         query = query.filter(Collection.collection_type == collection_type)
@@ -642,7 +642,7 @@ def list_public_collections(
     if collection_type:
         if collection_type not in COLLECTION_TYPES:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=f"collection_type must be one of {COLLECTION_TYPES}",
             )
         query = query.filter(Collection.collection_type == collection_type)

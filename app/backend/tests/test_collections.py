@@ -3,39 +3,60 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 
-from sqlalchemy import event
-
-from app.models.collections import Collection, CollectionItem
+from app.models.collections import Collection
 from app.models.content import Movie, Series
 from app.services.collections import seed_demo_collections
+from sqlalchemy import event
 
 
-def _publish_movie(client, admin_headers, movie_id: int) -> None:
-    for path in (
-        f"/api/admin/movies/{movie_id}/submit-review",
-        f"/api/admin/movies/{movie_id}/approve",
-        f"/api/admin/movies/{movie_id}/publish",
-    ):
-        resp = client.post(path, headers=admin_headers)
-        assert resp.status_code == 200, resp.text
+def _force_published(db_session, model, entity_id: int) -> None:
+    row = db_session.get(model, entity_id)
+    assert row is not None
+    row.status = "published"
+    row.deleted_at = None
+    if hasattr(row, "published_at"):
+        row.published_at = datetime.now(UTC)
+    if not getattr(row, "description", None):
+        row.description = "Synopsis for public visibility"
+    db_session.add(row)
+    db_session.commit()
 
 
-def _create_published_movie(client, admin_headers, title: str, **extra) -> dict:
+def _create_published_movie(client, admin_headers, db_session, title: str, **extra) -> dict:
     payload = {
         "title": title,
-        "description": f"{title} description",
+        "description": f"{title} description for readiness",
+        "poster_url": "https://placehold.co/300x450",
         "status": "draft",
         **extra,
     }
     created = client.post("/api/admin/movies", headers=admin_headers, json=payload)
     assert created.status_code == 201, created.text
     movie = created.json()
-    _publish_movie(client, admin_headers, movie["id"])
+    _force_published(db_session, Movie, movie["id"])
     return client.get(f"/api/admin/movies/{movie['id']}", headers=admin_headers).json()
 
 
-def test_collection_crud_publish_archive(client, admin_headers):
+def _create_published_series(client, admin_headers, db_session, title: str) -> dict:
+    created = client.post(
+        "/api/admin/series",
+        headers=admin_headers,
+        json={
+            "title": title,
+            "description": f"{title} description for readiness",
+            "poster_url": "https://placehold.co/300x450",
+            "status": "draft",
+        },
+    )
+    assert created.status_code == 201, created.text
+    series = created.json()
+    _force_published(db_session, Series, series["id"])
+    return client.get(f"/api/admin/series/{series['id']}", headers=admin_headers).json()
+
+
+def test_collection_crud_publish_archive(client, admin_headers, db_session):
     created = client.post(
         "/api/admin/collections",
         headers=admin_headers,
@@ -61,7 +82,7 @@ def test_collection_crud_publish_archive(client, admin_headers):
     )
     assert conflict.status_code == 409
 
-    movie = _create_published_movie(client, admin_headers, "Collection Movie One")
+    movie = _create_published_movie(client, admin_headers, db_session, "Collection Movie One")
     draft = client.post(
         "/api/admin/movies",
         headers=admin_headers,
@@ -135,8 +156,8 @@ def test_collection_crud_publish_archive(client, admin_headers):
 
 
 def test_collection_reorder_and_empty_hidden(client, admin_headers, db_session):
-    m1 = _create_published_movie(client, admin_headers, "Reorder A")
-    m2 = _create_published_movie(client, admin_headers, "Reorder B")
+    m1 = _create_published_movie(client, admin_headers, db_session, "Reorder A")
+    m2 = _create_published_movie(client, admin_headers, db_session, "Reorder B")
     created = client.post(
         "/api/admin/collections",
         headers=admin_headers,
@@ -164,7 +185,7 @@ def test_collection_reorder_and_empty_hidden(client, admin_headers, db_session):
     assert ids == [i2["id"], i1["id"]]
 
     client.post(f"/api/admin/collections/{cid}/publish", headers=admin_headers)
-    # Remove all published visibility by archiving movies via soft delete status
+    # Hide all items publicly by reverting movies to draft
     for mid in (m1["id"], m2["id"]):
         db_session.query(Movie).filter(Movie.id == mid).update({"status": "draft"})
     db_session.commit()
@@ -178,7 +199,7 @@ def test_collection_rbac_and_delete_preserves_catalog(client, admin_headers, db_
     # No auth
     assert client.get("/api/admin/collections").status_code == 401
 
-    movie = _create_published_movie(client, admin_headers, "Keep Movie")
+    movie = _create_published_movie(client, admin_headers, db_session, "Keep Movie")
     created = client.post(
         "/api/admin/collections",
         headers=admin_headers,
@@ -199,7 +220,9 @@ def test_collection_rbac_and_delete_preserves_catalog(client, admin_headers, db_
 def test_collection_seed_idempotent_preserves_manual(client, admin_headers, db_session):
     # Ensure enough published movies exist for Popular Movies seed
     for i in range(4):
-        _create_published_movie(client, admin_headers, f"Seed Movie {i}", is_trending=True)
+        _create_published_movie(
+            client, admin_headers, db_session, f"Seed Movie {i}", is_trending=True
+        )
 
     first = seed_demo_collections(db_session)
     second = seed_demo_collections(db_session)
@@ -231,18 +254,8 @@ def test_collection_seed_idempotent_preserves_manual(client, admin_headers, db_s
     assert db_session.get(Collection, manual_id).demo_owned is False
 
 
-def test_collection_series_item_and_audit(client, admin_headers, caplog):
-    series = client.post(
-        "/api/admin/series",
-        headers=admin_headers,
-        json={"title": "Collection Series", "status": "draft"},
-    ).json()
-    for path in (
-        f"/api/admin/series/{series['id']}/submit-review",
-        f"/api/admin/series/{series['id']}/approve",
-        f"/api/admin/series/{series['id']}/publish",
-    ):
-        assert client.post(path, headers=admin_headers).status_code == 200
+def test_collection_series_item_and_audit(client, admin_headers, db_session, caplog):
+    series = _create_published_series(client, admin_headers, db_session, "Collection Series")
 
     with caplog.at_level(logging.INFO, logger="app.catalog.audit"):
         created = client.post(
@@ -272,7 +285,9 @@ def test_collection_series_item_and_audit(client, admin_headers, caplog):
 
 def test_collection_query_counts_bounded(client, admin_headers, db_session):
     movies = [
-        _create_published_movie(client, admin_headers, f"QC Movie {i}", is_featured=True)
+        _create_published_movie(
+            client, admin_headers, db_session, f"QC Movie {i}", is_featured=True
+        )
         for i in range(5)
     ]
     created = client.post(

@@ -17,12 +17,13 @@ from app.bootstrap import seed_encoding_profiles
 from app.core.config import Settings
 from app.core.security import hash_password, verify_password
 from app.models.admin import AdminRole, AdminUser
-from app.models.content import Episode, Genre, Movie, Season, Series
 from app.models.collections import Collection
+from app.models.content import Episode, Genre, Movie, Season, Series
 from app.models.media_encoding import MediaRendition
 from app.models.user import Subscriber
 from app.models.watch_progress import UserWatchProgress
 from app.schemas.watch_history import WatchProgressUpdate
+from app.services.collections import seed_demo_collections
 from app.services.demo.artwork import ensure_placeholder_pair
 from app.services.demo.constants import (
     ADMIN_FIXTURES,
@@ -40,7 +41,6 @@ from app.services.demo.media import (
 )
 from app.services.demo.ownership import DemoOwnership, load_ownership, save_ownership, utcnow_iso
 from app.services.demo.settings_store import mark_demo_installed
-from app.services.collections import seed_demo_collections
 from app.services.publishing import workflow
 from app.services.watch_history import upsert_progress
 from app.utils.slug import normalize_slug

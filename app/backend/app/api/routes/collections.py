@@ -21,7 +21,6 @@ from app.schemas.collections import (
 )
 from app.schemas.common import Envelope, Message, paginated
 from app.services import collections as collections_service
-from app.services.catalog import movie_out, series_out
 
 router = APIRouter(tags=["collections"])
 
@@ -310,7 +309,3 @@ def admin_reorder_items(
         db, collection, payload, admin_id=admin.id
     )
     return collections_service.collection_admin_out(collection, db)
-
-
-# Silence unused import lint for movie_out/series_out if picker uses service wrappers.
-_ = (movie_out, series_out)

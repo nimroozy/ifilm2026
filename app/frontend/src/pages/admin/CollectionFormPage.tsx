@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useBlocker, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useForm, type UseFormReturn } from 'react-hook-form';
-import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { ArrowDown, ArrowUp, Plus, X } from 'lucide-react';
@@ -36,7 +35,13 @@ import {
 import { mapCollectionItems } from '@/lib/catalogData';
 import { CollectionItemsGrid } from '@/components/collections/CollectionItemsGrid';
 import { ErrorState, LoadingBlock, POSTER_FALLBACK, PosterThumb, StatusBadge } from './adminShared';
-import { COLLECTION_TYPE_LABELS, COLLECTION_TYPES, collectionStatusActions } from './collectionsShared';
+import {
+  COLLECTION_TYPE_LABELS,
+  COLLECTION_TYPES,
+  collectionFormSchema,
+  collectionStatusActions,
+  type CollectionFormValues,
+} from './collectionsShared';
 
 const COLLECTION_TABS = ['details', 'artwork', 'items', 'publishing', 'preview'] as const;
 type CollectionTab = (typeof COLLECTION_TABS)[number];
@@ -45,30 +50,6 @@ function tabFromSearch(raw: string | null): CollectionTab {
   if (raw && (COLLECTION_TABS as readonly string[]).includes(raw)) return raw as CollectionTab;
   return 'details';
 }
-
-function urlSchema(label: string) {
-  return z
-    .string()
-    .optional()
-    .refine((v) => !v || v.startsWith('http://') || v.startsWith('https://'), {
-      message: `${label} must start with http:// or https://`,
-    });
-}
-
-export const collectionFormSchema = z.object({
-  title: z.string().min(1, 'Title is required'),
-  slug: z.string().optional(),
-  description: z.string().optional(),
-  short_description: z.string().max(240, 'Keep short description under 240 characters').optional(),
-  collection_type: z.enum(COLLECTION_TYPES),
-  visibility: z.enum(['public', 'unlisted']),
-  poster_url: urlSchema('Poster URL'),
-  backdrop_url: urlSchema('Backdrop URL'),
-  sort_order: z.coerce.number().int().optional().or(z.literal('')),
-  is_featured: z.boolean().default(false),
-});
-
-export type CollectionFormValues = z.infer<typeof collectionFormSchema>;
 
 const FIELD_TAB: Partial<Record<keyof CollectionFormValues, CollectionTab>> = {
   title: 'details',

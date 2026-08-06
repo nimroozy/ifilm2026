@@ -1,5 +1,7 @@
 /** Shared constants/helpers for the Collections V1 admin UI (list + form pages). */
 
+import { z } from 'zod';
+
 export const COLLECTION_TYPES = [
   'editorial',
   'franchise',
@@ -25,6 +27,30 @@ export const COLLECTION_TYPE_LABELS: Record<string, string> = {
 export function collectionTypeLabel(value: string): string {
   return COLLECTION_TYPE_LABELS[value] || value;
 }
+
+function urlSchema(label: string) {
+  return z
+    .string()
+    .optional()
+    .refine((v) => !v || v.startsWith('http://') || v.startsWith('https://'), {
+      message: `${label} must start with http:// or https://`,
+    });
+}
+
+export const collectionFormSchema = z.object({
+  title: z.string().min(1, 'Title is required'),
+  slug: z.string().optional(),
+  description: z.string().optional(),
+  short_description: z.string().max(240, 'Keep short description under 240 characters').optional(),
+  collection_type: z.enum(COLLECTION_TYPES),
+  visibility: z.enum(['public', 'unlisted']),
+  poster_url: urlSchema('Poster URL'),
+  backdrop_url: urlSchema('Backdrop URL'),
+  sort_order: z.coerce.number().int().optional().or(z.literal('')),
+  is_featured: z.boolean().default(false),
+});
+
+export type CollectionFormValues = z.infer<typeof collectionFormSchema>;
 
 /**
  * Allowed quick actions given the current status.
