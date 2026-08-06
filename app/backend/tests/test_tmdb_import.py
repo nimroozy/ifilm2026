@@ -501,10 +501,10 @@ def test_curated_real_demo_v3_catalog_shape():
 def test_remove_fake_demo_cli_is_dry_run_by_default(monkeypatch, tmp_path: Path):
     from scripts import real_demo_dry_run, remove_fake_demo
 
-    calls: list[list[str] | None] = []
+    calls: list[tuple[list[str] | None, bool | None]] = []
 
-    def fake_main(argv=None):
-        calls.append(list(argv) if argv is not None else None)
+    def fake_main(argv=None, *, fake_only=None):
+        calls.append((list(argv) if argv is not None else None, fake_only))
         return 0
 
     monkeypatch.setattr(remove_fake_demo, "remove_demo_main", fake_main)
@@ -512,6 +512,9 @@ def test_remove_fake_demo_cli_is_dry_run_by_default(monkeypatch, tmp_path: Path)
     assert remove_fake_demo.main([]) == 0
     assert remove_fake_demo.main(["--confirm"]) == 0
     assert real_demo_dry_run.main(["--confirm"]) == 0
-    assert calls[0] == []
-    assert calls[1] == ["--confirm"]
-    assert calls[2] == []  # confirm stripped for dry-run alias
+    assert calls[0][1] is True
+    assert "--fake-only" in (calls[0][0] or [])
+    assert calls[1][1] is True
+    assert "--confirm" in (calls[1][0] or [])
+    assert calls[2][1] is True
+    assert "--confirm" not in (calls[2][0] or [])
