@@ -12,6 +12,11 @@ import { Badge } from '@/components/ui/badge';
 import { ContentShelf, MediaCard, MetaChip, MetaRow, SectionHeader, typography } from '@/design-system';
 import { useLang } from '@/components/CustomerLayout';
 import type { CatalogMovie } from '@/lib/catalogData';
+import {
+  catalogAvailabilityChips,
+  formatCatalogTracks,
+  hasCatalogTracks,
+} from '@/lib/catalogAvailability';
 import { canPlayFullMovie, fullMovieUnavailableLabel, hasDemoClip, isDemoCatalogItem } from '@/lib/catalogPresentation';
 import { trailerEmbedUrl } from '@/lib/trailers';
 import { cn } from '@/lib/utils';
@@ -68,6 +73,12 @@ export function MovieDetailView({
   const tmdbId = 'tmdbId' in movie ? movie.tmdbId : null;
   const runtimeLabel = movie.duration ? `${movie.duration} ${t.common.min}` : '';
   const imdbLabel = movie.rating ? `IMDb ${Number(movie.rating).toFixed(1)}` : '';
+  const availabilityLabels = {
+    dubbed: t.movie.dubbed,
+    subtitled: t.nav.subtitled,
+    audio: t.movie.audio,
+  };
+  const availabilityChips = catalogAvailabilityChips(movie, availabilityLabels);
 
   const onShare = async () => {
     const ok = await shareTitle(movie.title, window.location.href);
@@ -138,6 +149,18 @@ export function MovieDetailView({
                     tmdbId ? `TMDB ${tmdbId}` : null,
                   ]}
                 />
+
+                {availabilityChips.length ? (
+                  <div
+                    className="flex flex-wrap gap-2"
+                    data-testid="movie-availability-chips"
+                    aria-label="Audio and subtitle availability"
+                  >
+                    {availabilityChips.map((chip) => (
+                      <MetaChip key={chip}>{chip}</MetaChip>
+                    ))}
+                  </div>
+                ) : null}
 
                 <div className="flex flex-wrap gap-2">
                   {movie.genres.map((genre) => (
@@ -240,8 +263,9 @@ export function MovieDetailView({
         {/* Overview + technical */}
         {(movie.description ||
           movie.director ||
-          movie.audio?.length ||
-          movie.subtitles?.length ||
+          hasCatalogTracks(movie.audio) ||
+          hasCatalogTracks(movie.subtitles) ||
+          hasCatalogTracks(movie.dubbed) ||
           movie.qualities?.length ||
           movie.country ||
           movie.language ||
@@ -255,13 +279,17 @@ export function MovieDetailView({
               <p className={cn(typography.body, 'text-foreground/90')}>{movie.description}</p>
             </div>
             ) : <div />}
-            <div className="rounded-2xl border border-white/8 bg-card/60 p-5 shadow-lg backdrop-blur-sm">
+            <div
+              className="rounded-2xl border border-white/8 bg-card/60 p-5 shadow-lg backdrop-blur-sm"
+              data-testid="movie-technical-details"
+            >
               <h2 className={cn(typography.sectionTitle, 'mb-4')}>Technical Details</h2>
               <dl className="space-y-3 text-sm">
                 {[
                   [t.movie.director, movie.director],
-                  [t.movie.audio, movie.audio?.join(', ')],
-                  [t.movie.subtitles, movie.subtitles?.join(', ')],
+                  [t.movie.audio, formatCatalogTracks(movie.audio)],
+                  [t.movie.dubbed, formatCatalogTracks(movie.dubbed)],
+                  [t.movie.subtitles, formatCatalogTracks(movie.subtitles)],
                   [t.movie.quality, movie.qualities?.join(', ')],
                   ['Country', movie.country],
                   ['Language', movie.language],

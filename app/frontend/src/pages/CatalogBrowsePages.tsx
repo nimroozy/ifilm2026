@@ -11,6 +11,7 @@ import {
   type CatalogSeries,
 } from '@/lib/catalogData';
 import { ApiError } from '@/lib/api';
+import { catalogAvailabilityBadge } from '@/lib/catalogAvailability';
 import { canPlayFullMovie, hasDemoClip } from '@/lib/catalogPresentation';
 import { MediaCard } from '@/design-system';
 
@@ -42,12 +43,14 @@ function CatalogGrid({
   moviesLabel,
   seriesLabel,
   emptyLabel,
+  availabilityLabels,
 }: {
   movies: CatalogMovie[];
   series: CatalogSeries[];
   moviesLabel: string;
   seriesLabel: string;
   emptyLabel: string;
+  availabilityLabels: { dubbed: string; subtitled: string; audio: string };
 }) {
   const navigate = useNavigate();
   if (movies.length === 0 && series.length === 0) {
@@ -75,6 +78,7 @@ function CatalogGrid({
                 rating={movie.rating}
                 runtime={movie.duration ? `${movie.duration} min` : undefined}
                 quality={movie.qualities?.[0] || undefined}
+                badge={catalogAvailabilityBadge(movie, availabilityLabels)}
                 showDemo={hasDemoClip(movie)}
                 playable={canPlayFullMovie(movie) || hasDemoClip(movie)}
                 onActivate={() => navigate(`/movie/${movie.id}`)}
@@ -97,6 +101,7 @@ function CatalogGrid({
                 imageUrl={show.poster}
                 year={show.year}
                 rating={show.rating}
+                badge={catalogAvailabilityBadge(show, availabilityLabels)}
                 showDemo={hasDemoClip(show)}
                 playable={hasDemoClip(show)}
                 onActivate={() => navigate(`/series/${show.id}`)}
@@ -293,6 +298,11 @@ export function CatalogShelfPage({ mode }: { mode: ShelfMode }) {
               moviesLabel={t.pages.moviesSection}
               seriesLabel={t.pages.seriesSection}
               emptyLabel={t.pages.emptyCatalog}
+              availabilityLabels={{
+                dubbed: t.nav.dubbed,
+                subtitled: t.nav.subtitled,
+                audio: t.movie.audio,
+              }}
             />
           )}
         </div>

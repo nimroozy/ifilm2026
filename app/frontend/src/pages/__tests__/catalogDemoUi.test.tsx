@@ -91,6 +91,26 @@ describe('demo catalog movie UI', () => {
     );
   });
 
+  it('exposes audio, dubbed, and subtitle availability on movie detail', async () => {
+    fetchMovie.mockResolvedValue(
+      movie({
+        audio: ['Dari'],
+        dubbed: ['Persian', 'Pashto'],
+        subtitles: ['English'],
+      })
+    );
+
+    renderMovieDetails();
+
+    expect(await screen.findByTestId('movie-availability-chips')).toHaveTextContent('Dubbed');
+    expect(screen.getByTestId('movie-availability-chips')).toHaveTextContent('Subtitled');
+    expect(screen.getByTestId('movie-availability-chips')).toHaveTextContent('Audio');
+    const technical = screen.getByTestId('movie-technical-details');
+    expect(technical).toHaveTextContent('Persian, Pashto');
+    expect(technical).toHaveTextContent('English');
+    expect(technical).toHaveTextContent('Dari');
+  });
+
   it('shows Full Movie Unavailable when neither playable nor demo clip exists', async () => {
     fetchMovie.mockResolvedValue(
       movie({
