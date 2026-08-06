@@ -308,6 +308,134 @@ export interface EpisodeDto {
   thumbnail?: string;
 }
 
+export type CollectionType =
+  | 'editorial'
+  | 'franchise'
+  | 'seasonal'
+  | 'genre_feature'
+  | 'regional'
+  | 'language'
+  | 'staff_pick';
+
+export type CollectionStatus = 'draft' | 'published' | 'archived';
+export type CollectionVisibility = 'public' | 'unlisted';
+
+export interface CollectionItemDto {
+  id: number;
+  collection_id: number;
+  movie_id?: number | null;
+  series_id?: number | null;
+  position: number;
+  custom_title?: string | null;
+  custom_description?: string | null;
+  content_type: 'movie' | 'series';
+  movie?: MovieDto | null;
+  series?: SeriesDto | null;
+  created_at?: string | null;
+  publicly_visible?: boolean;
+}
+
+export interface CollectionDto {
+  id: number;
+  title: string;
+  slug: string;
+  description?: string;
+  short_description?: string;
+  collection_type: CollectionType | string;
+  status: CollectionStatus | string;
+  visibility: CollectionVisibility | string;
+  poster_url?: string;
+  backdrop_url?: string;
+  sort_order?: number;
+  is_featured?: boolean;
+  demo_owned?: boolean;
+  demo_seed_version?: string;
+  item_count?: number;
+  visible_item_count?: number;
+  items: CollectionItemDto[];
+  created_by_admin_id?: number | null;
+  updated_by_admin_id?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  published_at?: string | null;
+  archived_at?: string | null;
+}
+
+/** Public-safe collection payload — no admin/audit/demo internals. */
+export interface CollectionPublicDto {
+  id: number;
+  title: string;
+  slug: string;
+  description?: string;
+  short_description?: string;
+  collection_type: CollectionType | string;
+  poster_url?: string;
+  backdrop_url?: string;
+  sort_order?: number;
+  is_featured?: boolean;
+  item_count?: number;
+  items: CollectionItemDto[];
+  published_at?: string | null;
+}
+
+export type CollectionCreatePayload = {
+  title: string;
+  slug?: string | null;
+  description?: string;
+  short_description?: string;
+  collection_type?: CollectionType;
+  visibility?: CollectionVisibility;
+  poster_url?: string;
+  backdrop_url?: string;
+  sort_order?: number;
+  is_featured?: boolean;
+};
+
+export type CollectionUpdatePayload = Partial<CollectionCreatePayload> & {
+  expected_updated_at?: string | null;
+};
+
+export type CollectionItemAddPayload = {
+  movie_id?: number | null;
+  series_id?: number | null;
+  custom_title?: string | null;
+  custom_description?: string | null;
+  position?: number | null;
+};
+
+export interface CollectionPickerResultDto {
+  movies: MovieDto[];
+  series: SeriesDto[];
+  page: number;
+  page_size: number;
+}
+
+export interface CollectionListParams {
+  collection_type?: string;
+  featured?: boolean;
+  page?: number;
+  page_size?: number;
+}
+
+export interface AdminCollectionListParams {
+  q?: string;
+  status?: string;
+  collection_type?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export interface CollectionPickerParams {
+  q?: string;
+  content_type?: 'movie' | 'series';
+  published_only?: boolean;
+  year?: number;
+  genre?: string;
+  language?: string;
+  page?: number;
+  page_size?: number;
+}
+
 export interface DashboardStatsDto {
   total_movies: number;
   published_movies: number;
@@ -1271,6 +1399,23 @@ export const api = {
     const { data } = await http.get<StreamingStatusDto>('/streaming/status');
     return data;
   },
+
+  async listCollections(params?: CollectionListParams) {
+    const { data } = await http.get<Envelope<CollectionPublicDto>>('/catalog/collections', { params });
+    return unwrapList(data);
+  },
+
+  async getCollection(slug: string) {
+    const { data } = await http.get<CollectionPublicDto>(`/catalog/collections/${slug}`);
+    return data;
+  },
+
+  async listFeaturedHomeCollections(params?: { page_size?: number; min_items?: number }) {
+    const { data } = await http.get<Envelope<CollectionPublicDto>>('/catalog/collections/featured/home', {
+      params,
+    });
+    return unwrapList(data);
+  },
 };
 
 export const adminApi = {
@@ -1844,6 +1989,87 @@ export const adminApi = {
       '/admin/system/updates/history',
       { params: { limit } }
     );
+    return data;
+  },
+
+  async listCollections(params?: AdminCollectionListParams) {
+    const { data } = await adminHttp.get<Envelope<CollectionDto>>('/admin/collections', { params });
+    return unwrapList(data);
+  },
+
+  async getCollection(id: number) {
+    const { data } = await adminHttp.get<CollectionDto>(`/admin/collections/${id}`);
+    return data;
+  },
+
+  async createCollection(payload: CollectionCreatePayload) {
+    const { data } = await adminHttp.post<CollectionDto>('/admin/collections', payload);
+    return data;
+  },
+
+  async updateCollection(id: number, payload: CollectionUpdatePayload) {
+    const { data } = await adminHttp.patch<CollectionDto>(`/admin/collections/${id}`, payload);
+    return data;
+  },
+
+  async deleteCollection(id: number) {
+    const { data } = await adminHttp.delete<{ detail: string }>(`/admin/collections/${id}`);
+    return data;
+  },
+
+  async publishCollection(id: number, expectedUpdatedAt?: string | null) {
+    const { data } = await adminHttp.post<CollectionDto>(
+      `/admin/collections/${id}/publish`,
+      expectedUpdatedAt ? { expected_updated_at: expectedUpdatedAt } : {}
+    );
+    return data;
+  },
+
+  async unpublishCollection(id: number, expectedUpdatedAt?: string | null) {
+    const { data } = await adminHttp.post<CollectionDto>(
+      `/admin/collections/${id}/unpublish`,
+      expectedUpdatedAt ? { expected_updated_at: expectedUpdatedAt } : {}
+    );
+    return data;
+  },
+
+  async archiveCollection(id: number, expectedUpdatedAt?: string | null) {
+    const { data } = await adminHttp.post<CollectionDto>(
+      `/admin/collections/${id}/archive`,
+      expectedUpdatedAt ? { expected_updated_at: expectedUpdatedAt } : {}
+    );
+    return data;
+  },
+
+  async previewCollection(id: number) {
+    const { data } = await adminHttp.get<CollectionPublicDto>(`/admin/collections/${id}/preview`);
+    return data;
+  },
+
+  async collectionPicker(params?: CollectionPickerParams) {
+    const { data } = await adminHttp.get<CollectionPickerResultDto>('/admin/collections/picker', {
+      params,
+    });
+    return data;
+  },
+
+  async addCollectionItem(id: number, payload: CollectionItemAddPayload) {
+    const { data } = await adminHttp.post<CollectionItemDto>(`/admin/collections/${id}/items`, payload);
+    return data;
+  },
+
+  async removeCollectionItem(id: number, itemId: number) {
+    const { data } = await adminHttp.delete<{ detail: string }>(
+      `/admin/collections/${id}/items/${itemId}`
+    );
+    return data;
+  },
+
+  async reorderCollectionItems(id: number, itemIds: number[], expectedUpdatedAt?: string | null) {
+    const { data } = await adminHttp.put<CollectionDto>(`/admin/collections/${id}/items/reorder`, {
+      item_ids: itemIds,
+      expected_updated_at: expectedUpdatedAt ?? undefined,
+    });
     return data;
   },
 };
