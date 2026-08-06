@@ -27,6 +27,7 @@ class ImportResult:
     artwork_files: list[str] = field(default_factory=list)
     episode_ids: list[int] = field(default_factory=list)
     season_ids: list[int] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
 def utcnow() -> datetime:
@@ -162,7 +163,7 @@ def _store_artwork(
     details: dict[str, Any],
     media_type: MediaType,
     tmdb_configuration: dict[str, Any] | None,
-) -> tuple[dict[str, str], list[str]]:
+) -> tuple[dict[str, str], list[str], list[str]]:
     tmdb_id = int(details["id"])
     paths = {
         "poster_url": ("poster", details.get("poster_path")),
@@ -171,8 +172,11 @@ def _store_artwork(
     }
     urls: dict[str, str] = {}
     files: list[str] = []
+    warnings: list[str] = []
     for field_name, (kind, path) in paths.items():
         if not path:
+            if kind == "poster":
+                warnings.append(f"required poster missing for TMDB {tmdb_id}")
             continue
         url = build_image_url(settings, str(path), size="original")
         try:
@@ -183,13 +187,39 @@ def _store_artwork(
                 tmdb_id=tmdb_id,
                 tmdb_configuration=tmdb_configuration,
             )
-        except ArtworkError:
-            # Keep import usable when optional artwork is missing/bad; metadata is
-            # the source of truth and already local. Tests cover strict validation separately.
+        except ArtworkError as exc:
+            # Optional logo/backdrop failures must not fail the import. A missing
+            # required poster is reported clearly via ImportResult.warnings.
+            if kind == "poster":
+                warnings.append(f"required poster download failed for TMDB {tmdb_id}: {exc}")
             continue
         urls[field_name] = stored.url
         files.append(stored.relative_path)
-    return urls, files
+    return urls, files, warnings
+
+
+def _store_episode_still(
+    settings: Settings,
+    *,
+    still_path: str,
+    tmdb_episode_id: int,
+    tmdb_configuration: dict[str, Any] | None,
+) -> tuple[str, str] | None:
+    """Download an episode still when TMDB provides still_path. Optional — never fails import."""
+    if not still_path:
+        return None
+    url = build_image_url(settings, str(still_path), size="original")
+    try:
+        stored = download_artwork(
+            settings,
+            url,
+            kind="still",
+            tmdb_id=int(tmdb_episode_id),
+            tmdb_configuration=tmdb_configuration,
+        )
+    except ArtworkError:
+        return None
+    return stored.url, stored.relative_path
 
 
 def _apply_trailer(entity: Movie | Series, trailer: TrailerMetadata | None) -> None:
@@ -294,14 +324,24 @@ def import_movie(
     _apply_trailer(movie, trailer)
 
     artwork_files: list[str] = []
+    warnings: list[str] = []
     if download_images:
-        urls, artwork_files = _store_artwork(settings, details=details, media_type="movie", tmdb_configuration=config)
+        urls, artwork_files, warnings = _store_artwork(
+            settings, details=details, media_type="movie", tmdb_configuration=config
+        )
         for field, url in urls.items():
             setattr(movie, field, url)
 
     db.add(movie)
     db.flush()
-    return ImportResult("movie", movie.id, int(tmdb_id), created=created, artwork_files=artwork_files)
+    return ImportResult(
+        "movie",
+        movie.id,
+        int(tmdb_id),
+        created=created,
+        artwork_files=artwork_files,
+        warnings=warnings,
+    )
 
 
 def _season_name(season_number: int, season_details: dict[str, Any]) -> str:
@@ -354,8 +394,11 @@ def import_series(
     _apply_trailer(series, trailer)
 
     artwork_files: list[str] = []
+    warnings: list[str] = []
     if download_images:
-        urls, artwork_files = _store_artwork(settings, details=details, media_type="series", tmdb_configuration=config)
+        urls, artwork_files, warnings = _store_artwork(
+            settings, details=details, media_type="series", tmdb_configuration=config
+        )
         for field, url in urls.items():
             setattr(series, field, url)
 
@@ -434,6 +477,17 @@ def import_series(
             episode.duration_minutes = int(item.get("runtime") or 0) or None
             episode.release_date = _parse_date(item.get("air_date"))
             episode.thumbnail_url = series.backdrop_url or series.poster_url or ""
+            still_path = item.get("still_path")
+            if download_images and still_path and tmdb_episode_id:
+                still = _store_episode_still(
+                    settings,
+                    still_path=str(still_path),
+                    tmdb_episode_id=int(tmdb_episode_id),
+                    tmdb_configuration=config,
+                )
+                if still is not None:
+                    episode.thumbnail_url = still[0]
+                    artwork_files.append(still[1])
             db.add(episode)
             episode_ids.append(episode.id)
 
@@ -446,6 +500,7 @@ def import_series(
         artwork_files=artwork_files,
         season_ids=season_ids,
         episode_ids=episode_ids,
+        warnings=warnings,
     )
 
 
@@ -456,18 +511,47 @@ def refresh_demo_metadata(
     client: TMDBClient | None = None,
     force: bool = False,
 ) -> list[ImportResult]:
+    """Refresh demo-owned TMDB metadata without expanding beyond curated season/episode caps."""
+    from app.services.tmdb.curated import CURATED_SERIES
+
+    curated_series = {item.tmdb_id: item for item in CURATED_SERIES}
     results: list[ImportResult] = []
     client = client or TMDBClient(settings)
     for movie in db.query(Movie).filter(Movie.metadata_source == "tmdb", Movie.demo_owned.is_(True), Movie.tmdb_id.isnot(None)).all():
         tmdb_id = movie.tmdb_id
         if tmdb_id is None:
             continue
-        results.append(import_movie(db, settings, tmdb_id, client=client, demo_owned=True, seed_version=movie.demo_seed_version, force=force))
+        results.append(
+            import_movie(
+                db,
+                settings,
+                tmdb_id,
+                client=client,
+                demo_owned=True,
+                seed_version=movie.demo_seed_version,
+                force=force,
+            )
+        )
     for series in db.query(Series).filter(Series.metadata_source == "tmdb", Series.demo_owned.is_(True), Series.tmdb_id.isnot(None)).all():
         tmdb_id = series.tmdb_id
         if tmdb_id is None:
             continue
-        results.append(import_series(db, settings, tmdb_id, client=client, demo_owned=True, seed_version=series.demo_seed_version, force=force))
+        curated = curated_series.get(int(tmdb_id))
+        seasons_limit = curated.seasons if curated is not None else 2
+        episodes_per_season = curated.episodes_per_season if curated is not None else 3
+        results.append(
+            import_series(
+                db,
+                settings,
+                tmdb_id,
+                client=client,
+                demo_owned=True,
+                seed_version=series.demo_seed_version,
+                force=force,
+                seasons_limit=seasons_limit,
+                episodes_per_season=episodes_per_season,
+            )
+        )
     return results
 
 

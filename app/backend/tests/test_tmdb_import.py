@@ -11,6 +11,7 @@ from app.services.demo.artwork import write_rgb_png
 from app.services.demo.cleanup import build_cleanup_plan
 from app.services.tmdb.artwork import ArtworkError, store_artwork_bytes, validate_artwork_url
 from app.services.tmdb.client import TMDBClient, TMDBClientError
+from app.services.tmdb.curated import REAL_DEMO_SEED_VERSION
 from app.services.tmdb.import_service import import_movie, import_series, refresh_demo_metadata
 from app.services.tmdb.trailers import select_trailer
 from tests.conftest import TEST_JWT
@@ -114,6 +115,7 @@ class FakeTMDB:
                     "overview": "Episode overview",
                     "runtime": 42,
                     "air_date": "2023-01-02",
+                    "still_path": None,
                 }
             ],
         }
@@ -161,7 +163,7 @@ def test_tmdb_client_search_and_token_redaction():
 def test_movie_import_duplicate_trailer_and_offline_catalog(db_session, tmp_path: Path):
     settings = _settings(tmp_path)
     fake = FakeTMDB()
-    result = import_movie(db_session, settings, 100, client=fake, demo_owned=True, seed_version="2.0.0")
+    result = import_movie(db_session, settings, 100, client=fake, demo_owned=True, seed_version=REAL_DEMO_SEED_VERSION)
     db_session.commit()
     movie = db_session.get(Movie, result.entity_id)
     assert movie.status == "draft"
@@ -172,7 +174,7 @@ def test_movie_import_duplicate_trailer_and_offline_catalog(db_session, tmp_path
     assert movie.trailer_key == "abc123"
     assert movie.trailer_url == "https://www.youtube-nocookie.com/embed/abc123"
 
-    duplicate = import_movie(db_session, settings, 100, client=fake, demo_owned=True, seed_version="2.0.0")
+    duplicate = import_movie(db_session, settings, 100, client=fake, demo_owned=True, seed_version=REAL_DEMO_SEED_VERSION)
     db_session.commit()
     assert duplicate.entity_id == result.entity_id
     assert db_session.query(Movie).filter(Movie.tmdb_id == 100).count() == 1
@@ -189,7 +191,7 @@ def test_series_import_episode_ownership(db_session, tmp_path: Path):
         200,
         client=FakeTMDB(),
         demo_owned=True,
-        seed_version="2.0.0",
+        seed_version=REAL_DEMO_SEED_VERSION,
         seasons_limit=1,
         episodes_per_season=1,
     )
@@ -201,6 +203,50 @@ def test_series_import_episode_ownership(db_session, tmp_path: Path):
     assert episode.metadata_source == "tmdb"
 
 
+def test_series_import_episode_still_when_available(db_session, tmp_path: Path, monkeypatch):
+    class StillTMDB(FakeTMDB):
+        def season_details(self, tmdb_id, season_number, *, language=None):
+            payload = super().season_details(tmdb_id, season_number, language=language)
+            payload["episodes"][0]["still_path"] = "/still.jpg"
+            return payload
+
+    from app.services.tmdb import artwork as artwork_mod
+    from app.services.tmdb.artwork import StoredArtwork
+
+    def fake_download(settings, url, *, kind, tmdb_id, tmdb_configuration=None, http_client=None):
+        assert kind == "still"
+        assert "still.jpg" in url
+        return StoredArtwork(
+            url=f"/artwork/stills/tmdb-still-{tmdb_id}.jpg",
+            relative_path=f"stills/tmdb-still-{tmdb_id}.jpg",
+            checksum_sha256="abc",
+            size_bytes=10,
+            width=320,
+            height=180,
+        )
+
+    monkeypatch.setattr(artwork_mod, "download_artwork", fake_download)
+    # import_service binds download_artwork at import time — patch there too
+    import app.services.tmdb.import_service as import_mod
+
+    monkeypatch.setattr(import_mod, "download_artwork", fake_download)
+
+    result = import_series(
+        db_session,
+        _settings(tmp_path),
+        200,
+        client=StillTMDB(),
+        demo_owned=True,
+        seed_version=REAL_DEMO_SEED_VERSION,
+        seasons_limit=1,
+        episodes_per_season=1,
+    )
+    db_session.commit()
+    episode = db_session.get(Episode, result.episode_ids[0])
+    assert episode.thumbnail_url.endswith("tmdb-still-9001.jpg")
+    assert any(path.startswith("stills/") for path in result.artwork_files)
+
+
 def test_translation_fallback(db_session, tmp_path: Path):
     class FallbackTMDB(FakeTMDB):
         def movie_details(self, tmdb_id, *, language=None):
@@ -210,7 +256,7 @@ def test_translation_fallback(db_session, tmp_path: Path):
             return _movie_details(id=tmdb_id, title="", overview="")
 
     settings = _settings(tmp_path, tmdb_fallback_language="fa-AF")
-    result = import_movie(db_session, settings, 101, client=FallbackTMDB(), demo_owned=True, seed_version="2.0.0")
+    result = import_movie(db_session, settings, 101, client=FallbackTMDB(), demo_owned=True, seed_version=REAL_DEMO_SEED_VERSION)
     db_session.commit()
     movie = db_session.get(Movie, result.entity_id)
     assert movie.title == "Fallback Title"
@@ -233,7 +279,7 @@ def test_image_validation_and_ssrf_rejection(tmp_path: Path):
 def test_refresh_demo_metadata_only(db_session, tmp_path: Path):
     settings = _settings(tmp_path)
     fake = FakeTMDB()
-    demo = import_movie(db_session, settings, 100, client=fake, demo_owned=True, seed_version="2.0.0")
+    demo = import_movie(db_session, settings, 100, client=fake, demo_owned=True, seed_version=REAL_DEMO_SEED_VERSION)
     real = Movie(title="Real", slug="real", tmdb_id=999, status="draft", metadata_source="tmdb", demo_owned=False)
     db_session.add(real)
     db_session.commit()
@@ -243,6 +289,79 @@ def test_refresh_demo_metadata_only(db_session, tmp_path: Path):
     db_session.commit()
     assert [r.entity_id for r in results] == [demo.entity_id]
     assert fake.movie_detail_calls
+
+
+def test_refresh_demo_series_respects_curated_caps(db_session, tmp_path: Path):
+    """Refresh must not expand demo series beyond curated season/episode limits."""
+    from app.services.tmdb.curated import CURATED_SERIES
+
+    curated = CURATED_SERIES[0]
+
+    class WideTMDB(FakeTMDB):
+        def tv_details(self, tmdb_id, *, language=None):
+            self.tv_detail_calls += 1
+            return _series_details(
+                id=tmdb_id,
+                seasons=[{"season_number": n} for n in range(1, 6)],
+            )
+
+        def season_details(self, tmdb_id, season_number, *, language=None):
+            return {
+                "id": season_number,
+                "name": f"Season {season_number}",
+                "overview": "Season overview",
+                "air_date": "2023-01-01",
+                "episodes": [
+                    {
+                        "id": season_number * 100 + n,
+                        "episode_number": n,
+                        "name": f"E{n}",
+                        "overview": "Episode overview",
+                        "runtime": 40,
+                        "air_date": "2023-01-02",
+                        "still_path": None,
+                    }
+                    for n in range(1, 8)
+                ],
+            }
+
+    settings = _settings(tmp_path)
+    fake = WideTMDB()
+    import_series(
+        db_session,
+        settings,
+        curated.tmdb_id,
+        client=fake,
+        demo_owned=True,
+        seed_version=REAL_DEMO_SEED_VERSION,
+        seasons_limit=curated.seasons,
+        episodes_per_season=curated.episodes_per_season,
+    )
+    db_session.commit()
+    refresh_demo_metadata(db_session, settings, client=fake, force=True)
+    db_session.commit()
+    from app.models.content import Episode, Season, Series
+
+    series = db_session.query(Series).filter(Series.tmdb_id == curated.tmdb_id).one()
+    seasons = db_session.query(Season).filter(Season.series_id == series.id).count()
+    episodes = db_session.query(Episode).filter(Episode.series_id == series.id).count()
+    assert seasons == curated.seasons
+    assert episodes == curated.seasons * curated.episodes_per_season
+
+
+def test_artwork_replaces_prior_file_for_same_tmdb_id(tmp_path: Path):
+    settings = _settings(tmp_path)
+    png_a = tmp_path / "a.png"
+    png_b = tmp_path / "b.png"
+    write_rgb_png(png_a, 16, 16, (1, 2, 3), "A")
+    write_rgb_png(png_b, 16, 16, (200, 100, 50), "B")
+    first = store_artwork_bytes(settings, png_a.read_bytes(), kind="poster", tmdb_id=42, content_type="image/png")
+    second = store_artwork_bytes(settings, png_b.read_bytes(), kind="poster", tmdb_id=42, content_type="image/png")
+    root = Path(settings.artwork_root) / "posters"
+    files = list(root.glob("tmdb-poster-42-*"))
+    assert len(files) == 1
+    assert files[0].name == Path(second.relative_path).name
+    assert first.checksum_sha256 != second.checksum_sha256
 
 
 def test_trailer_selection_and_no_trailer():
@@ -269,8 +388,64 @@ def test_cleanup_isolates_demo_owned_rows(db_session, tmp_path: Path):
     plan = build_cleanup_plan(db_session, settings)
     assert demo.id in plan.movie_ids
     assert real.id not in plan.movie_ids
+    assert any("Demo" in title for title in plan.movie_titles)
+    assert not any("Real" in title and "real-movie" in title for title in plan.movie_titles)
 
 
 def test_public_movies_200_after_model_update(client):
     response = client.get("/api/movies")
     assert response.status_code == 200
+
+
+def test_curated_real_demo_v3_catalog_shape():
+    from app.services.tmdb.curated import (
+        CURATED_MOVIES,
+        CURATED_SERIES,
+        REAL_DEMO_SEED_VERSION,
+        curated_episode_clip_count,
+        curated_movie_clip_count,
+    )
+
+    assert REAL_DEMO_SEED_VERSION == "3.0.0"
+    assert len(CURATED_MOVIES) >= 15
+    assert len(CURATED_SERIES) >= 5
+    assert curated_movie_clip_count() >= 6
+    assert curated_episode_clip_count() >= 6
+    movie_ids = [m.tmdb_id for m in CURATED_MOVIES]
+    series_ids = [s.tmdb_id for s in CURATED_SERIES]
+    assert len(movie_ids) == len(set(movie_ids))
+    assert len(series_ids) == len(set(series_ids))
+    genre_labels = {g for m in CURATED_MOVIES for g in m.genres}
+    for required in (
+        "Action",
+        "Drama",
+        "Comedy",
+        "Family",
+        "Animation",
+        "Thriller",
+        "Science Fiction",
+        "Documentary",
+    ):
+        assert required in genre_labels
+    for series in CURATED_SERIES:
+        assert series.seasons <= 2
+        assert series.episodes_per_season <= 3
+
+
+def test_remove_fake_demo_cli_is_dry_run_by_default(monkeypatch, tmp_path: Path):
+    from scripts import real_demo_dry_run, remove_fake_demo
+
+    calls: list[list[str] | None] = []
+
+    def fake_main(argv=None):
+        calls.append(list(argv) if argv is not None else None)
+        return 0
+
+    monkeypatch.setattr(remove_fake_demo, "remove_demo_main", fake_main)
+    monkeypatch.setattr(real_demo_dry_run, "remove_demo_main", fake_main)
+    assert remove_fake_demo.main([]) == 0
+    assert remove_fake_demo.main(["--confirm"]) == 0
+    assert real_demo_dry_run.main(["--confirm"]) == 0
+    assert calls[0] == []
+    assert calls[1] == ["--confirm"]
+    assert calls[2] == []  # confirm stripped for dry-run alias
