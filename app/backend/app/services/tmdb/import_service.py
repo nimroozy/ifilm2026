@@ -511,18 +511,47 @@ def refresh_demo_metadata(
     client: TMDBClient | None = None,
     force: bool = False,
 ) -> list[ImportResult]:
+    """Refresh demo-owned TMDB metadata without expanding beyond curated season/episode caps."""
+    from app.services.tmdb.curated import CURATED_SERIES
+
+    curated_series = {item.tmdb_id: item for item in CURATED_SERIES}
     results: list[ImportResult] = []
     client = client or TMDBClient(settings)
     for movie in db.query(Movie).filter(Movie.metadata_source == "tmdb", Movie.demo_owned.is_(True), Movie.tmdb_id.isnot(None)).all():
         tmdb_id = movie.tmdb_id
         if tmdb_id is None:
             continue
-        results.append(import_movie(db, settings, tmdb_id, client=client, demo_owned=True, seed_version=movie.demo_seed_version, force=force))
+        results.append(
+            import_movie(
+                db,
+                settings,
+                tmdb_id,
+                client=client,
+                demo_owned=True,
+                seed_version=movie.demo_seed_version,
+                force=force,
+            )
+        )
     for series in db.query(Series).filter(Series.metadata_source == "tmdb", Series.demo_owned.is_(True), Series.tmdb_id.isnot(None)).all():
         tmdb_id = series.tmdb_id
         if tmdb_id is None:
             continue
-        results.append(import_series(db, settings, tmdb_id, client=client, demo_owned=True, seed_version=series.demo_seed_version, force=force))
+        curated = curated_series.get(int(tmdb_id))
+        seasons_limit = curated.seasons if curated is not None else 2
+        episodes_per_season = curated.episodes_per_season if curated is not None else 3
+        results.append(
+            import_series(
+                db,
+                settings,
+                tmdb_id,
+                client=client,
+                demo_owned=True,
+                seed_version=series.demo_seed_version,
+                force=force,
+                seasons_limit=seasons_limit,
+                episodes_per_season=episodes_per_season,
+            )
+        )
     return results
 
 

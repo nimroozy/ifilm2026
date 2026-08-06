@@ -291,6 +291,79 @@ def test_refresh_demo_metadata_only(db_session, tmp_path: Path):
     assert fake.movie_detail_calls
 
 
+def test_refresh_demo_series_respects_curated_caps(db_session, tmp_path: Path):
+    """Refresh must not expand demo series beyond curated season/episode limits."""
+    from app.services.tmdb.curated import CURATED_SERIES
+
+    curated = CURATED_SERIES[0]
+
+    class WideTMDB(FakeTMDB):
+        def tv_details(self, tmdb_id, *, language=None):
+            self.tv_detail_calls += 1
+            return _series_details(
+                id=tmdb_id,
+                seasons=[{"season_number": n} for n in range(1, 6)],
+            )
+
+        def season_details(self, tmdb_id, season_number, *, language=None):
+            return {
+                "id": season_number,
+                "name": f"Season {season_number}",
+                "overview": "Season overview",
+                "air_date": "2023-01-01",
+                "episodes": [
+                    {
+                        "id": season_number * 100 + n,
+                        "episode_number": n,
+                        "name": f"E{n}",
+                        "overview": "Episode overview",
+                        "runtime": 40,
+                        "air_date": "2023-01-02",
+                        "still_path": None,
+                    }
+                    for n in range(1, 8)
+                ],
+            }
+
+    settings = _settings(tmp_path)
+    fake = WideTMDB()
+    import_series(
+        db_session,
+        settings,
+        curated.tmdb_id,
+        client=fake,
+        demo_owned=True,
+        seed_version=REAL_DEMO_SEED_VERSION,
+        seasons_limit=curated.seasons,
+        episodes_per_season=curated.episodes_per_season,
+    )
+    db_session.commit()
+    refresh_demo_metadata(db_session, settings, client=fake, force=True)
+    db_session.commit()
+    from app.models.content import Episode, Season, Series
+
+    series = db_session.query(Series).filter(Series.tmdb_id == curated.tmdb_id).one()
+    seasons = db_session.query(Season).filter(Season.series_id == series.id).count()
+    episodes = db_session.query(Episode).filter(Episode.series_id == series.id).count()
+    assert seasons == curated.seasons
+    assert episodes == curated.seasons * curated.episodes_per_season
+
+
+def test_artwork_replaces_prior_file_for_same_tmdb_id(tmp_path: Path):
+    settings = _settings(tmp_path)
+    png_a = tmp_path / "a.png"
+    png_b = tmp_path / "b.png"
+    write_rgb_png(png_a, 16, 16, (1, 2, 3), "A")
+    write_rgb_png(png_b, 16, 16, (200, 100, 50), "B")
+    first = store_artwork_bytes(settings, png_a.read_bytes(), kind="poster", tmdb_id=42, content_type="image/png")
+    second = store_artwork_bytes(settings, png_b.read_bytes(), kind="poster", tmdb_id=42, content_type="image/png")
+    root = Path(settings.artwork_root) / "posters"
+    files = list(root.glob("tmdb-poster-42-*"))
+    assert len(files) == 1
+    assert files[0].name == Path(second.relative_path).name
+    assert first.checksum_sha256 != second.checksum_sha256
+
+
 def test_trailer_selection_and_no_trailer():
     selected = select_trailer(
         {

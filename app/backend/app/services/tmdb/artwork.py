@@ -146,6 +146,11 @@ def store_artwork_bytes(
     except ValueError as exc:
         raise ArtworkError("Artwork destination escaped artwork root") from exc
     path.parent.mkdir(parents=True, exist_ok=True)
+    # Replace prior downloads for the same TMDB id/kind so refresh/reseed stay idempotent.
+    prefix = f"tmdb-{kind}-{int(tmdb_id)}-"
+    for old in path.parent.glob(f"{prefix}*"):
+        if old.resolve() != path and old.is_file():
+            old.unlink(missing_ok=True)
     path.write_bytes(data)
     return StoredArtwork(
         url=_public_artwork_url(relative_path),
