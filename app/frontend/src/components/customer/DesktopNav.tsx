@@ -26,6 +26,7 @@ function navLabel(id: CustomerNavId, t: ReturnType<typeof useLang>['t']): string
     series: t.nav.series,
     children: t.nav.children,
     genres: t.nav.genres,
+    collections: t.nav.collections,
     dubbed: t.nav.dubbed,
     subtitled: t.nav.subtitled,
     newReleases: t.nav.newReleases,

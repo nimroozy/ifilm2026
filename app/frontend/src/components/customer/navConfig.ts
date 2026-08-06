@@ -6,6 +6,7 @@ export type CustomerNavId =
   | 'series'
   | 'children'
   | 'genres'
+  | 'collections'
   | 'dubbed'
   | 'subtitled'
   | 'newReleases'
@@ -20,16 +21,14 @@ export type CustomerNavItem = {
   matchPrefixes?: string[];
 };
 
-/**
- * Primary catalog destinations for Phase 3.
- * Collections omitted — no customer route exists yet.
- */
+/** Primary catalog destinations, including Collections V1. */
 export const DESKTOP_NAV_ITEMS: CustomerNavItem[] = [
   { id: 'home', path: '/' },
   { id: 'movies', path: '/movies', matchPrefixes: ['/movie/'] },
   { id: 'series', path: '/series', matchPrefixes: ['/series/'] },
   { id: 'children', path: '/children' },
   { id: 'genres', path: '/genres' },
+  { id: 'collections', path: '/collections', matchPrefixes: ['/collections/'] },
   { id: 'dubbed', path: '/dubbed' },
   { id: 'subtitled', path: '/subtitled' },
   { id: 'newReleases', path: '/new-releases' },
@@ -55,6 +54,7 @@ export const MOBILE_BOTTOM_NAV: CustomerNavItem[] = [
 
 export const FOOTER_DISCOVER_PATHS = [
   { id: 'genres' as const, path: '/genres' },
+  { id: 'collections' as const, path: '/collections' },
   { id: 'dubbed' as const, path: '/dubbed' },
   { id: 'subtitled' as const, path: '/subtitled' },
   { id: 'newReleases' as const, path: '/new-releases' },

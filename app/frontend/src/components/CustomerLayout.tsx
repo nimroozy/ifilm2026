@@ -241,6 +241,7 @@ function customerNavLabel(id: CustomerNavId, t: typeof translations.en): string 
     series: t.nav.series,
     children: t.nav.children,
     genres: t.nav.genres,
+    collections: t.nav.collections,
     dubbed: t.nav.dubbed,
     subtitled: t.nav.subtitled,
     newReleases: t.nav.newReleases,
