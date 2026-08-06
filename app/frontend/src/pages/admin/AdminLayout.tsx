@@ -85,7 +85,8 @@ export default function AdminLayout() {
         if ((me.permissions || []).includes('system_updates.read')) {
           return adminApi.getSystemVersion().then((v) => {
             if (!cancelled) {
-              setVersionLabel(`${v.version}`);
+              const label = String(v.version || '').trim();
+              setVersionLabel(label && label !== 'undefined' ? label : null);
               setEnvBadge(v.deployment_mode || v.update_channel || null);
             }
           });
@@ -174,7 +175,7 @@ export default function AdminLayout() {
     <div
       dir="ltr"
       lang="en"
-      className="min-h-screen overflow-x-hidden bg-background text-left"
+      className="min-h-screen bg-background text-left"
       data-testid="admin-layout-root"
     >
       <aside
@@ -196,22 +197,29 @@ export default function AdminLayout() {
         </SheetContent>
       </Sheet>
 
-      <div className="min-h-screen w-full lg:ml-64" data-testid="admin-content-wrapper">
-        <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border bg-background/95 px-4 backdrop-blur-md lg:px-6">
-          <div className="flex items-center gap-3">
+      {/*
+        Use padding (not margin) so main content width stays within the viewport.
+        `w-full` + `lg:ml-64` previously made content 100vw+16rem and clipped actions.
+      */}
+      <div
+        className="flex min-h-screen min-w-0 w-full max-w-full flex-col lg:pl-64"
+        data-testid="admin-content-wrapper"
+      >
+        <header className="sticky top-0 z-40 flex h-14 min-w-0 items-center justify-between gap-3 border-b border-border bg-background/95 px-4 backdrop-blur-md lg:px-6">
+          <div className="flex min-w-0 items-center gap-3">
             <Button
               variant="ghost"
               size="icon"
-              className="lg:hidden"
+              className="shrink-0 lg:hidden"
               onClick={() => setSidebarOpen(true)}
               aria-label="Open admin menu"
               data-testid="admin-mobile-menu-button"
             >
               <Menu className="h-5 w-5" />
             </Button>
-            <h1 className="text-lg font-semibold text-foreground">iFilm Admin</h1>
+            <h1 className="truncate text-lg font-semibold text-foreground">iFilm Admin</h1>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             {admin?.role_name && (
               <Badge variant="outline" className="text-xs">
                 {admin.role_name}
@@ -219,7 +227,7 @@ export default function AdminLayout() {
             )}
           </div>
         </header>
-        <main className="p-5 lg:p-8">
+        <main className="min-w-0 max-w-full flex-1 overflow-x-hidden p-4 sm:p-5 lg:p-8">
           <Outlet />
         </main>
       </div>

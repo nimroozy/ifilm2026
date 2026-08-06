@@ -11,7 +11,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ApiError, adminApi, type ProcessingJobDto, type ProcessingStatusDto } from '@/lib/api';
-import { EmptyState, ErrorState, LoadingBlock, StatusBadge } from './adminShared';
+import {
+  AdminTableCard,
+  EmptyState,
+  ErrorState,
+  LoadingBlock,
+  PageHeader,
+  StatusBadge,
+} from './adminShared';
 
 const STATUSES = ['queued', 'running', 'retry_wait', 'completed', 'failed', 'cancelled'];
 
@@ -62,16 +69,16 @@ export default function MediaProcessingJobsPage() {
   if (error) return <ErrorState message={error} onRetry={() => void load()} />;
 
   return (
-    <div className="space-y-6" data-testid="processing-jobs-page">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-serif font-bold">Media processing</h1>
-          <p className="text-sm text-muted-foreground">Probe and HLS encode jobs for completed uploads</p>
-        </div>
-        <Button variant="outline" size="sm" onClick={() => void load()}>
-          Refresh
-        </Button>
-      </div>
+    <div className="min-w-0 max-w-full space-y-6" data-testid="processing-jobs-page">
+      <PageHeader
+        title="Media processing"
+        description="Probe and HLS encode jobs for completed uploads"
+        actions={
+          <Button variant="outline" size="sm" className="shrink-0" onClick={() => void load()}>
+            Refresh
+          </Button>
+        }
+      />
 
       {status && !status.enabled && (
         <p className="text-sm text-muted-foreground" data-testid="processing-disabled">
@@ -79,8 +86,8 @@ export default function MediaProcessingJobsPage() {
         </p>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div>
+      <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="min-w-0">
           <Label>Status</Label>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger>
@@ -96,7 +103,7 @@ export default function MediaProcessingJobsPage() {
             </SelectContent>
           </Select>
         </div>
-        <div>
+        <div className="min-w-0">
           <Label>Job type</Label>
           <Select value={jobType} onValueChange={setJobType}>
             <SelectTrigger>
@@ -109,12 +116,13 @@ export default function MediaProcessingJobsPage() {
             </SelectContent>
           </Select>
         </div>
-        <div>
+        <div className="min-w-0">
           <Label>Media asset ID</Label>
           <Input
             value={assetFilter}
             onChange={(e) => setAssetFilter(e.target.value)}
             placeholder="Filter by asset UUID"
+            className="w-full max-w-full"
           />
         </div>
       </div>
@@ -122,18 +130,18 @@ export default function MediaProcessingJobsPage() {
       {jobs.length === 0 ? (
         <EmptyState message="No jobs yet. Queue a probe from a media asset detail page." />
       ) : (
-        <div className="overflow-x-auto border border-border rounded-lg">
+        <AdminTableCard minWidthClassName="min-w-[640px]">
           <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-left">
+            <thead className="sticky top-0 z-10 bg-card text-left">
               <tr>
                 <th className="p-3">Job</th>
                 <th className="p-3">File</th>
-                <th className="p-3">Type</th>
+                <th className="hidden p-3 md:table-cell">Type</th>
                 <th className="p-3">Status</th>
                 <th className="p-3">Progress</th>
-                <th className="p-3">Attempts</th>
-                <th className="p-3">Worker</th>
-                <th className="p-3">Error</th>
+                <th className="hidden p-3 lg:table-cell">Attempts</th>
+                <th className="hidden p-3 xl:table-cell">Worker</th>
+                <th className="hidden p-3 lg:table-cell">Error</th>
               </tr>
             </thead>
             <tbody>
@@ -144,26 +152,28 @@ export default function MediaProcessingJobsPage() {
                       {job.id.slice(0, 8)}…
                     </Link>
                   </td>
-                  <td className="p-3">{job.media_asset?.original_filename || job.media_asset_id.slice(0, 8)}</td>
-                  <td className="p-3">{job.job_type}</td>
+                  <td className="max-w-[10rem] truncate p-3" title={job.media_asset?.original_filename || undefined}>
+                    {job.media_asset?.original_filename || job.media_asset_id.slice(0, 8)}
+                  </td>
+                  <td className="hidden p-3 md:table-cell">{job.job_type}</td>
                   <td className="p-3">
                     <StatusBadge status={job.status} />
                   </td>
                   <td className="p-3">
                     {job.progress_percent}% {job.current_step ? `· ${job.current_step}` : ''}
                   </td>
-                  <td className="p-3">
+                  <td className="hidden p-3 lg:table-cell">
                     {job.attempt_count}/{job.max_attempts}
                   </td>
-                  <td className="p-3 font-mono text-xs">{job.worker_id || '—'}</td>
-                  <td className="p-3 text-destructive max-w-[14rem] truncate">
+                  <td className="hidden p-3 font-mono text-xs xl:table-cell">{job.worker_id || '—'}</td>
+                  <td className="hidden max-w-[14rem] truncate p-3 text-destructive lg:table-cell">
                     {job.error_message || '—'}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        </AdminTableCard>
       )}
     </div>
   );

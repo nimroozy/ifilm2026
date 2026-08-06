@@ -229,7 +229,7 @@ export default function TmdbToolsPage() {
   }
 
   return (
-    <div className="space-y-8" data-testid="tmdb-tools-page">
+    <div className="min-w-0 max-w-full space-y-8" data-testid="tmdb-tools-page">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-serif font-bold text-foreground">TMDB tools</h1>

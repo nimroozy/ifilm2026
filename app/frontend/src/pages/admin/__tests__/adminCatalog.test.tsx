@@ -220,9 +220,10 @@ describe('admin auth & catalog pages', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Listed Film')).toBeInTheDocument();
+      expect(screen.getAllByText('Listed Film').length).toBeGreaterThanOrEqual(1);
     });
     expect(screen.getByTestId('movie-row-5')).toBeInTheDocument();
+    expect(screen.getByTestId('movie-card-5')).toBeInTheDocument();
   });
 
   it('validates movie form title is required', () => {

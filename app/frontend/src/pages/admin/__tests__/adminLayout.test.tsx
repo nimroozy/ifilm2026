@@ -89,7 +89,7 @@ describe('admin LTR layout', () => {
     });
   });
 
-  it('desktop sidebar uses left positioning and content uses lg:ml-64', async () => {
+  it('desktop sidebar uses left positioning and content uses lg:pl-64 (not margin)', async () => {
     renderAt('/admin');
     const sidebar = await screen.findByTestId('admin-desktop-sidebar');
     expect(sidebar.className).toContain('fixed');
@@ -101,7 +101,10 @@ describe('admin LTR layout', () => {
     expect(sidebar.className).not.toContain('right-0');
 
     const content = screen.getByTestId('admin-content-wrapper');
-    expect(content.className).toContain('lg:ml-64');
+    expect(content.className).toContain('lg:pl-64');
+    expect(content.className).toContain('min-w-0');
+    expect(content.className).toContain('max-w-full');
+    expect(content.className).not.toContain('lg:ml-64');
     expect(content.className).not.toContain('lg:mr-64');
   });
 

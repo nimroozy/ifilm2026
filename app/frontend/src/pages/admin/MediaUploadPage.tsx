@@ -100,8 +100,8 @@ export default function MediaUploadPage() {
   }
 
   return (
-    <div className="space-y-8" data-testid="media-upload-page">
-      <div className="flex items-start justify-between gap-4">
+    <div className="min-w-0 max-w-full space-y-8" data-testid="media-upload-page">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-serif font-bold text-foreground">Media Upload</h1>
           <p className="text-sm text-muted-foreground mt-1">
