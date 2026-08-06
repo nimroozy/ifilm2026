@@ -11,6 +11,7 @@ from app.services.demo.artwork import write_rgb_png
 from app.services.demo.cleanup import build_cleanup_plan
 from app.services.tmdb.artwork import ArtworkError, store_artwork_bytes, validate_artwork_url
 from app.services.tmdb.client import TMDBClient, TMDBClientError
+from app.services.tmdb.curated import REAL_DEMO_SEED_VERSION
 from app.services.tmdb.import_service import import_movie, import_series, refresh_demo_metadata
 from app.services.tmdb.trailers import select_trailer
 from tests.conftest import TEST_JWT
@@ -161,7 +162,7 @@ def test_tmdb_client_search_and_token_redaction():
 def test_movie_import_duplicate_trailer_and_offline_catalog(db_session, tmp_path: Path):
     settings = _settings(tmp_path)
     fake = FakeTMDB()
-    result = import_movie(db_session, settings, 100, client=fake, demo_owned=True, seed_version="2.0.0")
+    result = import_movie(db_session, settings, 100, client=fake, demo_owned=True, seed_version=REAL_DEMO_SEED_VERSION)
     db_session.commit()
     movie = db_session.get(Movie, result.entity_id)
     assert movie.status == "draft"
@@ -172,7 +173,7 @@ def test_movie_import_duplicate_trailer_and_offline_catalog(db_session, tmp_path
     assert movie.trailer_key == "abc123"
     assert movie.trailer_url == "https://www.youtube-nocookie.com/embed/abc123"
 
-    duplicate = import_movie(db_session, settings, 100, client=fake, demo_owned=True, seed_version="2.0.0")
+    duplicate = import_movie(db_session, settings, 100, client=fake, demo_owned=True, seed_version=REAL_DEMO_SEED_VERSION)
     db_session.commit()
     assert duplicate.entity_id == result.entity_id
     assert db_session.query(Movie).filter(Movie.tmdb_id == 100).count() == 1
@@ -189,7 +190,7 @@ def test_series_import_episode_ownership(db_session, tmp_path: Path):
         200,
         client=FakeTMDB(),
         demo_owned=True,
-        seed_version="2.0.0",
+        seed_version=REAL_DEMO_SEED_VERSION,
         seasons_limit=1,
         episodes_per_season=1,
     )
@@ -210,7 +211,7 @@ def test_translation_fallback(db_session, tmp_path: Path):
             return _movie_details(id=tmdb_id, title="", overview="")
 
     settings = _settings(tmp_path, tmdb_fallback_language="fa-AF")
-    result = import_movie(db_session, settings, 101, client=FallbackTMDB(), demo_owned=True, seed_version="2.0.0")
+    result = import_movie(db_session, settings, 101, client=FallbackTMDB(), demo_owned=True, seed_version=REAL_DEMO_SEED_VERSION)
     db_session.commit()
     movie = db_session.get(Movie, result.entity_id)
     assert movie.title == "Fallback Title"
@@ -233,7 +234,7 @@ def test_image_validation_and_ssrf_rejection(tmp_path: Path):
 def test_refresh_demo_metadata_only(db_session, tmp_path: Path):
     settings = _settings(tmp_path)
     fake = FakeTMDB()
-    demo = import_movie(db_session, settings, 100, client=fake, demo_owned=True, seed_version="2.0.0")
+    demo = import_movie(db_session, settings, 100, client=fake, demo_owned=True, seed_version=REAL_DEMO_SEED_VERSION)
     real = Movie(title="Real", slug="real", tmdb_id=999, status="draft", metadata_source="tmdb", demo_owned=False)
     db_session.add(real)
     db_session.commit()
@@ -269,8 +270,64 @@ def test_cleanup_isolates_demo_owned_rows(db_session, tmp_path: Path):
     plan = build_cleanup_plan(db_session, settings)
     assert demo.id in plan.movie_ids
     assert real.id not in plan.movie_ids
+    assert any("Demo" in title for title in plan.movie_titles)
+    assert not any("Real" in title and "real-movie" in title for title in plan.movie_titles)
 
 
 def test_public_movies_200_after_model_update(client):
     response = client.get("/api/movies")
     assert response.status_code == 200
+
+
+def test_curated_real_demo_v3_catalog_shape():
+    from app.services.tmdb.curated import (
+        CURATED_MOVIES,
+        CURATED_SERIES,
+        REAL_DEMO_SEED_VERSION,
+        curated_episode_clip_count,
+        curated_movie_clip_count,
+    )
+
+    assert REAL_DEMO_SEED_VERSION == "3.0.0"
+    assert len(CURATED_MOVIES) >= 15
+    assert len(CURATED_SERIES) >= 5
+    assert curated_movie_clip_count() >= 6
+    assert curated_episode_clip_count() >= 6
+    movie_ids = [m.tmdb_id for m in CURATED_MOVIES]
+    series_ids = [s.tmdb_id for s in CURATED_SERIES]
+    assert len(movie_ids) == len(set(movie_ids))
+    assert len(series_ids) == len(set(series_ids))
+    genre_labels = {g for m in CURATED_MOVIES for g in m.genres}
+    for required in (
+        "Action",
+        "Drama",
+        "Comedy",
+        "Family",
+        "Animation",
+        "Thriller",
+        "Science Fiction",
+        "Documentary",
+    ):
+        assert required in genre_labels
+    for series in CURATED_SERIES:
+        assert series.seasons <= 2
+        assert series.episodes_per_season <= 3
+
+
+def test_remove_fake_demo_cli_is_dry_run_by_default(monkeypatch, tmp_path: Path):
+    from scripts import remove_fake_demo, real_demo_dry_run
+
+    calls: list[list[str] | None] = []
+
+    def fake_main(argv=None):
+        calls.append(list(argv) if argv is not None else None)
+        return 0
+
+    monkeypatch.setattr(remove_fake_demo, "remove_demo_main", fake_main)
+    monkeypatch.setattr(real_demo_dry_run, "remove_demo_main", fake_main)
+    assert remove_fake_demo.main([]) == 0
+    assert remove_fake_demo.main(["--confirm"]) == 0
+    assert real_demo_dry_run.main(["--confirm"]) == 0
+    assert calls[0] == []
+    assert calls[1] == ["--confirm"]
+    assert calls[2] == []  # confirm stripped for dry-run alias

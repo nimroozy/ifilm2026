@@ -170,7 +170,7 @@ def _attach_episode_clips(
                 work_dir=demo_work_dir(settings),
                 label=f"tmdb-demo-clip-episode-{episode.tmdb_id or episode.id}",
                 episode_id=episode.id,
-                duration_seconds=18,
+                duration_seconds=22,
             )
             episode.has_demo_clip = True
             db.add(episode)
@@ -241,6 +241,11 @@ def seed_real_demo(
         _track_unique(ownership.artwork_files, result.artwork_files)
         if curated_movie.with_demo_clip and not skip_media:
             _attach_movie_clip(db, settings, ownership, movie, actor, report)
+        if curated_movie.featured or curated_movie.trending:
+            movie.is_featured = bool(curated_movie.featured)
+            movie.is_trending = bool(curated_movie.trending)
+            db.add(movie)
+            db.flush()
         try:
             _apply_movie_status(db, movie, curated_movie.status, actor, report)
         except Exception as exc:  # noqa: BLE001
@@ -267,6 +272,11 @@ def seed_real_demo(
         _track_unique(ownership.season_ids, result.season_ids)
         _track_unique(ownership.episode_ids, result.episode_ids)
         _track_unique(ownership.artwork_files, result.artwork_files)
+        if curated_series.featured or curated_series.trending:
+            series.is_featured = bool(curated_series.featured)
+            series.is_trending = bool(curated_series.trending)
+            db.add(series)
+            db.flush()
         if not skip_media:
             _attach_episode_clips(db, settings, ownership, series, actor, report, curated_series.with_demo_clips)
         try:

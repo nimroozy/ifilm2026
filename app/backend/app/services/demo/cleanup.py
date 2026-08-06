@@ -45,23 +45,41 @@ class CleanupPlan:
     artwork_files: list[str] = field(default_factory=list)
     media_files: list[str] = field(default_factory=list)
     watch_progress_ids: list[int] = field(default_factory=list)
+    publication_event_ids: list[int] = field(default_factory=list)
+    movie_titles: list[str] = field(default_factory=list)
+    series_titles: list[str] = field(default_factory=list)
 
     def summary_lines(self) -> list[str]:
-        return [
+        lines = [
             "Demo cleanup dry-run summary (demo-owned only):",
             f"  admins: {len(self.admin_usernames)} {self.admin_usernames}",
             f"  admin_roles: {len(self.admin_role_names)} {self.admin_role_names}",
             f"  subscribers: {len(self.subscriber_usernames)} {self.subscriber_usernames}",
             f"  genres_created: {len(self.genre_ids)} {self.genre_ids}",
             f"  movies: {len(self.movie_ids)}",
-            f"  series: {len(self.series_ids)}",
-            f"  seasons: {len(self.season_ids)}",
-            f"  episodes: {len(self.episode_ids)}",
-            f"  media_assets: {len(self.media_asset_ids)}",
-            f"  packages: {len(self.package_ids)}",
-            f"  artwork_files: {len(self.artwork_files)}",
-            f"  watch_progress: {len(self.watch_progress_ids)}",
         ]
+        for title in self.movie_titles[:40]:
+            lines.append(f"    - movie: {title}")
+        if len(self.movie_titles) > 40:
+            lines.append(f"    … {len(self.movie_titles) - 40} more movies")
+        lines.append(f"  series: {len(self.series_ids)}")
+        for title in self.series_titles[:40]:
+            lines.append(f"    - series: {title}")
+        if len(self.series_titles) > 40:
+            lines.append(f"    … {len(self.series_titles) - 40} more series")
+        lines.extend(
+            [
+                f"  seasons: {len(self.season_ids)}",
+                f"  episodes: {len(self.episode_ids)}",
+                f"  media_assets: {len(self.media_asset_ids)}",
+                f"  packages: {len(self.package_ids)}",
+                f"  artwork_files: {len(self.artwork_files)}",
+                f"  media_files: {len(self.media_files)}",
+                f"  watch_progress: {len(self.watch_progress_ids)}",
+                f"  publication_events: {len(self.publication_event_ids)}",
+            ]
+        )
+        return lines
 
 
 def build_cleanup_plan(db: Session, settings: Settings) -> CleanupPlan:
@@ -137,6 +155,63 @@ def build_cleanup_plan(db: Session, settings: Settings) -> CleanupPlan:
         }:
             safe_admins.append(username)
     plan.admin_usernames = safe_admins
+
+    if plan.movie_ids:
+        movies = db.query(Movie).filter(Movie.id.in_(plan.movie_ids)).order_by(Movie.id).all()
+        plan.movie_titles = [
+            f"{m.title} (id={m.id}, tmdb={m.tmdb_id}, demo_owned={bool(m.demo_owned)}, slug={m.slug})"
+            for m in movies
+        ]
+    if plan.series_ids:
+        series_rows = db.query(Series).filter(Series.id.in_(plan.series_ids)).order_by(Series.id).all()
+        plan.series_titles = [
+            f"{s.title} (id={s.id}, tmdb={s.tmdb_id}, demo_owned={bool(s.demo_owned)}, slug={s.slug})"
+            for s in series_rows
+        ]
+
+    # Publication events tied to demo catalog entities (dry-run visibility).
+    pub_ids: list[int] = []
+    if plan.movie_ids:
+        pub_ids.extend(
+            e.id
+            for e in db.query(MediaPublicationEvent)
+            .filter(
+                MediaPublicationEvent.entity_type == "movie",
+                MediaPublicationEvent.entity_id.in_(plan.movie_ids),
+            )
+            .all()
+        )
+    if plan.series_ids:
+        pub_ids.extend(
+            e.id
+            for e in db.query(MediaPublicationEvent)
+            .filter(
+                MediaPublicationEvent.entity_type == "series",
+                MediaPublicationEvent.entity_id.in_(plan.series_ids),
+            )
+            .all()
+        )
+    if plan.season_ids:
+        pub_ids.extend(
+            e.id
+            for e in db.query(MediaPublicationEvent)
+            .filter(
+                MediaPublicationEvent.entity_type == "season",
+                MediaPublicationEvent.entity_id.in_(plan.season_ids),
+            )
+            .all()
+        )
+    if plan.episode_ids:
+        pub_ids.extend(
+            e.id
+            for e in db.query(MediaPublicationEvent)
+            .filter(
+                MediaPublicationEvent.entity_type == "episode",
+                MediaPublicationEvent.entity_id.in_(plan.episode_ids),
+            )
+            .all()
+        )
+    plan.publication_event_ids = sorted(set(pub_ids))
     return plan
 
 

@@ -9,14 +9,19 @@ Inside the API container (runtime.env sourced):
 
 ```bash
 DEMO_SEED_ALLOW_PROD=true python -m scripts.seed_demo
+python -m scripts.real_demo_dry_run      # dry-run summary (demo-owned only)
+python -m scripts.remove_fake_demo       # dry-run alias
 python -m scripts.remove_demo            # dry-run
-python -m scripts.remove_demo --confirm  # delete demo-owned data only
+python -m scripts.remove_fake_demo --confirm  # delete demo-owned data only
+python -m scripts.remove_demo --confirm  # same cleanup path
 ```
 
 On a Compose host:
 
 ```bash
 sudo bash /opt/ifilm/current/packaging/scripts/run_demo_seed.sh
+# TMDB-backed realistic catalog (v3):
+sudo bash /opt/ifilm/current/packaging/scripts/run_real_demo_seed.sh
 ```
 
 ## Identity
