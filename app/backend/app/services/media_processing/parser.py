@@ -195,11 +195,12 @@ def parse_ffprobe_payload(
     subtitle_count = sum(1 for s in streams if s.get("codec_type") in {"subtitle", "text"})
 
     def _stream_lang(stream: dict[str, Any]) -> str | None:
-        tags = stream.get("tags") if isinstance(stream.get("tags"), dict) else {}
-        raw = tags.get("language") or tags.get("LANGUAGE")
-        if raw is None or str(raw).strip() == "":
+        raw_tags = stream.get("tags")
+        tags: dict[str, Any] = raw_tags if isinstance(raw_tags, dict) else {}
+        lang_raw = tags.get("language") or tags.get("LANGUAGE")
+        if lang_raw is None or str(lang_raw).strip() == "":
             return None
-        return str(raw).strip()
+        return str(lang_raw).strip()
 
     audio_track_languages = [
         lang
