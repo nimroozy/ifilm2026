@@ -433,7 +433,7 @@ def test_curated_real_demo_v3_catalog_shape():
 
 
 def test_remove_fake_demo_cli_is_dry_run_by_default(monkeypatch, tmp_path: Path):
-    from scripts import remove_fake_demo, real_demo_dry_run
+    from scripts import real_demo_dry_run, remove_fake_demo
 
     calls: list[list[str] | None] = []
 
