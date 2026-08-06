@@ -43,7 +43,7 @@ def list_public_collections(
     collection_type: str | None = None,
     featured: bool | None = None,
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=50),
+    page_size: int = Query(20, ge=1, le=100),
 ) -> Envelope[CollectionPublicOut]:
     rows, total = collections_service.list_public_collections(
         db,
