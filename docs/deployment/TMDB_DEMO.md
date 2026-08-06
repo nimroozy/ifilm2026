@@ -40,12 +40,13 @@ From inside the API container runtime environment:
 ```bash
 set -a; . /run/ifilm/runtime.env; set +a
 
-# Dry-run: list demo-owned rows that would be removed (never deletes)
+# Dry-run: list fake-demo rows that would be removed (never deletes).
+# Retains TMDB real demo, non-demo catalog, admins, and audit tombstones.
 python -m scripts.real_demo_dry_run
-# Alias of remove_demo without --confirm
+# Alias of remove_demo --fake-only without --confirm
 python -m scripts.remove_fake_demo
 
-# Apply demo-owned cleanup only (preserves non-demo content)
+# Apply fake-demo cleanup only (preserves TMDB demo catalog + admins/audit)
 python -m scripts.remove_fake_demo --confirm
 
 DEMO_SEED_ALLOW_PROD=true python -m scripts.seed_real_demo

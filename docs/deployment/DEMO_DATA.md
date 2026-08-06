@@ -56,4 +56,17 @@ Ownership JSON: `{ARTWORK_ROOT}/.demo/ownership.json`
 ## Cleanup
 
 `python -m scripts.remove_demo` always prints a dry-run summary first.  
-`--confirm` deletes only demo-owned users/content/media/files tracked by ownership (plus `demo-` slug fallback).
+`--confirm` deletes only demo-owned catalog/media tracked by ownership / `demo_owned`.
+
+**Retention rules**
+
+- Non-demo catalog is never deleted.
+- Admin accounts and roles are never deleted by cleanup (preserves
+  `media_assets_created_by_admin_id_fkey` and audit integrity).
+- Publication events for removed entities are **tombstoned** (retained with
+  sanitized metadata), not deleted.
+- `remove_fake_demo` / `real_demo_dry_run` remove **synthetic/fake** demo rows
+  only and retain TMDB-backed real demo catalog (`metadata_source=tmdb`).
+- `remove_demo` may remove all `demo_owned` rows including TMDB demo.
+
+Dry-run sections: `DELETE` / `DETACH` / `RETAIN` / `TOMBSTONE` / `FK NOTES`.
