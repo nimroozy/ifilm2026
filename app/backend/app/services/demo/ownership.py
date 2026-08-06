@@ -52,6 +52,8 @@ class DemoOwnership:
     artwork_files: list[str] = field(default_factory=list)
     media_files: list[str] = field(default_factory=list)
     watch_progress_ids: list[int] = field(default_factory=list)
+    collection_ids: list[int] = field(default_factory=list)
+    collection_slugs: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -74,6 +76,8 @@ class DemoOwnership:
             "artwork_files": sorted(set(self.artwork_files)),
             "media_files": sorted(set(self.media_files)),
             "watch_progress_ids": sorted(set(self.watch_progress_ids)),
+            "collection_ids": sorted(set(self.collection_ids)),
+            "collection_slugs": sorted(set(self.collection_slugs)),
         }
 
     @classmethod
@@ -98,6 +102,8 @@ class DemoOwnership:
             artwork_files=list(data.get("artwork_files") or []),
             media_files=list(data.get("media_files") or []),
             watch_progress_ids=[int(x) for x in (data.get("watch_progress_ids") or [])],
+            collection_ids=[int(x) for x in (data.get("collection_ids") or [])],
+            collection_slugs=list(data.get("collection_slugs") or []),
         )
 
 

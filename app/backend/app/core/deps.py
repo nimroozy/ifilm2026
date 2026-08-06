@@ -10,6 +10,8 @@ Legacy coarse keys from the foundation seed remain supported with a narrow map:
 | `series.manage` | `series.manage`, `series` |
 | `genres.read` | `genres.read`, `genres.manage`, `genres` |
 | `genres.manage` | `genres.manage`, `genres` |
+| `collections.read` | `collections.read`, `collections.manage`, `collections` |
+| `collections.manage` | `collections.manage`, `collections` |
 | `upload.read` | `upload.read`, `upload.manage`, `upload` |
 | `upload.manage` | `upload.manage`, `upload` |
 | `processing.read` | `processing.read`, `processing.manage`, `processing` |
@@ -53,6 +55,8 @@ PERMISSION_ALIASES: dict[str, frozenset[str]] = {
     "series.manage": frozenset({"series.manage", "series"}),
     "genres.read": frozenset({"genres.read", "genres.manage", "genres"}),
     "genres.manage": frozenset({"genres.manage", "genres"}),
+    "collections.read": frozenset({"collections.read", "collections.manage", "collections"}),
+    "collections.manage": frozenset({"collections.manage", "collections"}),
     "upload.read": frozenset({"upload.read", "upload.manage", "upload"}),
     "upload.manage": frozenset({"upload.manage", "upload"}),
     "processing.read": frozenset({"processing.read", "processing.manage", "processing"}),

@@ -18,6 +18,7 @@ from app.core.config import Settings
 from app.core.security import hash_password, verify_password
 from app.models.admin import AdminRole, AdminUser
 from app.models.content import Episode, Genre, Movie, Season, Series
+from app.models.collections import Collection
 from app.models.media_encoding import MediaRendition
 from app.models.user import Subscriber
 from app.models.watch_progress import UserWatchProgress
@@ -39,6 +40,7 @@ from app.services.demo.media import (
 )
 from app.services.demo.ownership import DemoOwnership, load_ownership, save_ownership, utcnow_iso
 from app.services.demo.settings_store import mark_demo_installed
+from app.services.collections import seed_demo_collections
 from app.services.publishing import workflow
 from app.services.watch_history import upsert_progress
 from app.utils.slug import normalize_slug
@@ -56,6 +58,7 @@ class SeedReport:
     series: int = 0
     seasons: int = 0
     episodes: int = 0
+    collections: int = 0
     media_assets: int = 0
     active_hls_packages: int = 0
     published_items: int = 0
@@ -72,6 +75,7 @@ class SeedReport:
             "series": self.series,
             "seasons": self.seasons,
             "episodes": self.episodes,
+            "collections": self.collections,
             "media_assets": self.media_assets,
             "active_hls_packages": self.active_hls_packages,
             "published_items": self.published_items,
@@ -867,6 +871,29 @@ def run_seed(
     )
     db.flush()
     _seed_watch_history(db, ownership, movies, report)
+
+    collection_seed = seed_demo_collections(db, admin_id=actor.id if actor else None)
+    ownership.collection_ids = list(
+        dict.fromkeys([*ownership.collection_ids, *collection_seed.get("collection_ids", [])])
+    )
+    if ownership.collection_ids:
+        ownership.collection_slugs = sorted(
+            {
+                *ownership.collection_slugs,
+                *(
+                    row[0]
+                    for row in db.query(Collection.slug)
+                    .filter(Collection.id.in_(ownership.collection_ids))
+                    .all()
+                ),
+            }
+        )
+    report.collections = len(ownership.collection_ids)
+    if collection_seed.get("skipped"):
+        report.deviations.append(
+            f"collections seed skipped={collection_seed['skipped']} "
+            f"(insufficient published matches or non-demo slug conflict)"
+        )
 
     mark_demo_installed(
         db,

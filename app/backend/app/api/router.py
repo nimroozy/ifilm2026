@@ -5,6 +5,7 @@ from app.api.routes import (
     admin_catalog,
     auth,
     cdn,
+    collections,
     config,
     encoding,
     genres,
@@ -33,6 +34,7 @@ api_router.include_router(movies.router)
 api_router.include_router(series.router)
 api_router.include_router(seasons.router)
 api_router.include_router(genres.router)
+api_router.include_router(collections.router)
 api_router.include_router(admin_catalog.router)
 api_router.include_router(publishing.router)
 api_router.include_router(search.router)
