@@ -45,25 +45,25 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 max-w-full space-y-6" data-testid="dashboard-page">
       <PageHeader
         title="Dashboard"
         description="Catalog counts from the live admin API."
         actions={
           <>
-            <Button asChild className="gap-2">
+            <Button asChild className="gap-2 shrink-0">
               <Link to="/admin/movies/new">
                 <Plus className="h-4 w-4" />
                 New Movie
               </Link>
             </Button>
-            <Button asChild className="gap-2">
+            <Button asChild className="gap-2 shrink-0">
               <Link to="/admin/series/new">
                 <Plus className="h-4 w-4" />
                 New Series
               </Link>
             </Button>
-            <Button asChild variant="outline" className="gap-2">
+            <Button asChild variant="outline" className="gap-2 shrink-0">
               <Link to="/admin/tools/tmdb">
                 <Database className="h-4 w-4" />
                 Import TMDB
@@ -72,20 +72,25 @@ export default function DashboardPage() {
           </>
         }
       />
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4" data-testid="dashboard-stats">
+      <div
+        className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4"
+        data-testid="dashboard-stats"
+      >
         {cards.map((stat) => (
           <Card
             key={stat.label}
-            className="border-border/80 bg-card/80 shadow-sm transition-shadow hover:shadow-md"
+            className="min-w-0 border-border/80 bg-card/80 shadow-sm transition-shadow hover:shadow-md"
           >
             <CardContent className="pb-3 pt-4">
-              <div className="flex items-center justify-between">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted/80">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted/80">
                   <stat.icon className={`h-4 w-4 ${stat.color}`} />
                 </div>
-                <span className="font-display text-2xl font-bold text-foreground">{stat.value}</span>
+                <span className="font-display text-2xl font-bold tabular-nums text-foreground">
+                  {stat.value}
+                </span>
               </div>
-              <p className="mt-3 text-xs font-medium text-muted-foreground">{stat.label}</p>
+              <p className="mt-3 truncate text-xs font-medium text-muted-foreground">{stat.label}</p>
             </CardContent>
           </Card>
         ))}

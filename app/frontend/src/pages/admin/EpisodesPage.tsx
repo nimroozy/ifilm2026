@@ -21,7 +21,14 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { adminApi, ApiError, type EpisodeDto, type SeasonDto } from '@/lib/api';
-import { EmptyState, ErrorState, LoadingBlock, StatusBadge } from './adminShared';
+import {
+  AdminTableCard,
+  EmptyState,
+  ErrorState,
+  LoadingBlock,
+  PageHeader,
+  StatusBadge,
+} from './adminShared';
 
 const createSchema = z.object({
   episode_number: z.coerce.number().int().min(0).max(10000),
@@ -108,28 +115,29 @@ export default function EpisodesPage() {
   if (error) return <ErrorState message={error} onRetry={load} />;
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-semibold text-foreground">Episodes</h2>
-          <p className="text-sm text-muted-foreground">
-            Season {season?.season_number}
-            {season?.title ? ` — ${season.title}` : ''}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" asChild>
-            <Link to={`/admin/seasons/${seasonId}/edit`}>Edit season</Link>
-          </Button>
-          {season && (
-            <Button variant="outline" asChild>
-              <Link to={`/admin/series/${season.series_id}/seasons`}>Back to seasons</Link>
+    <div className="min-w-0 max-w-full space-y-4" data-testid="episodes-page">
+      <PageHeader
+        title="Episodes"
+        description={
+          season
+            ? `Season ${season.season_number}${season.title ? ` — ${season.title}` : ''}`
+            : undefined
+        }
+        actions={
+          <>
+            <Button variant="outline" className="shrink-0" asChild>
+              <Link to={`/admin/seasons/${seasonId}/edit`}>Edit season</Link>
             </Button>
-          )}
-        </div>
-      </div>
+            {season && (
+              <Button variant="outline" className="shrink-0" asChild>
+                <Link to={`/admin/series/${season.series_id}/seasons`}>Back to seasons</Link>
+              </Button>
+            )}
+          </>
+        }
+      />
 
-      <Card className="bg-card border-border">
+      <Card className="min-w-0 border-border bg-card">
         <CardHeader>
           <CardTitle className="text-base">Add episode</CardTitle>
         </CardHeader>
@@ -201,59 +209,58 @@ export default function EpisodesPage() {
           }
         />
       ) : (
-        <Card className="bg-card border-border">
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>#</TableHead>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Duration</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
+        <AdminTableCard minWidthClassName="min-w-[480px]">
+          <Table>
+            <TableHeader className="sticky top-0 z-10 bg-card">
+              <TableRow>
+                <TableHead>#</TableHead>
+                <TableHead>Title</TableHead>
+                <TableHead className="hidden sm:table-cell">Duration</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="sticky right-0 bg-card text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {episodes.map((ep) => (
+                <TableRow key={ep.id} data-testid={`episode-row-${ep.episode_number}`}>
+                  <TableCell>{ep.episode_number}</TableCell>
+                  <TableCell className="max-w-[14rem] truncate font-medium" title={ep.title}>
+                    {ep.title}
+                  </TableCell>
+                  <TableCell className="hidden sm:table-cell">
+                    {ep.duration_minutes ?? ep.duration ?? '—'} min
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge status={ep.status} />
+                  </TableCell>
+                  <TableCell className="sticky right-0 bg-card text-right">
+                    <div className="inline-flex gap-1">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+                        <Link to={`/admin/episodes/${ep.id}/edit`} aria-label="Edit episode">
+                          <Edit className="h-3.5 w-3.5" />
+                        </Link>
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+                        <Link to={`/admin/episodes/${ep.id}/edit`} aria-label="Manage episode publishing">
+                          <Eye className="h-3.5 w-3.5" />
+                        </Link>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-destructive"
+                        onClick={() => setDeleteId(ep.id)}
+                        aria-label="Delete episode"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {episodes.map((ep) => (
-                  <TableRow key={ep.id} data-testid={`episode-row-${ep.episode_number}`}>
-                    <TableCell>{ep.episode_number}</TableCell>
-                    <TableCell className="font-medium">{ep.title}</TableCell>
-                    <TableCell>{ep.duration_minutes ?? ep.duration ?? '—'} min</TableCell>
-                    <TableCell>
-                      <StatusBadge status={ep.status} />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
-                          <Link to={`/admin/episodes/${ep.id}/edit`} aria-label="Edit episode">
-                            <Edit className="h-3.5 w-3.5" />
-                          </Link>
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
-                          <Link
-                            to={`/admin/episodes/${ep.id}/edit`}
-                            aria-label="Manage episode publishing"
-                          >
-                            <Eye className="h-3.5 w-3.5" />
-                          </Link>
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-destructive"
-                          onClick={() => setDeleteId(ep.id)}
-                          aria-label="Delete episode"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+              ))}
+            </TableBody>
+          </Table>
+        </AdminTableCard>
       )}
 
       <AlertDialog open={deleteId != null} onOpenChange={(open) => !open && setDeleteId(null)}>

@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, Edit, Trash2, Eye, Database } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Eye, Database, MoreHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,7 +23,76 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { adminApi, ApiError, type GenreDto, type MovieDto } from '@/lib/api';
-import { EmptyState, ErrorState, LoadingBlock, PageHeader, PosterThumb, StatusBadge } from './adminShared';
+import {
+  AdminTableCard,
+  EmptyState,
+  ErrorState,
+  LoadingBlock,
+  PageHeader,
+  PosterThumb,
+  StatusBadge,
+} from './adminShared';
+
+function movieSourceLabel(m: MovieDto): string {
+  if (m.has_external_media) return 'External';
+  if (m.has_playable_package) return 'Package';
+  if (m.tmdb_id) return 'TMDB meta';
+  return '—';
+}
+
+function MovieRowActions({
+  movie,
+  onDelete,
+}: {
+  movie: MovieDto;
+  onDelete: (id: number) => void;
+}) {
+  return (
+    <>
+      <div className="hidden gap-1 xl:flex" data-testid={`movie-actions-${movie.id}`}>
+        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" asChild>
+          <Link to={`/admin/movies/${movie.id}/edit`} aria-label="Edit">
+            <Edit className="h-3.5 w-3.5" />
+          </Link>
+        </Button>
+        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" asChild>
+          <Link to={`/admin/movies/${movie.id}/edit?tab=publishing`} aria-label="Manage movie publishing">
+            <Eye className="h-3.5 w-3.5" />
+          </Link>
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 shrink-0 text-destructive"
+          onClick={() => onDelete(movie.id)}
+          aria-label="Delete"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+      <div className="xl:hidden">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Row actions">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-[10rem]">
+            <DropdownMenuItem asChild>
+              <Link to={`/admin/movies/${movie.id}/edit`}>Edit</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link to={`/admin/movies/${movie.id}/edit?tab=publishing`}>Publishing</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => onDelete(movie.id)}>
+              Archive
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </>
+  );
+}
 
 export default function MoviesListPage() {
   const [items, setItems] = useState<MovieDto[]>([]);
@@ -85,19 +159,19 @@ export default function MoviesListPage() {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-4" data-testid="movies-list-page">
       <PageHeader
         title="Movies"
         description={`${total} total`}
         actions={
           <>
-            <Button asChild className="gap-2">
+            <Button asChild className="gap-2 shrink-0">
               <Link to="/admin/movies/new">
                 <Plus className="h-4 w-4" />
-                + New Movie
+                New Movie
               </Link>
             </Button>
-            <Button asChild variant="outline" className="gap-2">
+            <Button asChild variant="outline" className="gap-2 shrink-0">
               <Link to="/admin/tools/tmdb">
                 <Database className="h-4 w-4" />
                 Import TMDB
@@ -107,9 +181,9 @@ export default function MoviesListPage() {
         }
       />
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      <div className="flex min-w-0 flex-wrap items-center gap-3">
+        <div className="relative min-w-[200px] max-w-full flex-1 sm:max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search movies..."
             value={q}
@@ -127,7 +201,7 @@ export default function MoviesListPage() {
             setStatus(v);
           }}
         >
-          <SelectTrigger className="w-[140px]">
+          <SelectTrigger className="w-full sm:w-[140px]">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -148,7 +222,7 @@ export default function MoviesListPage() {
             setGenre(v);
           }}
         >
-          <SelectTrigger className="w-[140px]">
+          <SelectTrigger className="w-full sm:w-[140px]">
             <SelectValue placeholder="Genre" />
           </SelectTrigger>
           <SelectContent>
@@ -167,7 +241,7 @@ export default function MoviesListPage() {
             setYear(v);
           }}
         >
-          <SelectTrigger className="w-[120px]">
+          <SelectTrigger className="w-full sm:w-[120px]">
             <SelectValue placeholder="Year" />
           </SelectTrigger>
           <SelectContent>
@@ -193,7 +267,7 @@ export default function MoviesListPage() {
               <Button asChild size="sm" className="gap-2">
                 <Link to="/admin/movies/new">
                   <Plus className="h-4 w-4" />
-                  + New Movie
+                  New Movie
                 </Link>
               </Button>
               <Button asChild size="sm" variant="outline" className="gap-2">
@@ -206,88 +280,98 @@ export default function MoviesListPage() {
           }
         />
       ) : (
-        <Card className="bg-card border-border">
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Poster</TableHead>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Year</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Playable</TableHead>
-                  <TableHead>Source</TableHead>
-                  <TableHead>Updated</TableHead>
-                  <TableHead>Flags</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {items.map((m) => (
-                  <TableRow key={m.id} data-testid={`movie-row-${m.id}`}>
-                    <TableCell>
-                      <PosterThumb src={m.poster_url || m.poster} alt={m.title} />
-                    </TableCell>
-                    <TableCell className="font-medium">{m.title}</TableCell>
-                    <TableCell>{m.release_year ?? m.year ?? '—'}</TableCell>
-                    <TableCell>
-                      <StatusBadge status={m.status} />
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={m.playable ? 'playable' : 'unavailable'} />
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {m.has_external_media
-                        ? 'External'
-                        : m.has_playable_package
-                          ? 'Package'
-                          : m.tmdb_id
-                            ? 'TMDB meta'
-                            : '—'}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                      {m.updated_at
-                        ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(m.updated_at))
-                        : '—'}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {[m.is_featured || m.featured ? 'Featured' : null, m.is_trending ? 'Trending' : null]
-                        .filter(Boolean)
-                        .join(', ') || '—'}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
-                          <Link to={`/admin/movies/${m.id}/edit`} aria-label="Edit">
-                            <Edit className="h-3.5 w-3.5" />
-                          </Link>
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
-                          <Link to={`/admin/movies/${m.id}/edit?tab=publishing`} aria-label="Manage movie publishing">
-                            <Eye className="h-3.5 w-3.5" />
-                          </Link>
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-destructive"
-                          onClick={() => setDeleteId(m.id)}
-                          aria-label="Delete"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </TableCell>
+        <>
+          {/* Mobile / narrow: card list */}
+          <ul className="space-y-3 md:hidden" data-testid="movies-mobile-list">
+            {items.map((m) => (
+              <li
+                key={m.id}
+                className="flex min-w-0 items-start gap-3 rounded-xl border border-border bg-card p-3"
+                data-testid={`movie-card-${m.id}`}
+              >
+                <PosterThumb src={m.poster_url || m.poster} alt={m.title} />
+                <div className="min-w-0 flex-1 space-y-1">
+                  <p className="truncate font-medium text-foreground">{m.title}</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <StatusBadge status={m.status} />
+                    <StatusBadge status={m.playable ? 'playable' : 'unavailable'} />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {movieSourceLabel(m)}
+                    {m.release_year || m.year ? ` · ${m.release_year ?? m.year}` : ''}
+                  </p>
+                </div>
+                <MovieRowActions movie={m} onDelete={setDeleteId} />
+              </li>
+            ))}
+          </ul>
+
+          {/* Desktop / tablet: responsive table */}
+          <div className="hidden min-w-0 md:block" data-testid="movies-table-desktop">
+            <AdminTableCard minWidthClassName="min-w-[640px]">
+              <Table>
+                <TableHeader className="sticky top-0 z-10 bg-card">
+                  <TableRow>
+                    <TableHead className="w-14">Poster</TableHead>
+                    <TableHead className="min-w-[10rem]">Title</TableHead>
+                    <TableHead className="hidden lg:table-cell">Year</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Playable</TableHead>
+                    <TableHead className="hidden lg:table-cell">Source</TableHead>
+                    <TableHead className="hidden xl:table-cell">Updated</TableHead>
+                    <TableHead className="hidden 2xl:table-cell">Flags</TableHead>
+                    <TableHead className="sticky right-0 bg-card text-right">Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                </TableHeader>
+                <TableBody>
+                  {items.map((m) => (
+                    <TableRow key={m.id} data-testid={`movie-row-${m.id}`}>
+                      <TableCell>
+                        <PosterThumb src={m.poster_url || m.poster} alt={m.title} />
+                      </TableCell>
+                      <TableCell className="max-w-[14rem] truncate font-medium" title={m.title}>
+                        {m.title}
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell">
+                        {m.release_year ?? m.year ?? '—'}
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={m.status} />
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={m.playable ? 'playable' : 'unavailable'} />
+                      </TableCell>
+                      <TableCell className="hidden text-xs text-muted-foreground lg:table-cell">
+                        {movieSourceLabel(m)}
+                      </TableCell>
+                      <TableCell className="hidden whitespace-nowrap text-xs text-muted-foreground xl:table-cell">
+                        {m.updated_at
+                          ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(
+                              new Date(m.updated_at)
+                            )
+                          : '—'}
+                      </TableCell>
+                      <TableCell className="hidden text-xs text-muted-foreground 2xl:table-cell">
+                        {[m.is_featured || m.featured ? 'Featured' : null, m.is_trending ? 'Trending' : null]
+                          .filter(Boolean)
+                          .join(', ') || '—'}
+                      </TableCell>
+                      <TableCell className="sticky right-0 bg-card text-right">
+                        <div className="inline-flex justify-end">
+                          <MovieRowActions movie={m} onDelete={setDeleteId} />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </AdminTableCard>
+          </div>
+        </>
       )}
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
             Previous
           </Button>

@@ -15,7 +15,14 @@ import {
   type PlaybackSessionDto,
   type StreamingStatusDto,
 } from '@/lib/api';
-import { EmptyState, ErrorState, LoadingBlock, StatusBadge } from './adminShared';
+import {
+  AdminTableCard,
+  EmptyState,
+  ErrorState,
+  LoadingBlock,
+  PageHeader,
+  StatusBadge,
+} from './adminShared';
 
 const STATUSES = ['active', 'revoked', 'expired'];
 
@@ -73,18 +80,16 @@ export default function PlaybackSessionsPage() {
   if (error) return <ErrorState message={error} onRetry={() => void load()} />;
 
   return (
-    <div className="space-y-6" data-testid="playback-sessions-page">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-serif font-bold">Playback sessions</h1>
-          <p className="text-sm text-muted-foreground">
-            Protected HLS session inspection and revocation (raw tokens never shown)
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={() => void load()}>
-          Refresh
-        </Button>
-      </div>
+    <div className="min-w-0 max-w-full space-y-6" data-testid="playback-sessions-page">
+      <PageHeader
+        title="Playback sessions"
+        description="Protected HLS session inspection and revocation (raw tokens never shown)"
+        actions={
+          <Button variant="outline" size="sm" className="shrink-0" onClick={() => void load()}>
+            Refresh
+          </Button>
+        }
+      />
 
       {status && !status.enabled && (
         <p className="text-sm text-muted-foreground" data-testid="streaming-disabled">
@@ -101,11 +106,11 @@ export default function PlaybackSessionsPage() {
 
       {flash && <p className="text-sm text-primary">{flash}</p>}
 
-      <div className="flex flex-wrap gap-4 items-end">
-        <div className="space-y-1">
+      <div className="flex min-w-0 flex-wrap items-end gap-4">
+        <div className="min-w-0 space-y-1">
           <Label>Status</Label>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[160px]">
+            <SelectTrigger className="w-full sm:w-[160px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -118,14 +123,14 @@ export default function PlaybackSessionsPage() {
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1">
+        <div className="min-w-0 flex-1 space-y-1 sm:max-w-xs">
           <Label htmlFor="asset-filter">Asset ID</Label>
           <Input
             id="asset-filter"
             value={assetFilter}
             onChange={(e) => setAssetFilter(e.target.value)}
             placeholder="Filter by media asset"
-            className="w-[280px]"
+            className="w-full max-w-full"
           />
         </div>
       </div>
@@ -133,17 +138,17 @@ export default function PlaybackSessionsPage() {
       {sessions.length === 0 ? (
         <EmptyState message="No playback sessions. Create a session for an asset with an active HLS package." />
       ) : (
-        <div className="overflow-x-auto border border-border rounded-lg">
+        <AdminTableCard minWidthClassName="min-w-[640px]">
           <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-left">
+            <thead className="sticky top-0 z-10 bg-card text-left">
               <tr>
                 <th className="p-3 font-medium">Session</th>
                 <th className="p-3 font-medium">Asset</th>
-                <th className="p-3 font-medium">Package</th>
-                <th className="p-3 font-medium">Principal</th>
+                <th className="hidden p-3 font-medium md:table-cell">Package</th>
+                <th className="hidden p-3 font-medium lg:table-cell">Principal</th>
                 <th className="p-3 font-medium">Status</th>
-                <th className="p-3 font-medium">Expires</th>
-                <th className="p-3 font-medium">Actions</th>
+                <th className="hidden p-3 font-medium xl:table-cell">Expires</th>
+                <th className="sticky right-0 bg-card p-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -151,17 +156,19 @@ export default function PlaybackSessionsPage() {
                 <tr key={session.id} className="border-t border-border" data-testid={`session-row-${session.id}`}>
                   <td className="p-3 font-mono text-xs">{session.id.slice(0, 8)}…</td>
                   <td className="p-3 font-mono text-xs">{session.media_asset_id.slice(0, 8)}…</td>
-                  <td className="p-3 font-mono text-xs">{session.media_package_id.slice(0, 8)}…</td>
-                  <td className="p-3">
+                  <td className="hidden p-3 font-mono text-xs md:table-cell">
+                    {session.media_package_id.slice(0, 8)}…
+                  </td>
+                  <td className="hidden p-3 lg:table-cell">
                     {session.principal_type}:{session.principal_id}
                   </td>
                   <td className="p-3">
                     <StatusBadge status={session.status} />
                   </td>
-                  <td className="p-3 text-xs text-muted-foreground">
+                  <td className="hidden p-3 text-xs text-muted-foreground xl:table-cell">
                     {session.expires_at ? new Date(session.expires_at).toLocaleString() : '—'}
                   </td>
-                  <td className="p-3">
+                  <td className="sticky right-0 bg-card p-3 text-right">
                     {session.status === 'active' ? (
                       <Button
                         size="sm"
@@ -179,7 +186,7 @@ export default function PlaybackSessionsPage() {
               ))}
             </tbody>
           </table>
-        </div>
+        </AdminTableCard>
       )}
     </div>
   );

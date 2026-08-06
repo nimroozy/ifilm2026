@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { adminApi, ApiError, type GenreDto } from '@/lib/api';
-import { EmptyState, ErrorState, LoadingBlock } from './adminShared';
+import { AdminTableCard, EmptyState, ErrorState, LoadingBlock, PageHeader } from './adminShared';
 
 const schema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -120,11 +120,8 @@ export default function GenresPage() {
   if (error) return <ErrorState message={error} onRetry={load} />;
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-xl font-semibold text-foreground">Genres</h2>
-        <p className="text-sm text-muted-foreground">Manage catalog genres and usage.</p>
-      </div>
+    <div className="min-w-0 max-w-full space-y-4" data-testid="genres-page">
+      <PageHeader title="Genres" description="Manage catalog genres and usage." />
 
       {conflictError && (
         <Alert variant="destructive" data-testid="genre-conflict-error">
@@ -202,57 +199,57 @@ export default function GenresPage() {
       {items.length === 0 ? (
         <EmptyState message="No genres yet." />
       ) : (
-        <Card className="bg-card border-border">
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Slug</TableHead>
-                  <TableHead>Movies</TableHead>
-                  <TableHead>Series</TableHead>
-                  <TableHead>Actions</TableHead>
+        <AdminTableCard minWidthClassName="min-w-[480px]">
+          <Table>
+            <TableHeader className="sticky top-0 z-10 bg-card">
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead className="hidden sm:table-cell">Slug</TableHead>
+                <TableHead>Movies</TableHead>
+                <TableHead className="hidden md:table-cell">Series</TableHead>
+                <TableHead className="sticky right-0 bg-card text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {items.map((g) => (
+                <TableRow key={g.id} data-testid={`genre-row-${g.id}`}>
+                  <TableCell className="max-w-[12rem] truncate font-medium" title={g.name}>
+                    {g.name}
+                  </TableCell>
+                  <TableCell className="hidden text-muted-foreground sm:table-cell">{g.slug}</TableCell>
+                  <TableCell>{g.movie_count ?? 0}</TableCell>
+                  <TableCell className="hidden md:table-cell">{g.series_count ?? 0}</TableCell>
+                  <TableCell className="sticky right-0 bg-card text-right">
+                    <div className="inline-flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => startEdit(g)}
+                        aria-label="Edit genre"
+                      >
+                        <Edit className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-destructive"
+                        onClick={() => {
+                          setConflictError(null);
+                          setDeleteId(g.id);
+                        }}
+                        aria-label="Delete genre"
+                        data-testid={`genre-delete-${g.id}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {items.map((g) => (
-                  <TableRow key={g.id} data-testid={`genre-row-${g.id}`}>
-                    <TableCell className="font-medium">{g.name}</TableCell>
-                    <TableCell className="text-muted-foreground">{g.slug}</TableCell>
-                    <TableCell>{g.movie_count ?? 0}</TableCell>
-                    <TableCell>{g.series_count ?? 0}</TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => startEdit(g)}
-                          aria-label="Edit genre"
-                        >
-                          <Edit className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-destructive"
-                          onClick={() => {
-                            setConflictError(null);
-                            setDeleteId(g.id);
-                          }}
-                          aria-label="Delete genre"
-                          data-testid={`genre-delete-${g.id}`}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+              ))}
+            </TableBody>
+          </Table>
+        </AdminTableCard>
       )}
 
       <AlertDialog open={deleteId != null} onOpenChange={(open) => !open && setDeleteId(null)}>

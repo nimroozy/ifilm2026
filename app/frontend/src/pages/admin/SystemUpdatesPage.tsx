@@ -191,8 +191,8 @@ export default function SystemUpdatesPage() {
   }
 
   return (
-    <div className="max-w-4xl space-y-8" dir="auto">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+    <div className="min-w-0 max-w-4xl space-y-8" dir="auto">
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">System updates</h2>
           <p className="text-sm text-muted-foreground mt-1">

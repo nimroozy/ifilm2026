@@ -21,7 +21,14 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { adminApi, ApiError, type SeasonDto, type SeriesDto } from '@/lib/api';
-import { EmptyState, ErrorState, LoadingBlock, StatusBadge } from './adminShared';
+import {
+  AdminTableCard,
+  EmptyState,
+  ErrorState,
+  LoadingBlock,
+  PageHeader,
+  StatusBadge,
+} from './adminShared';
 
 const createSchema = z.object({
   season_number: z.coerce.number().int().min(0).max(500),
@@ -102,23 +109,23 @@ export default function SeasonsPage() {
   if (error) return <ErrorState message={error} onRetry={load} />;
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-semibold text-foreground">Seasons</h2>
-          <p className="text-sm text-muted-foreground">{series?.title}</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" asChild>
-            <Link to={`/admin/series/${seriesId}/edit`}>Edit series</Link>
-          </Button>
-          <Button variant="outline" asChild>
-            <Link to="/admin/series">Back</Link>
-          </Button>
-        </div>
-      </div>
+    <div className="min-w-0 max-w-full space-y-4" data-testid="seasons-page">
+      <PageHeader
+        title="Seasons"
+        description={series?.title}
+        actions={
+          <>
+            <Button variant="outline" className="shrink-0" asChild>
+              <Link to={`/admin/series/${seriesId}/edit`}>Edit series</Link>
+            </Button>
+            <Button variant="outline" className="shrink-0" asChild>
+              <Link to="/admin/series">Back</Link>
+            </Button>
+          </>
+        }
+      />
 
-      <Card className="bg-card border-border">
+      <Card className="min-w-0 border-border bg-card">
         <CardHeader>
           <CardTitle className="text-base">Add season</CardTitle>
         </CardHeader>
@@ -177,56 +184,56 @@ export default function SeasonsPage() {
           }
         />
       ) : (
-        <Card className="bg-card border-border">
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>#</TableHead>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Episodes</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
+        <AdminTableCard minWidthClassName="min-w-[480px]">
+          <Table>
+            <TableHeader className="sticky top-0 z-10 bg-card">
+              <TableRow>
+                <TableHead>#</TableHead>
+                <TableHead>Title</TableHead>
+                <TableHead className="hidden sm:table-cell">Episodes</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="sticky right-0 bg-card text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {seasons.map((season) => (
+                <TableRow key={season.id} data-testid={`season-row-${season.season_number}`}>
+                  <TableCell>{season.season_number}</TableCell>
+                  <TableCell className="max-w-[14rem] truncate font-medium">
+                    {season.title || `Season ${season.season_number}`}
+                  </TableCell>
+                  <TableCell className="hidden sm:table-cell">{season.episode_count ?? 0}</TableCell>
+                  <TableCell>
+                    <StatusBadge status={season.status} />
+                  </TableCell>
+                  <TableCell className="sticky right-0 bg-card text-right">
+                    <div className="inline-flex gap-1">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+                        <Link to={`/admin/seasons/${season.id}/edit`} aria-label="Manage season publishing">
+                          <Edit className="h-3.5 w-3.5" />
+                        </Link>
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
+                        <Link to={`/admin/seasons/${season.id}/episodes`} aria-label="Episodes">
+                          <Clapperboard className="h-3.5 w-3.5" />
+                        </Link>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-destructive"
+                        onClick={() => setDeleteId(season.id)}
+                        aria-label="Delete season"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {seasons.map((season) => (
-                  <TableRow key={season.id} data-testid={`season-row-${season.season_number}`}>
-                    <TableCell>{season.season_number}</TableCell>
-                    <TableCell className="font-medium">{season.title || `Season ${season.season_number}`}</TableCell>
-                    <TableCell>{season.episode_count ?? 0}</TableCell>
-                    <TableCell>
-                      <StatusBadge status={season.status} />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
-                          <Link to={`/admin/seasons/${season.id}/edit`} aria-label="Manage season publishing">
-                            <Edit className="h-3.5 w-3.5" />
-                          </Link>
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
-                          <Link to={`/admin/seasons/${season.id}/episodes`} aria-label="Episodes">
-                            <Clapperboard className="h-3.5 w-3.5" />
-                          </Link>
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-destructive"
-                          onClick={() => setDeleteId(season.id)}
-                          aria-label="Delete season"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+              ))}
+            </TableBody>
+          </Table>
+        </AdminTableCard>
       )}
 
       <AlertDialog open={deleteId != null} onOpenChange={(open) => !open && setDeleteId(null)}>

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { AlertCircle, Film, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
@@ -124,15 +125,46 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-      <div>
+    <div
+      className="mb-6 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"
+      data-testid="admin-page-header"
+    >
+      <div className="min-w-0 flex-1">
         <h1 className="font-display text-2xl font-bold tracking-tight text-foreground md:text-3xl">
           {title}
         </h1>
         {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
       </div>
-      {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
+      {actions ? (
+        <div
+          className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end"
+          data-testid="admin-page-header-actions"
+        >
+          {actions}
+        </div>
+      ) : null}
     </div>
+  );
+}
+
+/** Card + horizontal scroll for wide admin tables; prevents page-level overflow. */
+export function AdminTableCard({
+  children,
+  className,
+  minWidthClassName = 'min-w-[720px]',
+}: {
+  children: ReactNode;
+  className?: string;
+  minWidthClassName?: string;
+}) {
+  return (
+    <Card className={cn('min-w-0 overflow-hidden border-border bg-card', className)} data-testid="admin-table-card">
+      <CardContent className="p-0">
+        <div className="w-full max-w-full overflow-x-auto" data-testid="admin-table-scroll">
+          <div className={cn(minWidthClassName)}>{children}</div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
