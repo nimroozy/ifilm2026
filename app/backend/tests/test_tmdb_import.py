@@ -5,7 +5,7 @@ from pathlib import Path
 import httpx
 import pytest
 from app.core.config import Settings
-from app.models.content import Episode, Movie
+from app.models.content import Episode, Movie, Series
 from app.services.catalog import movie_out
 from app.services.demo.artwork import write_rgb_png
 from app.services.demo.cleanup import build_cleanup_plan
@@ -390,6 +390,72 @@ def test_cleanup_isolates_demo_owned_rows(db_session, tmp_path: Path):
     assert real.id not in plan.movie_ids
     assert any("Demo" in title for title in plan.movie_titles)
     assert not any("Real" in title and "real-movie" in title for title in plan.movie_titles)
+
+
+def test_cleanup_ignores_preserved_demo_slug_rows(db_session, tmp_path: Path):
+    """Former fake-demo titles kept as non-demo must never enter the delete plan."""
+    from app.services.demo.ownership import DemoOwnership, save_ownership
+
+    settings = _settings(tmp_path)
+    preserved = Movie(
+        title="Kabul Nights",
+        slug="demo-kabul-nights",
+        status="published",
+        metadata_source="manual",
+        demo_owned=False,
+    )
+    demo = Movie(
+        title="Inception",
+        slug="inception",
+        tmdb_id=27205,
+        status="published",
+        metadata_source="tmdb",
+        demo_owned=True,
+    )
+    preserved_series = Series(
+        title="Mountain Echo",
+        slug="demo-series-mountain-echo",
+        status="published",
+        metadata_source="manual",
+        demo_owned=False,
+    )
+    demo_series = Series(
+        title="Stranger Things",
+        slug="stranger-things",
+        tmdb_id=66732,
+        status="published",
+        metadata_source="tmdb",
+        demo_owned=True,
+    )
+    db_session.add_all([preserved, demo, preserved_series, demo_series])
+    db_session.commit()
+
+    ownership = DemoOwnership(
+        seed_version="2.0.0",
+        movie_ids=[preserved.id, demo.id],
+        series_ids=[preserved_series.id, demo_series.id],
+        movie_slugs=[preserved.slug, demo.slug],
+        series_slugs=[preserved_series.slug, demo_series.slug],
+        artwork_files=[
+            "posters/demo-demo-kabul-nights.png",
+            "posters/tmdb-inception.jpg",
+        ],
+        media_files=[
+            "/data/media/temp/demo-seed/demo-kabul-nights.mp4",
+            "/data/media/temp/demo-seed/inception-clip.mp4",
+        ],
+    )
+    save_ownership(settings, ownership)
+
+    plan = build_cleanup_plan(db_session, settings)
+    assert plan.movie_ids == [demo.id]
+    assert plan.series_ids == [demo_series.id]
+    assert all("demo_owned=True" in title for title in plan.movie_titles)
+    assert all("demo_owned=True" in title for title in plan.series_titles)
+    assert not any("Kabul Nights" in title for title in plan.movie_titles)
+    assert not any("Mountain Echo" in title for title in plan.series_titles)
+    assert not any("kabul-nights" in path for path in plan.media_files)
+    assert any("inception-clip" in path for path in plan.media_files)
 
 
 def test_public_movies_200_after_model_update(client):

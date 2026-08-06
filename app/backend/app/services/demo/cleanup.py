@@ -103,35 +103,19 @@ def build_cleanup_plan(db: Session, settings: Settings) -> CleanupPlan:
         watch_progress_ids=list(ownership.watch_progress_ids),
     )
 
-    # Discover demo-prefixed / TMDB demo-owned catalog when ownership file is partial.
-    discovered_movies = [
-        m.id for m in db.query(Movie).filter(Movie.slug.like("demo-%")).all()
-    ]
-    discovered_movies.extend([m.id for m in db.query(Movie).filter(Movie.demo_owned.is_(True)).all()])
+    # Discover TMDB/demo-owned catalog when ownership file is partial.
+    # Never treat demo-* slugs alone as deletable: production may keep former
+    # fake-demo rows with demo_owned=False as real catalog content.
+    discovered_movies = [m.id for m in db.query(Movie).filter(Movie.demo_owned.is_(True)).all()]
     plan.movie_ids = sorted(set(plan.movie_ids + discovered_movies))
-
-    discovered_series = [
-        s.id for s in db.query(Series).filter(Series.slug.like("demo-%")).all()
-    ]
-    discovered_series.extend([s.id for s in db.query(Series).filter(Series.demo_owned.is_(True)).all()])
+    discovered_series = [s.id for s in db.query(Series).filter(Series.demo_owned.is_(True)).all()]
     plan.series_ids = sorted(set(plan.series_ids + discovered_series))
-
     discovered_episodes = [e.id for e in db.query(Episode).filter(Episode.demo_owned.is_(True)).all()]
     plan.episode_ids = sorted(set(plan.episode_ids + discovered_episodes))
-    if plan.series_ids:
-        plan.season_ids = sorted(
-            set(
-                plan.season_ids
-                + [s.id for s in db.query(Season).filter(Season.series_id.in_(plan.series_ids)).all()]
-            )
-        )
-    if plan.season_ids:
-        plan.episode_ids = sorted(
-            set(
-                plan.episode_ids
-                + [e.id for e in db.query(Episode).filter(Episode.season_id.in_(plan.season_ids)).all()]
-            )
-        )
+
+    # Hard safety rail: ownership.json from older seeds may still list IDs that
+    # were later marked non-demo. Never delete those rows or their dependents.
+    _restrict_plan_to_demo_owned(db, plan)
 
     plan.artwork_files = sorted(set(plan.artwork_files + _discover_demo_artwork_files(db, plan)))
 
@@ -162,12 +146,16 @@ def build_cleanup_plan(db: Session, settings: Settings) -> CleanupPlan:
             f"{m.title} (id={m.id}, tmdb={m.tmdb_id}, demo_owned={bool(m.demo_owned)}, slug={m.slug})"
             for m in movies
         ]
+        if any(not bool(m.demo_owned) for m in movies):
+            raise RuntimeError("Cleanup plan refused: non-demo movie listed for deletion")
     if plan.series_ids:
         series_rows = db.query(Series).filter(Series.id.in_(plan.series_ids)).order_by(Series.id).all()
         plan.series_titles = [
             f"{s.title} (id={s.id}, tmdb={s.tmdb_id}, demo_owned={bool(s.demo_owned)}, slug={s.slug})"
             for s in series_rows
         ]
+        if any(not bool(s.demo_owned) for s in series_rows):
+            raise RuntimeError("Cleanup plan refused: non-demo series listed for deletion")
 
     # Publication events tied to demo catalog entities (dry-run visibility).
     pub_ids: list[int] = []
@@ -213,6 +201,133 @@ def build_cleanup_plan(db: Session, settings: Settings) -> CleanupPlan:
         )
     plan.publication_event_ids = sorted(set(pub_ids))
     return plan
+
+
+def _restrict_plan_to_demo_owned(db: Session, plan: CleanupPlan) -> None:
+    """Drop any catalog/media targets that are not demo-owned.
+
+    Older ownership.json files and demo-* slugs may still point at rows that
+    operators intentionally kept (demo_owned=False). Those must never be deleted.
+    """
+    demo_movie_ids = {row[0] for row in db.query(Movie.id).filter(Movie.demo_owned.is_(True)).all()}
+    demo_series_ids = {
+        row[0] for row in db.query(Series.id).filter(Series.demo_owned.is_(True)).all()
+    }
+
+    plan.movie_ids = sorted(set(plan.movie_ids) & demo_movie_ids)
+    plan.series_ids = sorted(set(plan.series_ids) & demo_series_ids)
+
+    if plan.series_ids:
+        plan.season_ids = sorted(
+            row[0]
+            for row in db.query(Season.id).filter(Season.series_id.in_(plan.series_ids)).all()
+        )
+        plan.episode_ids = sorted(
+            row[0]
+            for row in db.query(Episode.id).filter(Episode.season_id.in_(plan.season_ids)).all()
+        )
+    else:
+        plan.season_ids = []
+        plan.episode_ids = sorted(
+            row[0]
+            for row in db.query(Episode.id)
+            .filter(Episode.id.in_(plan.episode_ids or [0]), Episode.demo_owned.is_(True))
+            .all()
+        )
+
+    preserved_movie_ids = {
+        row[0] for row in db.query(Movie.id).filter(Movie.demo_owned.is_(False)).all()
+    }
+    preserved_series_ids = {
+        row[0] for row in db.query(Series.id).filter(Series.demo_owned.is_(False)).all()
+    }
+    preserved_episode_ids = {
+        row[0]
+        for row in db.query(Episode.id)
+        .filter(
+            (Episode.demo_owned.is_(False))
+            | (Episode.series_id.in_(preserved_series_ids or [-1]))
+        )
+        .all()
+    }
+    deletable_movie_ids = set(plan.movie_ids)
+    deletable_episode_ids = set(plan.episode_ids)
+
+    safe_asset_ids: list[str] = []
+    if plan.media_asset_ids:
+        for asset in db.query(MediaAsset).filter(MediaAsset.id.in_(plan.media_asset_ids)).all():
+            if asset.movie_id is not None:
+                if asset.movie_id in preserved_movie_ids or asset.movie_id not in deletable_movie_ids:
+                    continue
+            if asset.series_id is not None and asset.series_id in preserved_series_ids:
+                continue
+            if asset.episode_id is not None:
+                if (
+                    asset.episode_id in preserved_episode_ids
+                    or asset.episode_id not in deletable_episode_ids
+                ):
+                    continue
+            # Keep unattached ownership assets only when not linked to preserved rows.
+            if (
+                asset.movie_id is None
+                and asset.episode_id is None
+                and asset.series_id is not None
+                and asset.series_id not in set(plan.series_ids)
+            ):
+                continue
+            safe_asset_ids.append(asset.id)
+    plan.media_asset_ids = sorted(set(safe_asset_ids))
+
+    if plan.package_ids and plan.media_asset_ids:
+        plan.package_ids = sorted(
+            row[0]
+            for row in db.query(MediaPackage.id)
+            .filter(
+                MediaPackage.id.in_(plan.package_ids),
+                MediaPackage.media_asset_id.in_(plan.media_asset_ids),
+            )
+            .all()
+        )
+    else:
+        plan.package_ids = []
+
+    # Ownership path lists often include preserved fake-demo artwork/media.
+    # Rebuild artwork from remaining demo-owned entities; keep only demo-seed media paths
+    # that are not tied to preserved movie/series slugs.
+    plan.artwork_files = []
+    preserved_slugs = {
+        row[0]
+        for row in db.query(Movie.slug).filter(Movie.demo_owned.is_(False)).all()
+    } | {
+        row[0]
+        for row in db.query(Series.slug).filter(Series.demo_owned.is_(False)).all()
+    }
+    filtered_media: list[str] = []
+    for path in plan.media_files:
+        name = Path(path).name
+        if any(slug and slug in name for slug in preserved_slugs):
+            continue
+        if "demo-seed" in path or "/temp/demo" in path:
+            filtered_media.append(path)
+    plan.media_files = filtered_media
+
+    if plan.watch_progress_ids:
+        plan.watch_progress_ids = sorted(
+            row[0]
+            for row in db.query(UserWatchProgress.id)
+            .filter(UserWatchProgress.id.in_(plan.watch_progress_ids))
+            .filter(
+                (
+                    UserWatchProgress.movie_id.isnot(None)
+                    & UserWatchProgress.movie_id.in_(deletable_movie_ids or [-1])
+                )
+                | (
+                    UserWatchProgress.episode_id.isnot(None)
+                    & UserWatchProgress.episode_id.in_(deletable_episode_ids or [-1])
+                )
+            )
+            .all()
+        )
 
 
 def _artwork_relative_from_url(value: str) -> str:
