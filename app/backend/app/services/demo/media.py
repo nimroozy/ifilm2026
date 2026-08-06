@@ -57,6 +57,14 @@ def generate_synthetic_mp4(path: Path, *, duration_seconds: int = 20, tag: str =
     path.parent.mkdir(parents=True, exist_ok=True)
     # Unique color/tag per asset to avoid duplicate-checksum rejection across runs.
     color = _demo_rgb_hex(tag)
+    font = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+    # Visible on-frame label so demo clips are never mistaken for commercial film.
+    drawtext = (
+        f"drawtext=fontfile={font}:"
+        "text='iFilm Demo Playback Clip':"
+        "fontsize=28:fontcolor=white:borderw=2:bordercolor=black:"
+        "x=(w-text_w)/2:y=(h-text_h)/2"
+    )
     cmd = [
         "ffmpeg",
         "-y",
@@ -68,6 +76,8 @@ def generate_synthetic_mp4(path: Path, *, duration_seconds: int = 20, tag: str =
         "lavfi",
         "-i",
         f"sine=f={440 + (abs(hash(tag)) % 200)}:d={duration_seconds}",
+        "-vf",
+        drawtext,
         "-c:v",
         "libx264",
         "-pix_fmt",

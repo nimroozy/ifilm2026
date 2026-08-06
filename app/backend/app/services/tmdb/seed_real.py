@@ -239,6 +239,8 @@ def seed_real_demo(
         _track_unique(ownership.movie_ids, [movie.id])
         _track_unique(ownership.movie_slugs, [movie.slug])
         _track_unique(ownership.artwork_files, result.artwork_files)
+        for warning in result.warnings:
+            report.deviations.append(warning)
         if curated_movie.with_demo_clip and not skip_media:
             _attach_movie_clip(db, settings, ownership, movie, actor, report)
         if curated_movie.featured or curated_movie.trending:
@@ -272,6 +274,8 @@ def seed_real_demo(
         _track_unique(ownership.season_ids, result.season_ids)
         _track_unique(ownership.episode_ids, result.episode_ids)
         _track_unique(ownership.artwork_files, result.artwork_files)
+        for warning in result.warnings:
+            report.deviations.append(warning)
         if curated_series.featured or curated_series.trending:
             series.is_featured = bool(curated_series.featured)
             series.is_trending = bool(curated_series.trending)

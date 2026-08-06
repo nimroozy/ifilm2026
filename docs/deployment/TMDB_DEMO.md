@@ -53,8 +53,8 @@ python -m scripts.refresh_real_demo_metadata
 ```
 
 Use `DEMO_SKIP_MEDIA=1` or `--skip-media` to skip synthetic Demo Clip media
-generation. Generated media is synthetic ffmpeg output only and carries the
-title metadata `iFilm Demo Playback Clip`.
+generation. Generated media is synthetic ffmpeg output only, burns in a visible
+`iFilm Demo Playback Clip` overlay, and carries matching title metadata.
 
 ## Media policy
 

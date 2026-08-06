@@ -115,6 +115,7 @@ class FakeTMDB:
                     "overview": "Episode overview",
                     "runtime": 42,
                     "air_date": "2023-01-02",
+                    "still_path": None,
                 }
             ],
         }
@@ -200,6 +201,50 @@ def test_series_import_episode_ownership(db_session, tmp_path: Path):
     assert episode.tmdb_id == 9001
     assert episode.demo_owned is True
     assert episode.metadata_source == "tmdb"
+
+
+def test_series_import_episode_still_when_available(db_session, tmp_path: Path, monkeypatch):
+    class StillTMDB(FakeTMDB):
+        def season_details(self, tmdb_id, season_number, *, language=None):
+            payload = super().season_details(tmdb_id, season_number, language=language)
+            payload["episodes"][0]["still_path"] = "/still.jpg"
+            return payload
+
+    from app.services.tmdb import artwork as artwork_mod
+    from app.services.tmdb.artwork import StoredArtwork
+
+    def fake_download(settings, url, *, kind, tmdb_id, tmdb_configuration=None, http_client=None):
+        assert kind == "still"
+        assert "still.jpg" in url
+        return StoredArtwork(
+            url=f"/artwork/stills/tmdb-still-{tmdb_id}.jpg",
+            relative_path=f"stills/tmdb-still-{tmdb_id}.jpg",
+            checksum_sha256="abc",
+            size_bytes=10,
+            width=320,
+            height=180,
+        )
+
+    monkeypatch.setattr(artwork_mod, "download_artwork", fake_download)
+    # import_service binds download_artwork at import time — patch there too
+    import app.services.tmdb.import_service as import_mod
+
+    monkeypatch.setattr(import_mod, "download_artwork", fake_download)
+
+    result = import_series(
+        db_session,
+        _settings(tmp_path),
+        200,
+        client=StillTMDB(),
+        demo_owned=True,
+        seed_version=REAL_DEMO_SEED_VERSION,
+        seasons_limit=1,
+        episodes_per_season=1,
+    )
+    db_session.commit()
+    episode = db_session.get(Episode, result.episode_ids[0])
+    assert episode.thumbnail_url.endswith("tmdb-still-9001.jpg")
+    assert any(path.startswith("stills/") for path in result.artwork_files)
 
 
 def test_translation_fallback(db_session, tmp_path: Path):
