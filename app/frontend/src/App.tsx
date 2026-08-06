@@ -36,7 +36,19 @@ import PlaybackSessionsPage from '@/pages/admin/PlaybackSessionsPage';
 import SystemUpdatesPage from '@/pages/admin/SystemUpdatesPage';
 import TmdbToolsPage from '@/pages/admin/TmdbToolsPage';
 import AdminPlaceholderPage from '@/pages/admin/AdminPlaceholderPage';
-import AboutPage from '@/pages/AboutPage';
+import AboutPage, {
+  ContactPage,
+  HelpPage,
+  PrivacyPage,
+  TermsPage,
+  CopyrightPage,
+} from '@/pages/AboutPage';
+import {
+  GenresBrowsePage,
+  DubbedPage,
+  SubtitledPage,
+  NewReleasesPage,
+} from '@/pages/CatalogBrowsePages';
 
 const queryClient = new QueryClient();
 
@@ -62,11 +74,20 @@ const router = createBrowserRouter([
       { path: '/movies', element: <CustomerRoute><MoviesPage /></CustomerRoute> },
       { path: '/series', element: <CustomerRoute><SeriesPage /></CustomerRoute> },
       { path: '/children', element: <CustomerRoute><ChildrenPage /></CustomerRoute> },
+      { path: '/genres', element: <CustomerRoute><GenresBrowsePage /></CustomerRoute> },
+      { path: '/dubbed', element: <CustomerRoute><DubbedPage /></CustomerRoute> },
+      { path: '/subtitled', element: <CustomerRoute><SubtitledPage /></CustomerRoute> },
+      { path: '/new-releases', element: <CustomerRoute><NewReleasesPage /></CustomerRoute> },
       { path: '/movie/:id', element: <CustomerRoute><MovieDetailsPage /></CustomerRoute> },
       { path: '/series/:id', element: <CustomerRoute><SeriesDetailsPage /></CustomerRoute> },
       { path: '/search', element: <CustomerRoute><SearchPage /></CustomerRoute> },
       { path: '/about', element: <CustomerRoute><AboutPage /></CustomerRoute> },
       { path: '/credits', element: <CustomerRoute><AboutPage /></CustomerRoute> },
+      { path: '/contact', element: <CustomerRoute><ContactPage /></CustomerRoute> },
+      { path: '/help', element: <CustomerRoute><HelpPage /></CustomerRoute> },
+      { path: '/privacy', element: <CustomerRoute><PrivacyPage /></CustomerRoute> },
+      { path: '/terms', element: <CustomerRoute><TermsPage /></CustomerRoute> },
+      { path: '/copyright', element: <CustomerRoute><CopyrightPage /></CustomerRoute> },
       { path: '/login', element: <LoginPage /> },
       { path: '/profile', element: <CustomerRoute><ProfilePage /></CustomerRoute> },
       { path: '/devices', element: <CustomerRoute><DevicesPage /></CustomerRoute> },

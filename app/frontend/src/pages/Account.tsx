@@ -100,7 +100,7 @@ export function LoginPage() {
             <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={loading}>
               {loading ? 'Signing in...' : t.login.signIn}
             </Button>
-            <Button type="button" variant="outline" className="w-full" onClick={() => navigate('/')}>
+            <Button type="button" variant="outline" className="w-full" onClick={() => navigate('/contact')}>
               {t.login.support}
             </Button>
           </form>

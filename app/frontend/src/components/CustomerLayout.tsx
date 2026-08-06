@@ -1,8 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Film, Tv, Search, User, Bell, Menu, X, Globe, ChevronDown, Baby } from 'lucide-react';
+import { Home, Film, Tv, Search, User, Bell, Menu, Globe, ChevronDown } from 'lucide-react';
 import { translations } from '@/data/mockData';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { api, tokenStore } from '@/lib/api';
@@ -13,6 +13,17 @@ import {
   readStoredLocale,
   writeStoredLocale,
 } from '@/lib/locale';
+import { DesktopNav } from '@/components/customer/DesktopNav';
+import CustomerFooter from '@/components/customer/CustomerFooter';
+import {
+  DESKTOP_NAV_ITEMS,
+  MOBILE_BOTTOM_NAV,
+  FOOTER_COMPANY_PATHS,
+  FOOTER_LEGAL_PATHS,
+  isNavActive,
+  type CustomerNavId,
+} from '@/components/customer/navConfig';
+import { cn } from '@/lib/utils';
 
 // ============ LANGUAGE CONTEXT ============
 type Lang = AppLocale;
@@ -223,12 +234,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 }
 
 // ============ CUSTOMER LAYOUT ============
+function customerNavLabel(id: CustomerNavId, t: typeof translations.en): string {
+  const map: Record<CustomerNavId, string> = {
+    home: t.nav.home,
+    movies: t.nav.movies,
+    series: t.nav.series,
+    children: t.nav.children,
+    genres: t.nav.genres,
+    dubbed: t.nav.dubbed,
+    subtitled: t.nav.subtitled,
+    newReleases: t.nav.newReleases,
+    myList: t.nav.myList,
+    search: t.nav.search,
+    profile: t.nav.profile,
+  };
+  return map[id];
+}
+
 export default function CustomerLayout({ children }: { children: React.ReactNode }) {
   const { t, lang, setLang, dir } = useLang();
   const location = useLocation();
   const navigate = useNavigate();
   const { isLoggedIn, logout } = useAuth();
   const [scrolled, setScrolled] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
@@ -236,54 +265,65 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const navItems = [
-    { path: '/', label: t.nav.home, icon: Home },
-    { path: '/movies', label: t.nav.movies, icon: Film },
-    { path: '/series', label: t.nav.series, icon: Tv },
-    { path: '/children', label: t.nav.children, icon: Baby },
-    { path: '/watchlist', label: t.nav.myList, icon: null },
-    { path: '/credits', label: 'Credits', icon: null },
-  ];
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
 
   const langLabel = lang === 'en' ? 'English' : lang === 'fa' ? 'فارسی' : 'پښتو';
+  const bottomIcons = {
+    home: Home,
+    movies: Film,
+    series: Tv,
+    search: Search,
+    profile: User,
+  } as const;
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Desktop Header */}
-      <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'bg-background/95 backdrop-blur-md shadow-lg' : 'bg-gradient-to-b from-background/80 to-transparent'}`}>
+    <div className="flex min-h-screen flex-col bg-background">
+      <header
+        className={cn(
+          'fixed left-0 right-0 top-0 z-50 transition-all duration-300',
+          scrolled
+            ? 'bg-background/95 shadow-lg backdrop-blur-md'
+            : 'bg-gradient-to-b from-background/80 to-transparent'
+        )}
+      >
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16 md:h-20">
-            {/* Logo */}
-            <Link to="/" className="flex items-center gap-2">
-              <span className="text-2xl md:text-3xl font-display text-primary font-bold tracking-tight">iFilm</span>
+          <div className="flex h-16 items-center justify-between gap-3 md:h-20">
+            <Link
+              to="/"
+              className="shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="iFilm"
+            >
+              <span className="font-display text-2xl font-bold tracking-tight text-primary md:text-3xl">
+                iFilm
+              </span>
             </Link>
 
-            {/* Desktop Nav */}
-            <nav className="hidden md:flex items-center gap-1">
-              {navItems.map((item) => (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${location.pathname === item.path ? 'text-primary' : 'text-foreground/70 hover:text-foreground'}`}
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
+            <DesktopNav />
 
-            {/* Right Actions */}
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" onClick={() => navigate('/search')} className="text-foreground/70 hover:text-foreground">
+            <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => navigate('/search')}
+                className="text-foreground/70 hover:text-foreground"
+                aria-label={t.nav.search}
+              >
                 <Search className="h-5 w-5" />
               </Button>
 
-              {/* Language Switcher */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="text-foreground/70 hover:text-foreground gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1 text-foreground/70 hover:text-foreground"
+                    aria-label={langLabel}
+                  >
                     <Globe className="h-4 w-4" />
-                    <span className="hidden sm:inline text-xs">{langLabel}</span>
-                    <ChevronDown className="h-3 w-3" />
+                    <span className="hidden text-xs sm:inline">{langLabel}</span>
+                    <ChevronDown className="h-3 w-3" aria-hidden />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align={dir === 'rtl' ? 'start' : 'end'}>
@@ -293,15 +333,24 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              <Button variant="ghost" size="icon" className="text-foreground/70 hover:text-foreground hidden sm:flex">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="hidden text-foreground/70 hover:text-foreground sm:flex"
+                aria-label={t.nav.notifications}
+              >
                 <Bell className="h-5 w-5" />
               </Button>
 
-              {/* Profile */}
               {isLoggedIn ? (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="text-foreground/70 hover:text-foreground">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-foreground/70 hover:text-foreground"
+                      aria-label={t.nav.profile}
+                    >
                       <User className="h-5 w-5" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -320,29 +369,72 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
                   </DropdownMenuContent>
                 </DropdownMenu>
               ) : (
-                <Button size="sm" onClick={() => navigate('/login')} className="bg-primary text-primary-foreground hover:bg-primary/90">
+                <Button
+                  size="sm"
+                  onClick={() => navigate('/login')}
+                  className="bg-primary text-primary-foreground hover:bg-primary/90"
+                >
                   {t.login.signIn}
                 </Button>
               )}
 
-              {/* Mobile Menu */}
-              <Sheet>
+              <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
                 <SheetTrigger asChild>
-                  <Button variant="ghost" size="icon" className="md:hidden text-foreground/70">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-foreground/70 md:hidden"
+                    aria-label={t.nav.openMenu}
+                    data-testid="mobile-nav-trigger"
+                  >
                     <Menu className="h-5 w-5" />
                   </Button>
                 </SheetTrigger>
-                <SheetContent side={dir === 'rtl' ? 'right' : 'left'} className="bg-background border-border">
-                  <div className="flex flex-col gap-4 mt-8">
-                    {navItems.map((item) => (
-                      <Link
-                        key={item.path}
-                        to={item.path}
-                        className={`px-4 py-3 rounded-lg text-base font-medium transition-colors ${location.pathname === item.path ? 'bg-primary/10 text-primary' : 'text-foreground/70 hover:text-foreground hover:bg-muted'}`}
-                      >
-                        {item.label}
-                      </Link>
-                    ))}
+                <SheetContent
+                  side={dir === 'rtl' ? 'right' : 'left'}
+                  className="overflow-y-auto border-border bg-background"
+                  data-testid="mobile-nav-sheet"
+                >
+                  <SheetTitle className="font-display text-lg text-primary">iFilm</SheetTitle>
+                  <SheetDescription className="sr-only">{t.nav.menu}</SheetDescription>
+                  <nav aria-label={t.nav.menu} className="mt-6 flex flex-col gap-1">
+                    {DESKTOP_NAV_ITEMS.map((item) => {
+                      const active = isNavActive(location.pathname, item);
+                      return (
+                        <Link
+                          key={item.path}
+                          to={item.path}
+                          aria-current={active ? 'page' : undefined}
+                          data-testid={`mobile-nav-${item.id}`}
+                          data-active={active ? 'true' : 'false'}
+                          className={cn(
+                            'rounded-lg px-4 py-3 text-base font-medium transition-colors',
+                            active
+                              ? 'bg-primary/10 text-primary'
+                              : 'text-foreground/70 hover:bg-muted hover:text-foreground'
+                          )}
+                        >
+                          {customerNavLabel(item.id, t)}
+                        </Link>
+                      );
+                    })}
+                  </nav>
+                  <div className="mt-8 border-t border-border pt-4">
+                    <p className="px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {t.footer.company}
+                    </p>
+                    <div className="mt-2 flex flex-col gap-1">
+                      {[...FOOTER_COMPANY_PATHS, ...FOOTER_LEGAL_PATHS].map((item) => (
+                        <Link
+                          key={item.path}
+                          to={item.path}
+                          data-testid={`mobile-footer-${item.id}`}
+                          className="rounded-lg px-4 py-2 text-sm text-foreground/70 hover:bg-muted hover:text-foreground"
+                        >
+                          {(t.footer as Record<string, string>)[item.id] || item.id}
+                        </Link>
+                      ))}
+                    </div>
                   </div>
                 </SheetContent>
               </Sheet>
@@ -351,30 +443,38 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="pt-16 md:pt-20 pb-20 md:pb-0">
-        {children}
-      </main>
+      <main className="flex-1 pb-20 pt-16 md:pb-0 md:pt-20">{children}</main>
 
-      {/* Mobile Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-background/95 backdrop-blur-md border-t border-border">
-        <div className="flex items-center justify-around h-16">
-          {[
-            { path: '/', icon: Home, label: t.nav.home },
-            { path: '/movies', icon: Film, label: t.nav.movies },
-            { path: '/series', icon: Tv, label: t.nav.series },
-            { path: '/search', icon: Search, label: t.nav.search },
-            { path: '/profile', icon: User, label: t.nav.profile },
-          ].map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`flex flex-col items-center gap-1 px-3 py-2 ${location.pathname === item.path ? 'text-primary' : 'text-muted-foreground'}`}
-            >
-              <item.icon className="h-5 w-5" />
-              <span className="text-[10px] font-medium">{item.label}</span>
-            </Link>
-          ))}
+      <div className="pb-20 md:pb-0">
+        <CustomerFooter />
+      </div>
+
+      <nav
+        className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-background/95 backdrop-blur-md md:hidden"
+        aria-label={t.nav.menu}
+        data-testid="mobile-bottom-nav"
+      >
+        <div className="flex h-16 items-center justify-around">
+          {MOBILE_BOTTOM_NAV.map((item) => {
+            const Icon = bottomIcons[item.id as keyof typeof bottomIcons] || Home;
+            const active = isNavActive(location.pathname, item);
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                aria-current={active ? 'page' : undefined}
+                data-testid={`bottom-nav-${item.id}`}
+                data-active={active ? 'true' : 'false'}
+                className={cn(
+                  'flex min-w-[3.5rem] flex-col items-center gap-1 px-2 py-2',
+                  active ? 'text-primary' : 'text-muted-foreground'
+                )}
+              >
+                <Icon className="h-5 w-5" aria-hidden />
+                <span className="text-[10px] font-medium">{customerNavLabel(item.id, t)}</span>
+              </Link>
+            );
+          })}
         </div>
       </nav>
     </div>

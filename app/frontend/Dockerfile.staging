@@ -6,8 +6,10 @@ RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY . .
+ARG VITE_APP_VERSION=
 ENV VITE_API_BASE_URL=/ \
-    VITE_DATA_MODE=api
+    VITE_DATA_MODE=api \
+    VITE_APP_VERSION=$VITE_APP_VERSION
 RUN pnpm run build
 
 FROM nginx:1.27-alpine AS runtime

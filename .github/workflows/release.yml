@@ -225,6 +225,7 @@ jobs:
             -t "${BACKEND_IMAGE}:sha-${GITHUB_SHA}" \
             app/backend
           docker build -f app/frontend/Dockerfile.staging \
+            --build-arg "VITE_APP_VERSION=${VERSION}" \
             -t "${FRONTEND_IMAGE}:${VERSION}" \
             -t "${FRONTEND_IMAGE}:sha-${GITHUB_SHA}" \
             app/frontend
