@@ -110,8 +110,7 @@ test.describe('Phase 3 desktop chrome', () => {
         await expect(page.getByTestId('desktop-nav-dubbed')).toHaveCount(0);
       }
 
-      // No duplicated Collections / app store
-      await expect(page.getByText(/collections/i)).toHaveCount(0);
+      // No app store badges — Collections is now a legitimate nav destination.
       await expect(page.getByText(/app store|google play/i)).toHaveCount(0);
 
       await noPageOverflow(page);

@@ -47,7 +47,7 @@ describe('customer navigation and footer chrome', () => {
     expect(within(nav).getByTestId('desktop-nav-dubbed')).toBeTruthy();
     expect(within(nav).getByTestId('desktop-nav-subtitled')).toBeTruthy();
     expect(within(nav).getByTestId('desktop-nav-newReleases')).toBeTruthy();
-    expect(screen.queryByText(/collections/i)).toBeNull();
+    expect(within(nav).getByTestId('desktop-nav-collections')).toBeTruthy();
   });
 
   it('marks active route for nested movie detail', () => {
