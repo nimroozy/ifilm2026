@@ -140,11 +140,7 @@ export default function CustomerFooter() {
               <p data-testid="footer-version">
                 {t.footer.version} {version}
               </p>
-            ) : (
-              <p data-testid="footer-version" className="sr-only">
-                {t.footer.version}
-              </p>
-            )}
+            ) : null}
           </div>
         </div>
       </div>

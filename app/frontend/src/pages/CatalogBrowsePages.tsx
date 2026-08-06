@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useLang } from '@/components/CustomerLayout';
@@ -113,9 +113,32 @@ function hasTracks(list: string[] | undefined): boolean {
   return Array.isArray(list) && list.length > 0;
 }
 
+function releaseSortKey(item: { publishedAt?: string | null; createdAt?: string | null; id: number }): number {
+  const raw = item.publishedAt || item.createdAt;
+  if (raw) {
+    const ms = Date.parse(raw);
+    if (!Number.isNaN(ms)) return ms;
+  }
+  return item.id;
+}
+
+function sortNewestPublished<T extends { publishedAt?: string | null; createdAt?: string | null; id: number; year?: number }>(
+  items: T[]
+): T[] {
+  return [...items].sort((a, b) => {
+    const kb = releaseSortKey(b);
+    const ka = releaseSortKey(a);
+    if (kb !== ka) return kb - ka;
+    const yb = b.year ?? 0;
+    const ya = a.year ?? 0;
+    if (yb !== ya) return yb - ya;
+    return b.id - a.id;
+  });
+}
+
 export function GenresBrowsePage() {
   const { t } = useLang();
-  const [genres, setGenres] = useState<{ id?: number; name: string; slug?: string }[]>([]);
+  const [genres, setGenres] = useState<{ name: string; slug?: string; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -123,8 +146,33 @@ export function GenresBrowsePage() {
     setLoading(true);
     setError(null);
     try {
-      const rows = await fetchGenres();
-      setGenres(rows);
+      // Only genres backed by published catalog items (public list endpoints are published-only).
+      const [catalogGenres, moviePage, seriesPage] = await Promise.all([
+        fetchGenres(),
+        fetchMovies({ page_size: 100, sort: 'newest' }),
+        fetchSeries({ page_size: 100, sort: 'newest' }),
+      ]);
+      const counts = new Map<string, number>();
+      for (const movie of moviePage.items) {
+        for (const name of movie.genres || []) {
+          counts.set(name, (counts.get(name) || 0) + 1);
+        }
+      }
+      for (const show of seriesPage.items) {
+        for (const name of show.genres || []) {
+          counts.set(name, (counts.get(name) || 0) + 1);
+        }
+      }
+      const byName = new Map(catalogGenres.map((g) => [g.name, g]));
+      const next = [...counts.entries()]
+        .filter(([, count]) => count > 0)
+        .map(([name, count]) => ({
+          name,
+          slug: byName.get(name)?.slug || name.toLowerCase().replace(/\s+/g, '-'),
+          count,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      setGenres(next);
     } catch (err) {
       setGenres([]);
       setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Failed to load genres');
@@ -147,7 +195,9 @@ export function GenresBrowsePage() {
         ) : error ? (
           <PageError message={error} onRetry={load} />
         ) : genres.length === 0 ? (
-          <div className="py-16 text-center text-muted-foreground">{t.pages.emptyCatalog}</div>
+          <div className="py-16 text-center text-muted-foreground" data-testid="catalog-empty">
+            {t.pages.emptyCatalog}
+          </div>
         ) : (
           <ul className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
             {genres.map((genre) => (
@@ -155,10 +205,13 @@ export function GenresBrowsePage() {
                 <Link
                   to={`/movies?genre=${encodeURIComponent(genre.name)}`}
                   data-testid={`genre-card-${genre.slug || genre.name}`}
-                  className="flex min-h-[4.5rem] items-center justify-center rounded-lg border border-border bg-card px-3 py-4 text-center text-sm font-medium text-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  data-count={genre.count}
+                  className="flex min-h-[4.5rem] flex-col items-center justify-center gap-1 rounded-lg border border-border bg-card px-3 py-4 text-center transition-colors hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  <span className="sr-only">{t.pages.browseGenre.replace('{genre}', genre.name)} — </span>
-                  {genre.name}
+                  <span className="text-sm font-medium text-foreground">{genre.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {t.pages.genreCount.replace('{count}', String(genre.count))}
+                  </span>
                 </Link>
               </li>
             ))}
@@ -191,6 +244,7 @@ export function CatalogShelfPage({ mode }: { mode: ShelfMode }) {
     setLoading(true);
     setError(null);
     try {
+      // Public catalog endpoints return published rows only — never invent filler.
       const [moviePage, seriesPage] = await Promise.all([
         fetchMovies({ sort: 'newest', page_size: 100 }),
         fetchSeries({ sort: 'newest', page_size: 100 }),
@@ -204,8 +258,8 @@ export function CatalogShelfPage({ mode }: { mode: ShelfMode }) {
         nextMovies = nextMovies.filter((m) => hasTracks(m.subtitles));
         nextSeries = nextSeries.filter((s) => hasTracks(s.subtitles));
       } else {
-        nextMovies = nextMovies.slice(0, 24);
-        nextSeries = nextSeries.slice(0, 24);
+        nextMovies = sortNewestPublished(nextMovies).slice(0, 24);
+        nextSeries = sortNewestPublished(nextSeries).slice(0, 24);
       }
       setMovies(nextMovies);
       setSeries(nextSeries);
@@ -257,4 +311,9 @@ export function SubtitledPage() {
 
 export function NewReleasesPage() {
   return <CatalogShelfPage mode="new" />;
+}
+
+/** Compatibility alias used by some external links / QA checklists. */
+export function KidsRedirect() {
+  return <Navigate to="/children" replace />;
 }

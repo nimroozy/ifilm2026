@@ -63,13 +63,13 @@ function NavLinkItem({
 
 /**
  * Desktop catalog nav.
- * Below xl, secondary destinations collapse into More to avoid header overflow.
- * At xl+, all destinations render inline with horizontal scroll as a safety net.
+ * Below 2xl, secondary destinations collapse into More to avoid header overflow.
+ * At 2xl+, all destinations render inline with horizontal scroll as a safety net.
  */
 export function DesktopNav({ className }: { className?: string }) {
   const { t, dir } = useLang();
   const location = useLocation();
-  const isWide = useMediaQuery('(min-width: 1280px)');
+  const isWide = useMediaQuery('(min-width: 1536px)');
 
   const items = DESKTOP_NAV_ITEMS;
   const { visible, overflowItems } = useMemo(() => {

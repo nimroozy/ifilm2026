@@ -29,12 +29,13 @@ describe('customer nav active matching', () => {
     expect(isNavActive('/genres', genres)).toBe(true);
   });
 
-  it('includes Phase 3 destinations and excludes Collections', () => {
+  it('includes Phase 3 destinations and excludes Collections and deferred Watchlist', () => {
     const ids = DESKTOP_NAV_ITEMS.map((i) => i.id);
     expect(ids).toEqual(
-      expect.arrayContaining(['genres', 'dubbed', 'subtitled', 'newReleases', 'myList'])
+      expect.arrayContaining(['genres', 'dubbed', 'subtitled', 'newReleases'])
     );
     expect(ids).not.toContain('collections');
+    expect(ids).not.toContain('myList');
   });
 
   it('keeps mobile bottom tabs focused on core destinations', () => {

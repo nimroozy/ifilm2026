@@ -1,9 +1,11 @@
+import { lazy, Suspense, type ReactNode } from 'react';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createBrowserRouter, RouterProvider, Outlet } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, Outlet, Navigate } from 'react-router-dom';
 import CustomerLayout, { LangProvider, AuthProvider } from '@/components/CustomerLayout';
 import DocumentLangSync from '@/components/DocumentLangSync';
+import CustomerDocumentTitle from '@/components/customer/CustomerDocumentTitle';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Index from '@/pages/Index';
 import {
@@ -36,30 +38,36 @@ import PlaybackSessionsPage from '@/pages/admin/PlaybackSessionsPage';
 import SystemUpdatesPage from '@/pages/admin/SystemUpdatesPage';
 import TmdbToolsPage from '@/pages/admin/TmdbToolsPage';
 import AdminPlaceholderPage from '@/pages/admin/AdminPlaceholderPage';
-import AboutPage, {
-  ContactPage,
-  HelpPage,
-  PrivacyPage,
-  TermsPage,
-  CopyrightPage,
-} from '@/pages/AboutPage';
 import {
   GenresBrowsePage,
   DubbedPage,
   SubtitledPage,
   NewReleasesPage,
 } from '@/pages/CatalogBrowsePages';
+import NotFoundPage from '@/pages/NotFoundPage';
+
+const AboutPage = lazy(() => import('@/pages/LegalPages'));
+const ContactPage = lazy(() => import('@/pages/LegalPages').then((m) => ({ default: m.ContactPage })));
+const HelpPage = lazy(() => import('@/pages/LegalPages').then((m) => ({ default: m.HelpPage })));
+const PrivacyPage = lazy(() => import('@/pages/LegalPages').then((m) => ({ default: m.PrivacyPage })));
+const TermsPage = lazy(() => import('@/pages/LegalPages').then((m) => ({ default: m.TermsPage })));
+const CopyrightPage = lazy(() => import('@/pages/LegalPages').then((m) => ({ default: m.CopyrightPage })));
 
 const queryClient = new QueryClient();
 
-function CustomerRoute({ children }: { children: React.ReactNode }) {
+function CustomerRoute({ children }: { children: ReactNode }) {
   return <CustomerLayout>{children}</CustomerLayout>;
+}
+
+function LazyPage({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<div className="min-h-[40vh]" data-testid="route-loading" />}>{children}</Suspense>;
 }
 
 function RootLayout() {
   return (
     <>
       <DocumentLangSync />
+      <CustomerDocumentTitle />
       <Outlet />
     </>
   );
@@ -74,6 +82,7 @@ const router = createBrowserRouter([
       { path: '/movies', element: <CustomerRoute><MoviesPage /></CustomerRoute> },
       { path: '/series', element: <CustomerRoute><SeriesPage /></CustomerRoute> },
       { path: '/children', element: <CustomerRoute><ChildrenPage /></CustomerRoute> },
+      { path: '/kids', element: <Navigate to="/children" replace /> },
       { path: '/genres', element: <CustomerRoute><GenresBrowsePage /></CustomerRoute> },
       { path: '/dubbed', element: <CustomerRoute><DubbedPage /></CustomerRoute> },
       { path: '/subtitled', element: <CustomerRoute><SubtitledPage /></CustomerRoute> },
@@ -81,13 +90,76 @@ const router = createBrowserRouter([
       { path: '/movie/:id', element: <CustomerRoute><MovieDetailsPage /></CustomerRoute> },
       { path: '/series/:id', element: <CustomerRoute><SeriesDetailsPage /></CustomerRoute> },
       { path: '/search', element: <CustomerRoute><SearchPage /></CustomerRoute> },
-      { path: '/about', element: <CustomerRoute><AboutPage /></CustomerRoute> },
-      { path: '/credits', element: <CustomerRoute><AboutPage /></CustomerRoute> },
-      { path: '/contact', element: <CustomerRoute><ContactPage /></CustomerRoute> },
-      { path: '/help', element: <CustomerRoute><HelpPage /></CustomerRoute> },
-      { path: '/privacy', element: <CustomerRoute><PrivacyPage /></CustomerRoute> },
-      { path: '/terms', element: <CustomerRoute><TermsPage /></CustomerRoute> },
-      { path: '/copyright', element: <CustomerRoute><CopyrightPage /></CustomerRoute> },
+      {
+        path: '/about',
+        element: (
+          <CustomerRoute>
+            <LazyPage>
+              <AboutPage />
+            </LazyPage>
+          </CustomerRoute>
+        ),
+      },
+      {
+        path: '/credits',
+        element: (
+          <CustomerRoute>
+            <LazyPage>
+              <AboutPage />
+            </LazyPage>
+          </CustomerRoute>
+        ),
+      },
+      {
+        path: '/contact',
+        element: (
+          <CustomerRoute>
+            <LazyPage>
+              <ContactPage />
+            </LazyPage>
+          </CustomerRoute>
+        ),
+      },
+      {
+        path: '/help',
+        element: (
+          <CustomerRoute>
+            <LazyPage>
+              <HelpPage />
+            </LazyPage>
+          </CustomerRoute>
+        ),
+      },
+      {
+        path: '/privacy',
+        element: (
+          <CustomerRoute>
+            <LazyPage>
+              <PrivacyPage />
+            </LazyPage>
+          </CustomerRoute>
+        ),
+      },
+      {
+        path: '/terms',
+        element: (
+          <CustomerRoute>
+            <LazyPage>
+              <TermsPage />
+            </LazyPage>
+          </CustomerRoute>
+        ),
+      },
+      {
+        path: '/copyright',
+        element: (
+          <CustomerRoute>
+            <LazyPage>
+              <CopyrightPage />
+            </LazyPage>
+          </CustomerRoute>
+        ),
+      },
       { path: '/login', element: <LoginPage /> },
       { path: '/profile', element: <CustomerRoute><ProfilePage /></CustomerRoute> },
       { path: '/devices', element: <CustomerRoute><DevicesPage /></CustomerRoute> },
@@ -129,6 +201,7 @@ const router = createBrowserRouter([
           { path: 'tools/users', element: <AdminPlaceholderPage section="users" /> },
         ],
       },
+      { path: '*', element: <CustomerRoute><NotFoundPage /></CustomerRoute> },
     ],
   },
 ]);

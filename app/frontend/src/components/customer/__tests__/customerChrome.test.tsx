@@ -26,7 +26,7 @@ function wrap(ui: ReactNode, path = '/') {
 describe('customer navigation and footer chrome', () => {
   beforeEach(() => {
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-      matches: String(query).includes('1280'),
+      matches: String(query).includes('1536'),
       media: query,
       onchange: null,
       addListener: vi.fn(),

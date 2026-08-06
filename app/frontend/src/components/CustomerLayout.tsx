@@ -443,14 +443,14 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
         </div>
       </header>
 
-      <main className="flex-1 pb-20 pt-16 md:pb-0 md:pt-20">{children}</main>
+      <main className="flex-1 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-16 md:pb-0 md:pt-20">{children}</main>
 
-      <div className="pb-20 md:pb-0">
+      <div className="pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0">
         <CustomerFooter />
       </div>
 
       <nav
-        className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-background/95 backdrop-blur-md md:hidden"
+        className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden"
         aria-label={t.nav.menu}
         data-testid="mobile-bottom-nav"
       >
