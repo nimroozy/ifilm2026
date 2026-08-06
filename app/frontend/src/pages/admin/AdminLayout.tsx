@@ -5,6 +5,7 @@ import {
   Film,
   Tv,
   Tags,
+  Bookmark,
   Upload,
   Cpu,
   PlayCircle,
@@ -41,6 +42,7 @@ const navGroups: NavGroup[] = [
       { to: '/admin/movies', label: 'Movies', icon: Film },
       { to: '/admin/series', label: 'Series', icon: Tv },
       { to: '/admin/genres', label: 'Genres', icon: Tags },
+      { to: '/admin/collections', label: 'Collections', icon: Bookmark },
     ],
   },
   {

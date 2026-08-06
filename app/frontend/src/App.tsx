@@ -16,6 +16,7 @@ import {
   SeriesDetailsPage,
   SearchPage,
 } from '@/pages/Browse';
+import { CollectionsIndexPage, CollectionDetailPage } from '@/pages/CollectionsPages';
 import PlayerPage from '@/pages/PlayerPage';
 import { LoginPage, ProfilePage, DevicesPage, WatchlistPage, HistoryPage } from '@/pages/Account';
 import RequireAdmin from '@/pages/admin/RequireAdmin';
@@ -31,6 +32,8 @@ import SeasonFormPage from '@/pages/admin/SeasonFormPage';
 import EpisodesPage from '@/pages/admin/EpisodesPage';
 import EpisodeFormPage from '@/pages/admin/EpisodeFormPage';
 import GenresPage from '@/pages/admin/GenresPage';
+import CollectionsListPage from '@/pages/admin/CollectionsListPage';
+import CollectionFormPage from '@/pages/admin/CollectionFormPage';
 import MediaUploadPage from '@/pages/admin/MediaUploadPage';
 import MediaAssetDetailPage from '@/pages/admin/MediaAssetDetailPage';
 import MediaProcessingJobsPage from '@/pages/admin/MediaProcessingJobsPage';
@@ -84,6 +87,8 @@ const router = createBrowserRouter([
       { path: '/children', element: <CustomerRoute><ChildrenPage /></CustomerRoute> },
       { path: '/kids', element: <Navigate to="/children" replace /> },
       { path: '/genres', element: <CustomerRoute><GenresBrowsePage /></CustomerRoute> },
+      { path: '/collections', element: <CustomerRoute><CollectionsIndexPage /></CustomerRoute> },
+      { path: '/collections/:slug', element: <CustomerRoute><CollectionDetailPage /></CustomerRoute> },
       { path: '/dubbed', element: <CustomerRoute><DubbedPage /></CustomerRoute> },
       { path: '/subtitled', element: <CustomerRoute><SubtitledPage /></CustomerRoute> },
       { path: '/new-releases', element: <CustomerRoute><NewReleasesPage /></CustomerRoute> },
@@ -190,6 +195,9 @@ const router = createBrowserRouter([
           { path: 'seasons/:id/episodes', element: <EpisodesPage /> },
           { path: 'episodes/:id/edit', element: <EpisodeFormPage /> },
           { path: 'genres', element: <GenresPage /> },
+          { path: 'collections', element: <CollectionsListPage /> },
+          { path: 'collections/new', element: <CollectionFormPage /> },
+          { path: 'collections/:id/edit', element: <CollectionFormPage /> },
           { path: 'tools/upload', element: <MediaUploadPage /> },
           { path: 'tools/tmdb', element: <TmdbToolsPage /> },
           { path: 'media/processing', element: <MediaProcessingJobsPage /> },
