@@ -456,10 +456,10 @@ function MetadataFields({
         />
         {(
           [
-            ['audio', 'Audio (comma-separated)'],
-            ['subtitles', 'Subtitles (comma-separated)'],
+            ['audio', 'Audio languages (codes: en, fa, prs, ps, …)'],
+            ['subtitles', 'Subtitle languages (canonical codes)'],
             ['qualities', 'Qualities (comma-separated)'],
-            ['dubbed', 'Dubbed (comma-separated)'],
+            ['dubbed', 'Dubbed languages (must differ from original; codes only)'],
           ] as const
         ).map(([name, label]) => (
           <FormField
@@ -470,13 +470,22 @@ function MetadataFields({
               <FormItem>
                 <FormLabel>{label}</FormLabel>
                 <FormControl>
-                  <Input {...field} />
+                  <Input {...field} placeholder="e.g. en, fa, prs, ps" list="ifilm-language-codes" />
                 </FormControl>
+                <p className="text-xs text-muted-foreground">
+                  Stored as canonical codes. Does not overwrite probed package tracks — those remain
+                  authoritative when present. Dari=prs, Persian/Farsi=fa (kept distinct).
+                </p>
                 <FormMessage />
               </FormItem>
             )}
           />
         ))}
+        <datalist id="ifilm-language-codes">
+          {['en', 'fa', 'prs', 'ps', 'ar', 'hi', 'ur', 'ko', 'ja', 'zh', 'tr', 'ru'].map((code) => (
+            <option key={code} value={code} />
+          ))}
+        </datalist>
       </CardContent>
     </Card>
   );

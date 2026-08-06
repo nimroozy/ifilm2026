@@ -12,8 +12,8 @@ Customer-facing adaptive playback using the **protected Phase 7 streaming servic
 | `useHlsPlayer` | Native HLS **or** `hls.js` (never both) |
 | `PlayerControls` | Play, seek, volume, fullscreen, PiP, speed |
 | `QualitySelector` | Auto + manifest levels (hls.js only) |
-| `AudioTrackSelector` | Manifest audio tracks when >1 |
-| `SubtitleSelector` | Placeholder (pipeline deferred) |
+| `AudioTrackSelector` | Manifest audio tracks when >1 (external HLS only today) |
+| `SubtitleSelector` | Manifest text tracks + Off; local packaging deferred |
 | `PlaybackError` / `PlayerLoadingState` | Safe UX (no tokens in messages) |
 
 ## Native HLS vs hls.js
@@ -105,4 +105,6 @@ pnpm exec playwright test -c playwright.phase8.config.ts
 
 ## Deferred
 
-Watch history / Continue Watching are implemented for authenticated subscribers (see [docs/user/WATCH_HISTORY.md](../user/WATCH_HISTORY.md)). Still deferred: payments/entitlement, DRM, subtitle packaging, CDN/Cloudflare/R2/S3, casting, TV apps, analytics platform, offline downloads.
+Watch history / Continue Watching are implemented for authenticated subscribers (see [docs/user/WATCH_HISTORY.md](../user/WATCH_HISTORY.md)). Still deferred: payments/entitlement, DRM, **multi-track local packaging** (`EXT-X-MEDIA` audio groups + subtitle playlists), CDN/Cloudflare/R2/S3, casting, TV apps, analytics platform, offline downloads.
+
+Catalog `audio_availability` / `subtitle_availability` expose truthful metadata with `selectable_in_player: false` until local multi-track packaging ships (see [AUDIO_SUBTITLE_AVAILABILITY.md](../catalog/AUDIO_SUBTITLE_AVAILABILITY.md)).

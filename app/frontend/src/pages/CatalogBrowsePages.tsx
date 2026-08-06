@@ -11,7 +11,7 @@ import {
   type CatalogSeries,
 } from '@/lib/catalogData';
 import { ApiError } from '@/lib/api';
-import { catalogAvailabilityBadge } from '@/lib/catalogAvailability';
+import { catalogAvailabilityBadges, itemIsDubbed, itemIsSubtitled } from '@/lib/catalogAvailability';
 import { canPlayFullMovie, hasDemoClip } from '@/lib/catalogPresentation';
 import { MediaCard } from '@/design-system';
 
@@ -50,7 +50,7 @@ function CatalogGrid({
   moviesLabel: string;
   seriesLabel: string;
   emptyLabel: string;
-  availabilityLabels: { dubbed: string; subtitled: string; audio: string };
+  availabilityLabels: { dubbed: string; subtitled: string; multiAudio: string };
 }) {
   const navigate = useNavigate();
   if (movies.length === 0 && series.length === 0) {
@@ -68,22 +68,26 @@ function CatalogGrid({
             {moviesLabel}
           </h2>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-            {movies.map((movie) => (
-              <MediaCard
-                key={`m-${movie.id}`}
-                className="!w-full max-w-none"
-                title={movie.title}
-                imageUrl={movie.poster}
-                year={movie.year}
-                rating={movie.rating}
-                runtime={movie.duration ? `${movie.duration} min` : undefined}
-                quality={movie.qualities?.[0] || undefined}
-                badge={catalogAvailabilityBadge(movie, availabilityLabels)}
-                showDemo={hasDemoClip(movie)}
-                playable={canPlayFullMovie(movie) || hasDemoClip(movie)}
-                onActivate={() => navigate(`/movie/${movie.id}`)}
-              />
-            ))}
+            {movies.map((movie) => {
+              const { badges, overflow } = catalogAvailabilityBadges(movie, availabilityLabels);
+              return (
+                <MediaCard
+                  key={`m-${movie.id}`}
+                  className="!w-full max-w-none"
+                  title={movie.title}
+                  imageUrl={movie.poster}
+                  year={movie.year}
+                  rating={movie.rating}
+                  runtime={movie.duration ? `${movie.duration} min` : undefined}
+                  quality={movie.qualities?.[0] || undefined}
+                  availabilityBadges={badges}
+                  availabilityOverflow={overflow}
+                  showDemo={hasDemoClip(movie)}
+                  playable={canPlayFullMovie(movie) || hasDemoClip(movie)}
+                  onActivate={() => navigate(`/movie/${movie.id}`)}
+                />
+              );
+            })}
           </div>
         </section>
       ) : null}
@@ -93,29 +97,29 @@ function CatalogGrid({
             {seriesLabel}
           </h2>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-            {series.map((show) => (
-              <MediaCard
-                key={`s-${show.id}`}
-                className="!w-full max-w-none"
-                title={show.title}
-                imageUrl={show.poster}
-                year={show.year}
-                rating={show.rating}
-                badge={catalogAvailabilityBadge(show, availabilityLabels)}
-                showDemo={hasDemoClip(show)}
-                playable={hasDemoClip(show)}
-                onActivate={() => navigate(`/series/${show.id}`)}
-              />
-            ))}
+            {series.map((show) => {
+              const { badges, overflow } = catalogAvailabilityBadges(show, availabilityLabels);
+              return (
+                <MediaCard
+                  key={`s-${show.id}`}
+                  className="!w-full max-w-none"
+                  title={show.title}
+                  imageUrl={show.poster}
+                  year={show.year}
+                  rating={show.rating}
+                  availabilityBadges={badges}
+                  availabilityOverflow={overflow}
+                  showDemo={hasDemoClip(show)}
+                  playable={hasDemoClip(show)}
+                  onActivate={() => navigate(`/series/${show.id}`)}
+                />
+              );
+            })}
           </div>
         </section>
       ) : null}
     </div>
   );
-}
-
-function hasTracks(list: string[] | undefined): boolean {
-  return Array.isArray(list) && list.length > 0;
 }
 
 function releaseSortKey(item: { publishedAt?: string | null; createdAt?: string | null; id: number }): number {
@@ -249,19 +253,27 @@ export function CatalogShelfPage({ mode }: { mode: ShelfMode }) {
     setLoading(true);
     setError(null);
     try {
-      // Public catalog endpoints return published rows only — never invent filler.
+      // Published-only catalog. Dubbed/Subtitled use server semantic filters.
+      const movieParams =
+        mode === 'dubbed'
+          ? { sort: 'newest' as const, page_size: 100, has_dubbed: true }
+          : mode === 'subtitled'
+            ? { sort: 'newest' as const, page_size: 100, has_subtitles: true }
+            : { sort: 'newest' as const, page_size: 100 };
+      const seriesParams = { ...movieParams };
       const [moviePage, seriesPage] = await Promise.all([
-        fetchMovies({ sort: 'newest', page_size: 100 }),
-        fetchSeries({ sort: 'newest', page_size: 100 }),
+        fetchMovies(movieParams),
+        fetchSeries(seriesParams),
       ]);
       let nextMovies = moviePage.items;
       let nextSeries = seriesPage.items;
       if (mode === 'dubbed') {
-        nextMovies = nextMovies.filter((m) => hasTracks(m.dubbed));
-        nextSeries = nextSeries.filter((s) => hasTracks(s.dubbed));
+        // Client-side safety net for older API responses without structured fields.
+        nextMovies = nextMovies.filter((m) => itemIsDubbed(m));
+        nextSeries = nextSeries.filter((s) => itemIsDubbed(s));
       } else if (mode === 'subtitled') {
-        nextMovies = nextMovies.filter((m) => hasTracks(m.subtitles));
-        nextSeries = nextSeries.filter((s) => hasTracks(s.subtitles));
+        nextMovies = nextMovies.filter((m) => itemIsSubtitled(m));
+        nextSeries = nextSeries.filter((s) => itemIsSubtitled(s));
       } else {
         nextMovies = sortNewestPublished(nextMovies).slice(0, 24);
         nextSeries = sortNewestPublished(nextSeries).slice(0, 24);
@@ -301,7 +313,7 @@ export function CatalogShelfPage({ mode }: { mode: ShelfMode }) {
               availabilityLabels={{
                 dubbed: t.nav.dubbed,
                 subtitled: t.nav.subtitled,
-                audio: t.movie.audio,
+                multiAudio: 'Multi Audio',
               }}
             />
           )}

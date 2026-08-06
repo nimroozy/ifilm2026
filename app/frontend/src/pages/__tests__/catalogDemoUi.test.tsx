@@ -94,21 +94,35 @@ describe('demo catalog movie UI', () => {
   it('exposes audio, dubbed, and subtitle availability on movie detail', async () => {
     fetchMovie.mockResolvedValue(
       movie({
-        audio: ['Dari'],
-        dubbed: ['Persian', 'Pashto'],
-        subtitles: ['English'],
+        audio: ['en', 'fa'],
+        dubbed: ['fa'],
+        subtitles: ['en'],
+        language: 'English',
+        audioAvailability: {
+          original_language: 'en',
+          languages: ['en', 'fa'],
+          dubbed_languages: ['fa'],
+          track_count: null,
+          source: 'admin_metadata',
+          selectable_in_player: false,
+        },
+        subtitleAvailability: {
+          languages: ['en'],
+          track_count: null,
+          source: 'admin_metadata',
+          selectable_in_player: false,
+        },
       })
     );
 
     renderMovieDetails();
 
-    expect(await screen.findByTestId('movie-availability-chips')).toHaveTextContent('Dubbed');
-    expect(screen.getByTestId('movie-availability-chips')).toHaveTextContent('Subtitled');
-    expect(screen.getByTestId('movie-availability-chips')).toHaveTextContent('Audio');
+    expect(await screen.findByTestId('movie-availability-chips')).toHaveTextContent(/Dubbed/i);
+    expect(screen.getByTestId('movie-availability-chips')).toHaveTextContent(/Original/i);
     const technical = screen.getByTestId('movie-technical-details');
-    expect(technical).toHaveTextContent('Persian, Pashto');
-    expect(technical).toHaveTextContent('English');
-    expect(technical).toHaveTextContent('Dari');
+    expect(technical).toHaveTextContent(/Persian/i);
+    expect(technical).toHaveTextContent(/English/i);
+    expect(screen.getByTestId('movie-availability-source-note')).toBeInTheDocument();
   });
 
   it('shows Full Movie Unavailable when neither playable nor demo clip exists', async () => {

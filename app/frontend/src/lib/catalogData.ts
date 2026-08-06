@@ -11,6 +11,7 @@ import {
   type MovieDto,
   type SeriesDto,
 } from './api';
+import { resolveAudioAvailability } from './catalogAvailability';
 import { isApiMode, isMockMode } from './dataMode';
 import {
   movies as mockMovies,
@@ -20,6 +21,15 @@ import {
   type Movie,
   type Series,
 } from '@/data/mockData';
+
+function hasDubCode(item: { dubbed?: string[]; audioAvailability?: unknown }, code: string): boolean {
+  const audio = resolveAudioAvailability(item as never);
+  if ((audio.dubbed_languages || []).includes(code)) return true;
+  // Legacy free-text fallback for mock fixtures
+  return Array.isArray(item.dubbed) && item.dubbed.some((d) => String(d).toLowerCase().includes(
+    code === 'fa' ? 'persian' : code === 'ps' ? 'pashto' : code
+  ));
+}
 
 export type CatalogMovie = ReturnType<typeof mapMovieDto> | Movie;
 export type CatalogSeries = ReturnType<typeof mapSeriesDto> | Series;
@@ -175,6 +185,8 @@ export async function fetchSeriesDetail(idOrSlug: number | string): Promise<Seri
         playable: false,
         hasPlayablePackage: false,
         hasExternalMedia: false,
+        audioAvailability: null,
+        subtitleAvailability: null,
       }));
     const seasonNumbers = Array.from(new Set(eps.map((e) => e.season))).sort((a, b) => a - b);
     const seasons =
@@ -278,8 +290,8 @@ export async function fetchHomeCatalog() {
       recentlyAdded: [...movies].sort((a, b) => b.year - a.year || b.id - a.id).slice(0, 12),
       popular: movies.filter((m) => m.rating >= 8.0).slice(0, 12),
       afghanMovies: movies.filter((m) => m.country === 'Afghanistan').slice(0, 12),
-      persianDubbed: movies.filter((m) => m.dubbed.includes('Persian')).slice(0, 12),
-      pashtoDubbed: movies.filter((m) => m.dubbed.includes('Pashto')).slice(0, 12),
+      persianDubbed: movies.filter((m) => hasDubCode(m, 'fa')).slice(0, 12),
+      pashtoDubbed: movies.filter((m) => hasDubCode(m, 'ps')).slice(0, 12),
       actionMovies: movies.filter((m) => m.genres.includes('Action')).slice(0, 12),
       comedyMovies: movies.filter((m) => m.genres.includes('Comedy')).slice(0, 12),
       familyMovies: movies
@@ -324,8 +336,8 @@ export async function fetchHomeCatalog() {
     recentlyAdded: mapAll(recentPage.items),
     popular: mapAll(popularPage.items),
     afghanMovies: pool.filter((m) => m.country === 'Afghanistan').slice(0, 12),
-    persianDubbed: pool.filter((m) => m.dubbed.includes('Persian')).slice(0, 12),
-    pashtoDubbed: pool.filter((m) => m.dubbed.includes('Pashto')).slice(0, 12),
+    persianDubbed: pool.filter((m) => hasDubCode(m, 'fa')).slice(0, 12),
+    pashtoDubbed: pool.filter((m) => hasDubCode(m, 'ps')).slice(0, 12),
     actionMovies: mapAll(actionPage.items),
     comedyMovies: mapAll(comedyPage.items),
     familyMovies: pool

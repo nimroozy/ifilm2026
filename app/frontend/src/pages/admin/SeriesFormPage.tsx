@@ -462,9 +462,9 @@ export default function SeriesFormPage() {
               />
               {(
                 [
-                  ['audio', 'Audio (comma-separated)'],
-                  ['subtitles', 'Subtitles (comma-separated)'],
-                  ['dubbed', 'Dubbed (comma-separated)'],
+                  ['audio', 'Audio languages (codes: en, fa, prs, ps, …)'],
+                  ['subtitles', 'Subtitle languages (canonical codes)'],
+                  ['dubbed', 'Dubbed languages (must differ from original; codes only)'],
                 ] as const
               ).map(([name, label]) => (
                 <FormField
@@ -475,13 +475,22 @@ export default function SeriesFormPage() {
                     <FormItem>
                       <FormLabel>{label}</FormLabel>
                       <FormControl>
-                        <Input {...field} />
+                        <Input {...field} placeholder="e.g. en, fa, prs, ps" list="ifilm-series-language-codes" />
                       </FormControl>
+                      <p className="text-xs text-muted-foreground">
+                        Stored as canonical codes. Package probe data (when present) remains authoritative.
+                        Dari=prs and Persian/Farsi=fa stay distinct.
+                      </p>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               ))}
+              <datalist id="ifilm-series-language-codes">
+                {['en', 'fa', 'prs', 'ps', 'ar', 'hi', 'ur', 'ko', 'ja', 'zh', 'tr', 'ru'].map((code) => (
+                  <option key={code} value={code} />
+                ))}
+              </datalist>
             </CardContent>
           </Card>
 
