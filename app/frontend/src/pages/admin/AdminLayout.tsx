@@ -85,7 +85,8 @@ export default function AdminLayout() {
         if ((me.permissions || []).includes('system_updates.read')) {
           return adminApi.getSystemVersion().then((v) => {
             if (!cancelled) {
-              setVersionLabel(`${v.version}`);
+              const label = String(v.version || '').trim();
+              setVersionLabel(label && label !== 'undefined' ? label : null);
               setEnvBadge(v.deployment_mode || v.update_channel || null);
             }
           });
