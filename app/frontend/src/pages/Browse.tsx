@@ -28,6 +28,11 @@ import {
   type CatalogSeries,
 } from '@/lib/catalogData';
 import { ApiError } from '@/lib/api';
+import {
+  catalogAvailabilityChips,
+  formatCatalogTracks,
+  hasCatalogTracks,
+} from '@/lib/catalogAvailability';
 import { canPlayFullMovie, fullMovieUnavailableLabel, hasDemoClip, isDemoCatalogItem } from '@/lib/catalogPresentation';
 import { trailerEmbedUrl } from '@/lib/trailers';
 import { MediaCard } from '@/design-system';
@@ -498,9 +503,21 @@ export function SeriesDetailsPage() {
   const show = detail.series;
   const showTrailerEmbed = trailerEmbedUrl(show);
   const showIsDemo = isDemoCatalogItem(show);
+  const availabilityLabels = {
+    dubbed: t.movie.dubbed,
+    subtitled: t.nav.subtitled,
+    audio: t.movie.audio,
+  };
+  const availabilityChips = catalogAvailabilityChips(show, availabilityLabels);
+  const hasTechnical =
+    hasCatalogTracks(show.audio) ||
+    hasCatalogTracks(show.subtitles) ||
+    hasCatalogTracks(show.dubbed) ||
+    Boolean(show.country) ||
+    Boolean(show.language);
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen" data-testid="series-detail">
       <div className="relative h-[40vh] md:h-[50vh]">
         <img src={show.backdrop} alt={show.title} className="w-full h-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
@@ -528,6 +545,19 @@ export function SeriesDetailsPage() {
               <Star className="h-4 w-4 text-primary fill-primary" />
               <span>{show.rating}</span>
             </div>
+            {availabilityChips.length ? (
+              <div
+                className="flex flex-wrap gap-2"
+                data-testid="series-availability-chips"
+                aria-label="Audio and subtitle availability"
+              >
+                {availabilityChips.map((chip) => (
+                  <Badge key={chip} variant="secondary">
+                    {chip}
+                  </Badge>
+                ))}
+              </div>
+            ) : null}
             <p className="text-sm text-foreground/80">{show.description}</p>
             <div className="flex flex-wrap gap-2">
               {show.genres.map((g) => (
@@ -591,6 +621,34 @@ export function SeriesDetailsPage() {
             )}
           </div>
         </div>
+
+        {hasTechnical ? (
+          <section
+            className="mt-8 rounded-lg border border-border bg-card/60 p-5"
+            data-testid="series-technical-details"
+            aria-labelledby="series-technical-heading"
+          >
+            <h2 id="series-technical-heading" className="mb-4 text-lg font-serif font-bold text-foreground">
+              Technical Details
+            </h2>
+            <dl className="space-y-3 text-sm">
+              {[
+                [t.movie.audio, formatCatalogTracks(show.audio)],
+                [t.movie.dubbed, formatCatalogTracks(show.dubbed)],
+                [t.movie.subtitles, formatCatalogTracks(show.subtitles)],
+                ['Country', show.country],
+                ['Language', show.language],
+              ]
+                .filter(([, value]) => Boolean(value))
+                .map(([label, value]) => (
+                  <div key={String(label)} className="flex justify-between gap-4 border-b border-border/60 pb-2 last:border-0">
+                    <dt className="text-muted-foreground">{label}</dt>
+                    <dd className="text-right font-medium text-foreground">{value}</dd>
+                  </div>
+                ))}
+            </dl>
+          </section>
+        ) : null}
 
         {showTrailerEmbed && (
           <section className="mt-10 space-y-3" aria-labelledby="series-trailer-heading">

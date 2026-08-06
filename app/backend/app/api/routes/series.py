@@ -34,6 +34,11 @@ from app.services.catalog import (
     soft_delete,
     utcnow,
 )
+from app.services.catalog_availability import (
+    availability_for_series,
+    item_has_dub,
+    item_has_subtitles,
+)
 from app.services.publishing import workflow as publishing_workflow
 
 router = APIRouter(tags=["series"])
@@ -71,6 +76,40 @@ def _list_query(
         published_only=published_only,
     )
     return apply_sort(query, Series, sort if sort in SORT_OPTIONS else "newest")
+
+
+def _paginate_series(
+    db: DbSession,
+    query,
+    *,
+    page: int,
+    page_size: int,
+    has_dubbed: bool | None = None,
+    has_subtitles: bool | None = None,
+    public_counts: bool = False,
+):
+    if not has_dubbed and not has_subtitles:
+        total = query.count()
+        items = query.offset((page - 1) * page_size).limit(page_size).all()
+        return paginated(
+            [series_out(s, public_counts=public_counts, db=db) for s in items],
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
+
+    candidates = query.all()
+    filtered = []
+    for series in candidates:
+        audio_av, sub_av = availability_for_series(series, db)
+        if has_dubbed and not item_has_dub(audio_av):
+            continue
+        if has_subtitles and not item_has_subtitles(sub_av):
+            continue
+        filtered.append(series_out(series, public_counts=public_counts, db=db))
+    total = len(filtered)
+    start = (page - 1) * page_size
+    return paginated(filtered[start : start + page_size], total=total, page=page, page_size=page_size)
 
 
 def _ensure_unique_season_number(
@@ -122,6 +161,8 @@ def list_series(
     language: str | None = None,
     featured: bool | None = None,
     trending: bool | None = None,
+    has_dubbed: bool | None = None,
+    has_subtitles: bool | None = None,
     sort: SortParam = "newest",
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -138,14 +179,20 @@ def list_series(
         published_only=True,
         sort=sort,
     )
-    total = query.count()
-    items = query.offset((page - 1) * page_size).limit(page_size).all()
-    return paginated([series_out(s) for s in items], total=total, page=page, page_size=page_size)
+    return _paginate_series(
+        db,
+        query,
+        page=page,
+        page_size=page_size,
+        has_dubbed=has_dubbed,
+        has_subtitles=has_subtitles,
+        public_counts=True,
+    )
 
 
 @router.get("/series/{id_or_slug}", response_model=SeriesOut)
 def get_public_series(id_or_slug: str, db: DbSession) -> SeriesOut:
-    return series_out(resolve_series(db, id_or_slug, published_only=True), public_counts=True)
+    return series_out(resolve_series(db, id_or_slug, published_only=True), public_counts=True, db=db)
 
 
 @router.get("/series/{id_or_slug}/seasons", response_model=list[SeasonOut])
@@ -203,7 +250,7 @@ def admin_list_series(
     )
     total = query.count()
     items = query.offset((page - 1) * page_size).limit(page_size).all()
-    return paginated([series_out(s) for s in items], total=total, page=page, page_size=page_size)
+    return paginated([series_out(s, db=db) for s in items], total=total, page=page, page_size=page_size)
 
 
 @router.post("/admin/series", response_model=SeriesOut, status_code=status.HTTP_201_CREATED)
@@ -221,7 +268,7 @@ def create_series(
     series.genre_links = genres
     db.add(series)
     db.commit()
-    return series_out(get_series(db, series.id))
+    return series_out(get_series(db, series.id), db=db)
 
 
 @router.get("/admin/series/{series_id}", response_model=SeriesOut)
@@ -230,7 +277,7 @@ def admin_get_series(
     db: DbSession,
     _: Annotated[AdminUser, Depends(require_permissions("series.read"))],
 ) -> SeriesOut:
-    return series_out(get_series(db, series_id))
+    return series_out(get_series(db, series_id), db=db)
 
 
 @router.patch("/admin/series/{series_id}", response_model=SeriesOut)
@@ -238,8 +285,10 @@ def update_series(
     series_id: int,
     payload: SeriesUpdate,
     db: DbSession,
-    _: Annotated[AdminUser, Depends(require_permissions("series.manage"))],
+    admin: Annotated[AdminUser, Depends(require_permissions("series.manage"))],
 ) -> SeriesOut:
+    import logging
+
     series = get_series(db, series_id)
     data = payload.model_dump(exclude_unset=True, exclude={"genre_ids", "slug"})
     if "title" in payload.model_fields_set or "slug" in payload.model_fields_set:
@@ -248,6 +297,8 @@ def update_series(
         series.slug = make_slug_for_series(db, title, slug_value, exclude_id=series.id)
     if "imdb_id" in payload.model_fields_set:
         ensure_unique_imdb(db, Series, payload.imdb_id, exclude_id=series.id)
+    track_fields = ("audio", "subtitles", "dubbed")
+    before_tracks = {k: list(getattr(series, k) or []) for k in track_fields}
     for key, value in data.items():
         if hasattr(series, key):
             setattr(series, key, value)
@@ -256,7 +307,18 @@ def update_series(
     series.updated_at = utcnow()
     db.add(series)
     db.commit()
-    return series_out(get_series(db, series.id))
+    after_tracks = {k: list(getattr(series, k) or []) for k in track_fields}
+    changed = {
+        k: {"from": before_tracks[k], "to": after_tracks[k]}
+        for k in track_fields
+        if before_tracks[k] != after_tracks[k]
+    }
+    if changed:
+        logging.getLogger("app.catalog.audit").info(
+            "catalog_audit event=series_availability_updated details=%s",
+            {"series_id": series.id, "admin_id": admin.id, "changes": changed},
+        )
+    return series_out(get_series(db, series.id), db=db)
 
 
 @router.delete("/admin/series/{series_id}", response_model=Message)

@@ -12,6 +12,13 @@ import { Badge } from '@/components/ui/badge';
 import { ContentShelf, MediaCard, MetaChip, MetaRow, SectionHeader, typography } from '@/design-system';
 import { useLang } from '@/components/CustomerLayout';
 import type { CatalogMovie } from '@/lib/catalogData';
+import {
+  catalogAvailabilityChips,
+  formatCatalogTracks,
+  hasCatalogTracks,
+  resolveAudioAvailability,
+  resolveSubtitleAvailability,
+} from '@/lib/catalogAvailability';
 import { canPlayFullMovie, fullMovieUnavailableLabel, hasDemoClip, isDemoCatalogItem } from '@/lib/catalogPresentation';
 import { trailerEmbedUrl } from '@/lib/trailers';
 import { cn } from '@/lib/utils';
@@ -68,6 +75,16 @@ export function MovieDetailView({
   const tmdbId = 'tmdbId' in movie ? movie.tmdbId : null;
   const runtimeLabel = movie.duration ? `${movie.duration} ${t.common.min}` : '';
   const imdbLabel = movie.rating ? `IMDb ${Number(movie.rating).toFixed(1)}` : '';
+  const availabilityLabels = {
+    dubbed: t.movie.dubbed,
+    subtitled: t.nav.subtitled,
+    audio: t.movie.audio,
+    original: 'Original',
+  };
+  const availabilityChips = catalogAvailabilityChips(movie, availabilityLabels);
+  const audioAv = resolveAudioAvailability(movie);
+  const subAv = resolveSubtitleAvailability(movie);
+  const impliesPackagedTracks = Boolean(audioAv.selectable_in_player || subAv.selectable_in_player);
 
   const onShare = async () => {
     const ok = await shareTitle(movie.title, window.location.href);
@@ -138,6 +155,27 @@ export function MovieDetailView({
                     tmdbId ? `TMDB ${tmdbId}` : null,
                   ]}
                 />
+
+                {availabilityChips.length ? (
+                  <div
+                    className="flex flex-wrap gap-2"
+                    data-testid="movie-availability-chips"
+                    aria-label="Audio and subtitle availability"
+                  >
+                    {availabilityChips.map((chip) => (
+                      <MetaChip key={chip}>{chip}</MetaChip>
+                    ))}
+                  </div>
+                ) : null}
+                {availabilityChips.length && !impliesPackagedTracks ? (
+                  <p className="text-xs text-muted-foreground" data-testid="movie-availability-source-note">
+                    {audioAv.source === 'admin_metadata' || subAv.source === 'admin_metadata'
+                      ? 'Catalog language info — not confirmed as selectable packaged tracks.'
+                      : audioAv.source === 'tmdb_metadata'
+                        ? 'Original language from metadata — does not confirm a local audio track.'
+                        : null}
+                  </p>
+                ) : null}
 
                 <div className="flex flex-wrap gap-2">
                   {movie.genres.map((genre) => (
@@ -240,8 +278,9 @@ export function MovieDetailView({
         {/* Overview + technical */}
         {(movie.description ||
           movie.director ||
-          movie.audio?.length ||
-          movie.subtitles?.length ||
+          hasCatalogTracks(movie.audio) ||
+          hasCatalogTracks(movie.subtitles) ||
+          hasCatalogTracks(movie.dubbed) ||
           movie.qualities?.length ||
           movie.country ||
           movie.language ||
@@ -255,16 +294,40 @@ export function MovieDetailView({
               <p className={cn(typography.body, 'text-foreground/90')}>{movie.description}</p>
             </div>
             ) : <div />}
-            <div className="rounded-2xl border border-white/8 bg-card/60 p-5 shadow-lg backdrop-blur-sm">
+            <div
+              className="rounded-2xl border border-white/8 bg-card/60 p-5 shadow-lg backdrop-blur-sm"
+              data-testid="movie-technical-details"
+            >
               <h2 className={cn(typography.sectionTitle, 'mb-4')}>Technical Details</h2>
               <dl className="space-y-3 text-sm">
                 {[
                   [t.movie.director, movie.director],
-                  [t.movie.audio, movie.audio?.join(', ')],
-                  [t.movie.subtitles, movie.subtitles?.join(', ')],
+                  [
+                    'Original',
+                    audioAv.original_language
+                      ? formatCatalogTracks([audioAv.original_language])
+                      : movie.language,
+                  ],
+                  [t.movie.audio, formatCatalogTracks(audioAv.languages?.length ? audioAv.languages : movie.audio)],
+                  [t.movie.dubbed, formatCatalogTracks(audioAv.dubbed_languages?.length ? audioAv.dubbed_languages : [])],
+                  [
+                    t.movie.subtitles,
+                    formatCatalogTracks(subAv.languages?.length ? subAv.languages : movie.subtitles),
+                  ],
+                  [
+                    'Audio tracks',
+                    typeof audioAv.track_count === 'number' && audioAv.track_count > 0
+                      ? String(audioAv.track_count)
+                      : '',
+                  ],
+                  [
+                    'Subtitle tracks',
+                    typeof subAv.track_count === 'number' && subAv.track_count > 0
+                      ? String(subAv.track_count)
+                      : '',
+                  ],
                   [t.movie.quality, movie.qualities?.join(', ')],
                   ['Country', movie.country],
-                  ['Language', movie.language],
                   ['Runtime', runtimeLabel],
                   ['IMDb', imdbLabel.replace(/^IMDb\s/, '')],
                 ]

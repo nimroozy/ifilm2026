@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.common import ORMModel
+from app.services.languages import normalize_language_list
 from app.utils.slug import normalize_slug
 
 
@@ -13,6 +14,37 @@ def _trim(value: Any) -> Any:
     if isinstance(value, str):
         return value.strip()
     return value
+
+
+AvailabilitySource = Literal[
+    "media_probe",
+    "package_manifest",
+    "admin_metadata",
+    "tmdb_metadata",
+    "unknown",
+]
+
+
+class AudioAvailabilityOut(BaseModel):
+    original_language: str | None = None
+    languages: list[str] = Field(default_factory=list)
+    dubbed_languages: list[str] = Field(default_factory=list)
+    track_count: int | None = None
+    source: AvailabilitySource = "unknown"
+    selectable_in_player: bool = False
+
+
+class SubtitleAvailabilityOut(BaseModel):
+    languages: list[str] = Field(default_factory=list)
+    track_count: int | None = None
+    source: AvailabilitySource = "unknown"
+    selectable_in_player: bool = False
+
+
+def _normalize_lang_field(value: Any) -> Any:
+    if value is None:
+        return value
+    return normalize_language_list(value)
 
 
 class GenreBase(BaseModel):
@@ -172,6 +204,11 @@ class MovieCreate(CatalogFieldsMixin):
     dubbed: list[str] = Field(default_factory=list)
     tmdb_id: int | None = None
 
+    @field_validator("audio", "subtitles", "dubbed", mode="before")
+    @classmethod
+    def normalize_language_fields(cls, value: Any) -> Any:
+        return _normalize_lang_field(value)
+
 
 class MovieUpdate(BaseModel):
     title: str | None = None
@@ -204,6 +241,13 @@ class MovieUpdate(BaseModel):
     dubbed: list[str] | None = None
     hls_path: str | None = None
     tmdb_id: int | None = None
+
+    @field_validator("audio", "subtitles", "dubbed", mode="before")
+    @classmethod
+    def normalize_language_fields(cls, value: Any) -> Any:
+        if value is None:
+            return value
+        return _normalize_lang_field(value)
 
     @field_validator(
         "title",
@@ -317,6 +361,8 @@ class MovieOut(ORMModel):
     subtitles: list[str] = Field(default_factory=list)
     qualities: list[str] = Field(default_factory=list)
     dubbed: list[str] = Field(default_factory=list)
+    audio_availability: AudioAvailabilityOut = Field(default_factory=AudioAvailabilityOut)
+    subtitle_availability: SubtitleAvailabilityOut = Field(default_factory=SubtitleAvailabilityOut)
     views: int = 0
     type: str = "movie"
     hls_path: str | None = None
@@ -343,6 +389,11 @@ class SeriesCreate(CatalogFieldsMixin):
     subtitles: list[str] = Field(default_factory=list)
     dubbed: list[str] = Field(default_factory=list)
     new_episode: bool = False
+
+    @field_validator("audio", "subtitles", "dubbed", mode="before")
+    @classmethod
+    def normalize_language_fields(cls, value: Any) -> Any:
+        return _normalize_lang_field(value)
 
     @field_validator("end_year")
     @classmethod
@@ -403,6 +454,8 @@ class SeriesOut(ORMModel):
     audio: list[str] = Field(default_factory=list)
     subtitles: list[str] = Field(default_factory=list)
     dubbed: list[str] = Field(default_factory=list)
+    audio_availability: AudioAvailabilityOut = Field(default_factory=AudioAvailabilityOut)
+    subtitle_availability: SubtitleAvailabilityOut = Field(default_factory=SubtitleAvailabilityOut)
     new_episode: bool = False
     views: int = 0
     type: str = "series"
@@ -584,6 +637,8 @@ class EpisodeOut(ORMModel):
     playable: bool = False
     has_playable_package: bool = False
     has_external_media: bool = False
+    audio_availability: AudioAvailabilityOut = Field(default_factory=AudioAvailabilityOut)
+    subtitle_availability: SubtitleAvailabilityOut = Field(default_factory=SubtitleAvailabilityOut)
 
     # Compatibility
     season: int | None = None

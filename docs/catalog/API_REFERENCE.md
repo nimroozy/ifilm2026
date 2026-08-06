@@ -20,9 +20,17 @@ All list endpoints use:
 | GET | `/api/search` | Published movies + series by query |
 
 ### Filters / sort
-`q`, `genre`, `year`, `language`, `featured`, `trending`, `page`, `page_size`
+`q`, `genre`, `year`, `language`, `featured`, `trending`, `has_dubbed`, `has_subtitles`, `page`, `page_size`
 
 `sort`: `newest`, `oldest`, `title_asc`, `title_desc`, `rating_desc`, `recently_updated`
+
+### Availability fields (movie / series / episode)
+Backward-compatible additions — see `docs/catalog/AUDIO_SUBTITLE_AVAILABILITY.md`:
+
+- `audio_availability`: `original_language`, `languages`, `dubbed_languages`, `track_count`, `source`, `selectable_in_player`
+- `subtitle_availability`: `languages`, `track_count`, `source`, `selectable_in_player`
+
+Legacy `audio` / `subtitles` / `dubbed` string arrays remain.
 
 ## Admin (Bearer admin JWT + RBAC)
 

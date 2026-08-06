@@ -14,6 +14,7 @@ from app.schemas.common import Envelope, Message, paginated
 from app.schemas.content import MovieCreate, MovieOut, MovieUpdate, PublishAction
 from app.services.catalog import (
     apply_sort,
+    content_playability,
     ensure_unique_imdb,
     filter_catalog_query,
     get_movie,
@@ -23,6 +24,11 @@ from app.services.catalog import (
     resolve_movie,
     soft_delete,
     utcnow,
+)
+from app.services.catalog_availability import (
+    availability_for_movie,
+    item_has_dub,
+    item_has_subtitles,
 )
 from app.services.publishing import workflow as publishing_workflow
 
@@ -60,6 +66,38 @@ def _list_query(
     return apply_sort(query, Movie, sort if sort in SORT_OPTIONS else "newest")
 
 
+def _paginate_movies(
+    db: DbSession,
+    query,
+    *,
+    page: int,
+    page_size: int,
+    has_dubbed: bool | None = None,
+    has_subtitles: bool | None = None,
+):
+    if not has_dubbed and not has_subtitles:
+        total = query.count()
+        items = query.offset((page - 1) * page_size).limit(page_size).all()
+        return paginated([movie_out(m, db) for m in items], total=total, page=page, page_size=page_size)
+
+    # Semantic filter over candidates (no denormalized flags yet; catalog scale is modest).
+    candidates = query.all()
+    filtered = []
+    for movie in candidates:
+        _playable, has_package, has_external = content_playability(db, movie_id=movie.id)
+        audio_av, sub_av = availability_for_movie(
+            movie, db, has_playable_package=has_package, has_external_media=has_external
+        )
+        if has_dubbed and not item_has_dub(audio_av):
+            continue
+        if has_subtitles and not item_has_subtitles(sub_av):
+            continue
+        filtered.append(movie_out(movie, db))
+    total = len(filtered)
+    start = (page - 1) * page_size
+    return paginated(filtered[start : start + page_size], total=total, page=page, page_size=page_size)
+
+
 @router.get("/movies", response_model=Envelope[MovieOut])
 def list_movies(
     db: DbSession,
@@ -69,6 +107,8 @@ def list_movies(
     language: str | None = None,
     featured: bool | None = None,
     trending: bool | None = None,
+    has_dubbed: bool | None = None,
+    has_subtitles: bool | None = None,
     sort: SortParam = "newest",
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -85,9 +125,14 @@ def list_movies(
         published_only=True,
         sort=sort,
     )
-    total = query.count()
-    items = query.offset((page - 1) * page_size).limit(page_size).all()
-    return paginated([movie_out(m, db) for m in items], total=total, page=page, page_size=page_size)
+    return _paginate_movies(
+        db,
+        query,
+        page=page,
+        page_size=page_size,
+        has_dubbed=has_dubbed,
+        has_subtitles=has_subtitles,
+    )
 
 
 @router.get("/movies/{id_or_slug}", response_model=MovieOut)
@@ -169,7 +214,7 @@ def update_movie(
     movie_id: int,
     payload: MovieUpdate,
     db: DbSession,
-    _: Annotated[AdminUser, Depends(require_permissions("movies.manage"))],
+    admin: Annotated[AdminUser, Depends(require_permissions("movies.manage"))],
 ) -> MovieOut:
     movie = get_movie(db, movie_id)
     data = payload.model_dump(exclude_unset=True, exclude={"genre_ids", "slug"})
@@ -179,6 +224,8 @@ def update_movie(
         movie.slug = make_slug_for_movie(db, title, slug_value, exclude_id=movie.id)
     if "imdb_id" in payload.model_fields_set:
         ensure_unique_imdb(db, Movie, payload.imdb_id, exclude_id=movie.id)
+    track_fields = ("audio", "subtitles", "dubbed")
+    before_tracks = {k: list(getattr(movie, k) or []) for k in track_fields}
     for key, value in data.items():
         setattr(movie, key, value)
     if "genre_ids" in payload.model_fields_set and payload.genre_ids is not None:
@@ -187,6 +234,13 @@ def update_movie(
     movie.updated_at = utcnow()
     db.add(movie)
     db.commit()
+    after_tracks = {k: list(getattr(movie, k) or []) for k in track_fields}
+    changed = {k: {"from": before_tracks[k], "to": after_tracks[k]} for k in track_fields if before_tracks[k] != after_tracks[k]}
+    if changed:
+        logging.getLogger("app.catalog.audit").info(
+            "catalog_audit event=movie_availability_updated details=%s",
+            {"movie_id": movie.id, "admin_id": admin.id, "changes": changed},
+        )
     return movie_out(get_movie(db, movie.id), db)
 
 

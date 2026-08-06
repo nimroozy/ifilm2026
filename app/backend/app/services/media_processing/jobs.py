@@ -551,7 +551,7 @@ def execute_probe_job(
         db.add(job)
         db.commit()
 
-        meta = parse_ffprobe_payload(raw, probe_version="ffprobe-json-v1")
+        meta = parse_ffprobe_payload(raw, probe_version="ffprobe-json-v2")
 
         job.progress_percent = PROGRESS_SAVING
         job.current_step = "saving_metadata"

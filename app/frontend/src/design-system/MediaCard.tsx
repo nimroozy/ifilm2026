@@ -18,6 +18,8 @@ export interface MediaCardProps {
   playable?: boolean;
   progress?: number;
   badge?: string;
+  availabilityBadges?: { key: string; label: string; fullLabel: string }[];
+  availabilityOverflow?: number;
   variant?: MediaCardVariant;
   size?: 'sm' | 'md' | 'lg';
   onActivate?: () => void;
@@ -49,6 +51,8 @@ export function MediaCard({
   playable = false,
   progress,
   badge,
+  availabilityBadges,
+  availabilityOverflow = 0,
   variant = 'poster',
   size = 'md',
   onActivate,
@@ -117,8 +121,26 @@ export function MediaCard({
         ) : null}
 
         <div className="absolute left-2 right-2 top-2 flex flex-wrap items-start justify-between gap-1">
-          <div className="flex flex-wrap gap-1">
-            {badge ? (
+          <div className="flex max-w-[70%] flex-wrap gap-1" data-testid="media-card-availability">
+            {availabilityBadges?.map((b) => (
+              <span
+                key={b.key}
+                title={b.fullLabel}
+                aria-label={b.fullLabel}
+                className="rounded-md bg-secondary/90 px-1.5 py-0.5 text-[10px] font-medium text-secondary-foreground"
+              >
+                {b.label}
+              </span>
+            ))}
+            {availabilityOverflow > 0 ? (
+              <span
+                className="rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-medium text-white"
+                aria-label={`Plus ${availabilityOverflow} more`}
+              >
+                +{availabilityOverflow}
+              </span>
+            ) : null}
+            {!availabilityBadges?.length && badge ? (
               <span className="rounded-md bg-secondary/90 px-1.5 py-0.5 text-[10px] font-medium text-secondary-foreground">
                 {badge}
               </span>

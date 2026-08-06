@@ -42,6 +42,8 @@ class ProbeMetadata:
     audio_bitrate: int | None
     audio_stream_count: int
     subtitle_stream_count: int
+    audio_track_languages: list[str]
+    subtitle_track_languages: list[str]
     filtered_probe: dict[str, Any]
     probe_version: str | None
 
@@ -141,8 +143,19 @@ def filter_probe_json(raw: dict[str, Any]) -> dict[str, Any]:
                 "channel_layout": stream.get("channel_layout"),
                 "sample_rate": stream.get("sample_rate"),
                 "duration": stream.get("duration"),
+                "tags": {
+                    "language": (stream.get("tags") or {}).get("language")
+                    or (stream.get("tags") or {}).get("LANGUAGE"),
+                    "title": (stream.get("tags") or {}).get("title"),
+                }
+                if isinstance(stream.get("tags"), dict)
+                else None,
                 "disposition": {
                     "default": (stream.get("disposition") or {}).get("default"),
+                    "dub": (stream.get("disposition") or {}).get("dub"),
+                    "forced": (stream.get("disposition") or {}).get("forced"),
+                    "hearing_impaired": (stream.get("disposition") or {}).get("hearing_impaired"),
+                    "comment": (stream.get("disposition") or {}).get("comment"),
                 }
                 if isinstance(stream.get("disposition"), dict)
                 else None,
@@ -180,6 +193,29 @@ def parse_ffprobe_payload(
     audio = select_stream(streams, "audio")
     audio_count = sum(1 for s in streams if s.get("codec_type") == "audio")
     subtitle_count = sum(1 for s in streams if s.get("codec_type") in {"subtitle", "text"})
+
+    def _stream_lang(stream: dict[str, Any]) -> str | None:
+        raw_tags = stream.get("tags")
+        tags: dict[str, Any] = raw_tags if isinstance(raw_tags, dict) else {}
+        lang_raw = tags.get("language") or tags.get("LANGUAGE")
+        if lang_raw is None or str(lang_raw).strip() == "":
+            return None
+        return str(lang_raw).strip()
+
+    audio_track_languages = [
+        lang
+        for s in streams
+        if s.get("codec_type") == "audio"
+        for lang in [_stream_lang(s)]
+        if lang
+    ]
+    subtitle_track_languages = [
+        lang
+        for s in streams
+        if s.get("codec_type") in {"subtitle", "text"}
+        for lang in [_stream_lang(s)]
+        if lang
+    ]
 
     if video is None and audio is None:
         raise UnsupportedMediaError("No video or audio streams detected")
@@ -229,6 +265,8 @@ def parse_ffprobe_payload(
         audio_bitrate=parse_int(audio.get("bit_rate")) if audio else None,
         audio_stream_count=audio_count,
         subtitle_stream_count=subtitle_count,
+        audio_track_languages=audio_track_languages,
+        subtitle_track_languages=subtitle_track_languages,
         filtered_probe=filter_probe_json(raw),
         probe_version=probe_version,
     )

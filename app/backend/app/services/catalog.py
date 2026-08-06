@@ -11,11 +11,18 @@ from sqlalchemy.orm import Session, joinedload
 from app.models.content import Episode, Genre, Movie, Season, Series
 from app.models.enums import SORT_OPTIONS
 from app.schemas.content import (
+    AudioAvailabilityOut,
     EpisodeOut,
     GenreOut,
     MovieOut,
     SeasonOut,
     SeriesOut,
+    SubtitleAvailabilityOut,
+)
+from app.services.catalog_availability import (
+    availability_for_episode,
+    availability_for_movie,
+    availability_for_series,
 )
 from app.services.publishing.readiness import evaluate_playable_package
 from app.services.publishing.visibility import (
@@ -90,6 +97,12 @@ def genre_out(genre: Genre, *, movie_count: int | None = None, series_count: int
 def movie_out(movie: Movie, db: Session | None = None) -> MovieOut:
     genres = [genre_out(g, movie_count=0, series_count=0) for g in (movie.genre_links or [])]
     playable, has_package, has_external = content_playability(db, movie_id=movie.id)
+    audio_av, sub_av = availability_for_movie(
+        movie,
+        db,
+        has_playable_package=has_package,
+        has_external_media=has_external,
+    )
     return MovieOut(
         id=movie.id,
         title=movie.title,
@@ -137,6 +150,8 @@ def movie_out(movie: Movie, db: Session | None = None) -> MovieOut:
         subtitles=movie.subtitles or [],
         qualities=movie.qualities or [],
         dubbed=movie.dubbed or [],
+        audio_availability=AudioAvailabilityOut.model_validate(audio_av.model_dump()),
+        subtitle_availability=SubtitleAvailabilityOut.model_validate(sub_av.model_dump()),
         views=movie.views or 0,
         type="movie",
         hls_path=movie.hls_path,
@@ -152,7 +167,7 @@ def movie_out(movie: Movie, db: Session | None = None) -> MovieOut:
     )
 
 
-def series_out(series: Series, *, public_counts: bool = False) -> SeriesOut:
+def series_out(series: Series, *, public_counts: bool = False, db: Session | None = None) -> SeriesOut:
     genres = [genre_out(g, movie_count=0, series_count=0) for g in (series.genre_links or [])]
     if public_counts:
         season_count = public_season_count(series)
@@ -161,6 +176,7 @@ def series_out(series: Series, *, public_counts: bool = False) -> SeriesOut:
         seasons = [s for s in (series.seasons or []) if s.deleted_at is None]
         season_count = len(seasons)
         episode_count = sum(len([e for e in (s.episodes or []) if e.deleted_at is None]) for s in seasons)
+    audio_av, sub_av = availability_for_series(series, db)
     return SeriesOut(
         id=series.id,
         title=series.title,
@@ -204,6 +220,8 @@ def series_out(series: Series, *, public_counts: bool = False) -> SeriesOut:
         audio=series.audio or [],
         subtitles=series.subtitles or [],
         dubbed=series.dubbed or [],
+        audio_availability=AudioAvailabilityOut.model_validate(audio_av.model_dump()),
+        subtitle_availability=SubtitleAvailabilityOut.model_validate(sub_av.model_dump()),
         new_episode=bool(series.new_episode),
         views=series.views or 0,
         type="series",
@@ -241,6 +259,10 @@ def season_out(season: Season, *, public_counts: bool = False) -> SeasonOut:
 
 def episode_out(episode: Episode, db: Session | None = None) -> EpisodeOut:
     playable, has_package, has_external = content_playability(db, episode_id=episode.id)
+    series = episode.series if getattr(episode, "series", None) is not None else None
+    if series is None and db is not None and episode.series_id:
+        series = db.get(Series, episode.series_id)
+    audio_av, sub_av = availability_for_episode(episode, db, series=series)
     return EpisodeOut(
         id=episode.id,
         season_id=episode.season_id,
@@ -264,6 +286,8 @@ def episode_out(episode: Episode, db: Session | None = None) -> EpisodeOut:
         playable=playable,
         has_playable_package=has_package,
         has_external_media=has_external,
+        audio_availability=AudioAvailabilityOut.model_validate(audio_av.model_dump()),
+        subtitle_availability=SubtitleAvailabilityOut.model_validate(sub_av.model_dump()),
         season=episode.season.season_number if episode.season else None,
         episode=episode.episode_number,
         duration=episode.duration_minutes,

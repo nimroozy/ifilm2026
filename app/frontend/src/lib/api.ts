@@ -147,6 +147,20 @@ export interface MovieDto {
   subtitles?: string[];
   qualities?: string[];
   dubbed?: string[];
+  audio_availability?: {
+    original_language?: string | null;
+    languages?: string[];
+    dubbed_languages?: string[];
+    track_count?: number | null;
+    source?: string;
+    selectable_in_player?: boolean;
+  };
+  subtitle_availability?: {
+    languages?: string[];
+    track_count?: number | null;
+    source?: string;
+    selectable_in_player?: boolean;
+  };
   views?: number;
   type?: 'movie' | string;
   hls_path?: string | null;
@@ -208,6 +222,20 @@ export interface SeriesDto {
   audio?: string[];
   subtitles?: string[];
   dubbed?: string[];
+  audio_availability?: {
+    original_language?: string | null;
+    languages?: string[];
+    dubbed_languages?: string[];
+    track_count?: number | null;
+    source?: string;
+    selectable_in_player?: boolean;
+  };
+  subtitle_availability?: {
+    languages?: string[];
+    track_count?: number | null;
+    source?: string;
+    selectable_in_player?: boolean;
+  };
   new_episode?: boolean;
   views?: number;
   type?: 'series' | string;
@@ -259,6 +287,20 @@ export interface EpisodeDto {
   playable?: boolean;
   has_playable_package?: boolean;
   has_external_media?: boolean;
+  audio_availability?: {
+    original_language?: string | null;
+    languages?: string[];
+    dubbed_languages?: string[];
+    track_count?: number | null;
+    source?: string;
+    selectable_in_player?: boolean;
+  };
+  subtitle_availability?: {
+    languages?: string[];
+    track_count?: number | null;
+    source?: string;
+    selectable_in_player?: boolean;
+  };
   // Compatibility
   season?: number | null;
   episode?: number | null;
@@ -360,6 +402,8 @@ export interface CatalogListParams {
   sort?: string;
   page?: number;
   page_size?: number;
+  has_dubbed?: boolean;
+  has_subtitles?: boolean;
 }
 
 export type MovieCreatePayload = {
@@ -1836,6 +1880,8 @@ export function mapMovieDto(dto: MovieDto) {
     featured,
     type: 'movie' as const,
     dubbed: dto.dubbed ?? [],
+    audioAvailability: dto.audio_availability ?? null,
+    subtitleAvailability: dto.subtitle_availability ?? null,
     views: dto.views ?? 0,
     slug: dto.slug,
     status: dto.status,
@@ -1895,6 +1941,8 @@ export function mapSeriesDto(dto: SeriesDto) {
     audio: dto.audio ?? [],
     subtitles: dto.subtitles ?? [],
     dubbed: dto.dubbed ?? [],
+    audioAvailability: dto.audio_availability ?? null,
+    subtitleAvailability: dto.subtitle_availability ?? null,
     type: 'series' as const,
     newEpisode: dto.new_episode ?? false,
     views: dto.views ?? 0,
@@ -1941,6 +1989,8 @@ export function mapEpisodeDto(dto: EpisodeDto) {
     playable: dto.playable ?? false,
     hasPlayablePackage: dto.has_playable_package ?? false,
     hasExternalMedia: dto.has_external_media ?? false,
+    audioAvailability: dto.audio_availability ?? null,
+    subtitleAvailability: dto.subtitle_availability ?? null,
   };
 }
 
