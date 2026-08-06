@@ -9,6 +9,7 @@ interface ImportMetaEnv {
   readonly VITE_SITE_URL?: string;
   readonly VITE_TWITTER_SITE?: string;
   readonly VITE_TWITTER_CREATOR?: string;
+  readonly VITE_APP_VERSION?: string;
   readonly VITE_PORT?: string;
 }
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Play,
   Star,
@@ -96,8 +96,10 @@ function sortMergedMovies(movies: CatalogMovie[], sort: string): CatalogMovie[] 
 export function MoviesPage({ audience = 'all' }: { audience?: 'all' | 'children' } = {}) {
   const { t } = useLang();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const genreFromUrl = searchParams.get('genre')?.trim() || 'all';
   const [search, setSearch] = useState('');
-  const [genre, setGenre] = useState('all');
+  const [genre, setGenre] = useState(genreFromUrl);
   const [sort, setSort] = useState('newest');
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [items, setItems] = useState<CatalogMovie[]>([]);
@@ -105,6 +107,19 @@ export function MoviesPage({ audience = 'all' }: { audience?: 'all' | 'children'
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const isChildren = audience === 'children';
+
+  useEffect(() => {
+    setGenre(genreFromUrl);
+  }, [genreFromUrl]);
+
+  function onGenreChange(next: string) {
+    setGenre(next);
+    if (isChildren) return;
+    const params = new URLSearchParams(searchParams);
+    if (next === 'all') params.delete('genre');
+    else params.set('genre', next);
+    setSearchParams(params, { replace: true });
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -176,8 +191,8 @@ export function MoviesPage({ audience = 'all' }: { audience?: 'all' | 'children'
               className="pl-9 bg-card border-border"
             />
           </div>
-          <Select value={genre} onValueChange={setGenre}>
-            <SelectTrigger className="w-[140px] bg-card border-border">
+          <Select value={genre} onValueChange={onGenreChange}>
+            <SelectTrigger className="w-[140px] bg-card border-border" data-testid="movies-genre-filter">
               <SelectValue placeholder={t.common.filter} />
             </SelectTrigger>
             <SelectContent>

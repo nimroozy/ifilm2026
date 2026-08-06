@@ -1851,6 +1851,8 @@ export function mapMovieDto(dto: MovieDto) {
     trailerOfficial: dto.trailer_official ?? false,
     trailerLanguage: dto.trailer_language || '',
     trailerPublishedAt: dto.trailer_published_at ?? null,
+    publishedAt: dto.published_at ?? null,
+    createdAt: dto.created_at ?? null,
     hlsPath: dto.hls_path ?? null,
     playable: dto.playable ?? false,
     hasPlayablePackage: dto.has_playable_package ?? false,
@@ -1911,6 +1913,8 @@ export function mapSeriesDto(dto: SeriesDto) {
     trailerOfficial: dto.trailer_official ?? false,
     trailerLanguage: dto.trailer_language || '',
     trailerPublishedAt: dto.trailer_published_at ?? null,
+    publishedAt: dto.published_at ?? null,
+    createdAt: dto.created_at ?? null,
     genreIds: Array.isArray(dto.genres)
       ? dto.genres.filter((g): g is GenreDto => typeof g !== 'string').map((g) => g.id)
       : [],

@@ -185,19 +185,25 @@ describe('admin LTR layout', () => {
 });
 
 describe('production metadata cleanup', () => {
-  it('index.html has iFilm Admin metadata and local favicon', () => {
+  it('index.html has iFilm customer metadata, locale bootstrap, and local favicon', () => {
     const htmlPath = path.resolve(__dirname, '../../../../index.html');
     const html = fs.readFileSync(htmlPath, 'utf8');
-    expect(html).toContain('<title>iFilm Admin</title>');
-    expect(html).toContain('content="iFilm media and catalog administration"');
+    expect(html).toContain('<title>iFilm</title>');
+    expect(html).toContain('content="iFilm streaming for Mobin Net subscribers"');
     expect(html).toContain('href="/favicon.svg"');
+    expect(html).toContain('src="/locale-bootstrap.js"');
     expect(html).toMatch(/<html[^>]*lang="en"/);
     expect(html).toMatch(/<html[^>]*dir="ltr"/);
-    expect(html).toContain("localStorage.getItem('ifilm.locale')");
+    expect(html).not.toContain('<title>iFilm Admin</title>');
     expect(html).not.toContain('Atoms Generated Project');
     expect(html).not.toContain('metadl.com');
     expect(html).not.toContain('favicon_atoms');
     expect(html).not.toContain('data-mgx-overview');
+    const bootstrap = fs.readFileSync(
+      path.resolve(__dirname, '../../../../public/locale-bootstrap.js'),
+      'utf8'
+    );
+    expect(bootstrap).toContain("localStorage.getItem('ifilm.locale')");
   });
 
   it('local favicon exists and vite defaults are not MGX', () => {
