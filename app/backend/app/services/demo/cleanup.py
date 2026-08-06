@@ -455,6 +455,20 @@ def execute_cleanup(db: Session, settings: Settings, plan: CleanupPlan) -> None:
             db.delete(genre)
 
     if plan.admin_usernames:
+        admin_ids = [
+            a.id
+            for a in db.query(AdminUser).filter(AdminUser.username.in_(plan.admin_usernames)).all()
+        ]
+        if admin_ids:
+            # Detach non-demo media that still references demo fixture admins.
+            db.query(MediaAsset).filter(MediaAsset.created_by_admin_id.in_(admin_ids)).update(
+                {MediaAsset.created_by_admin_id: None},
+                synchronize_session=False,
+            )
+            db.query(MediaPackage).filter(MediaPackage.created_by_admin_id.in_(admin_ids)).update(
+                {MediaPackage.created_by_admin_id: None},
+                synchronize_session=False,
+            )
         db.query(AdminUser).filter(AdminUser.username.in_(plan.admin_usernames)).delete(
             synchronize_session=False
         )
