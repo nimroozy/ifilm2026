@@ -1,14 +1,57 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import RequestContentPage from '@/pages/RequestContentPage';
-import { LangProvider } from '@/components/CustomerLayout';
 
 const createContentRequest = vi.fn();
 const listContentRequests = vi.fn();
 const search = vi.fn();
 const withdrawContentRequest = vi.fn();
+
+const requestContent = {
+  title: 'Request Movie',
+  subtitle: 'Ask the iFilm team to review a movie or series.',
+  disclaimer:
+    'Requests are reviewed by the iFilm team. Submitting a request does not guarantee that the title will be added.',
+  typeLabel: 'Type',
+  movie: 'Movie',
+  series: 'Series',
+  titleLabel: 'Title',
+  yearLabel: 'Year (optional)',
+  tmdbLabel: 'TMDB link (optional)',
+  imdbLabel: 'IMDb link (optional)',
+  languageLabel: 'Preferred language (optional)',
+  notesLabel: 'Notes (optional)',
+  submit: 'Submit request',
+  submitting: 'Submitting…',
+  signInPrompt: 'Sign in',
+  signIn: 'Sign In',
+  myRequests: 'My Requests',
+  emptyRequests: 'You have not submitted any requests yet.',
+  status: 'Status',
+  requested: 'Requested',
+  preferredLanguage: 'Preferred language',
+  response: 'Response',
+  availableNow: 'Available now',
+  viewTitle: 'View',
+  withdraw: 'Withdraw',
+  alreadyAvailable: 'This title is already available.',
+  existingRequest: 'You already have an open request for this title.',
+  suggestionsTitle: 'Similar titles may already be available',
+  continueAnyway: 'Continue with my request',
+  catalogHint: 'Already available in the catalog',
+  success: 'Request submitted for review.',
+  errorGeneric: 'Unable to submit request',
+  rateLimited: 'Too many requests. Please try again later.',
+  statuses: {
+    new: 'New',
+    reviewing: 'Reviewing',
+    approved: 'Approved',
+    rejected: 'Rejected',
+    added: 'Added',
+    withdrawn: 'Withdrawn',
+  },
+};
 
 vi.mock('@/lib/api', () => ({
   api: {
@@ -26,23 +69,10 @@ vi.mock('@/lib/api', () => ({
   },
 }));
 
-vi.mock('@/components/CustomerLayout', async () => {
-  const actual = await vi.importActual<typeof import('@/components/CustomerLayout')>(
-    '@/components/CustomerLayout'
-  );
-  return {
-    ...actual,
-    useAuth: () => ({ isLoggedIn: true }),
-  };
-});
-
-function wrap(ui: React.ReactNode) {
-  return (
-    <MemoryRouter>
-      <LangProvider>{ui}</LangProvider>
-    </MemoryRouter>
-  );
-}
+vi.mock('@/components/CustomerLayout', () => ({
+  useLang: () => ({ t: { requestContent }, lang: 'en', dir: 'ltr' }),
+  useAuth: () => ({ isLoggedIn: true }),
+}));
 
 describe('RequestContentPage', () => {
   beforeEach(() => {
@@ -55,7 +85,11 @@ describe('RequestContentPage', () => {
   });
 
   it('renders form, disclaimer, and my requests', async () => {
-    render(wrap(<RequestContentPage />));
+    render(
+      <MemoryRouter>
+        <RequestContentPage />
+      </MemoryRouter>
+    );
     expect(screen.getByTestId('request-content-page')).toBeInTheDocument();
     expect(screen.getByTestId('request-disclaimer')).toHaveTextContent(/does not guarantee/i);
     expect(screen.getByTestId('request-form')).toBeInTheDocument();
@@ -64,7 +98,6 @@ describe('RequestContentPage', () => {
   });
 
   it('submits a movie request', async () => {
-    const user = userEvent.setup();
     createContentRequest.mockResolvedValue({
       outcome: 'created',
       message: 'ok',
@@ -96,19 +129,23 @@ describe('RequestContentPage', () => {
         page_size: 50,
       });
 
-    render(wrap(<RequestContentPage />));
-    await user.type(screen.getByTestId('request-title'), 'Dune Part Three');
-    await user.click(screen.getByTestId('request-submit'));
+    render(
+      <MemoryRouter>
+        <RequestContentPage />
+      </MemoryRouter>
+    );
+    fireEvent.change(screen.getByTestId('request-title'), { target: { value: 'Dune Part Three' } });
+    fireEvent.click(screen.getByTestId('request-submit'));
     await waitFor(() => expect(createContentRequest).toHaveBeenCalled());
     expect(createContentRequest.mock.calls[0][0]).toMatchObject({
       request_type: 'movie',
       title: 'Dune Part Three',
     });
     await waitFor(() => expect(screen.getByTestId('my-request-9')).toBeInTheDocument());
+    expect(screen.getByTestId('my-request-9')).toHaveTextContent('New');
   });
 
   it('shows already-available catalog match', async () => {
-    const user = userEvent.setup();
     createContentRequest.mockResolvedValue({
       outcome: 'already_available',
       message: 'This title is already available.',
@@ -122,17 +159,52 @@ describe('RequestContentPage', () => {
       },
       suggestions: [],
     });
-    render(wrap(<RequestContentPage />));
-    await user.type(screen.getByTestId('request-title'), 'Inception');
-    await user.click(screen.getByTestId('request-submit'));
+    render(
+      <MemoryRouter>
+        <RequestContentPage />
+      </MemoryRouter>
+    );
+    fireEvent.change(screen.getByTestId('request-title'), { target: { value: 'Inception' } });
+    fireEvent.click(screen.getByTestId('request-submit'));
     await waitFor(() => expect(screen.getByTestId('catalog-match')).toBeInTheDocument());
     expect(screen.getByTestId('request-form-message')).toHaveTextContent(/already available/i);
   });
 
-  it('toggles series type', async () => {
-    const user = userEvent.setup();
-    render(wrap(<RequestContentPage />));
-    await user.click(screen.getByTestId('request-type-series'));
+  it('toggles series type', () => {
+    render(
+      <MemoryRouter>
+        <RequestContentPage />
+      </MemoryRouter>
+    );
+    fireEvent.click(screen.getByTestId('request-type-series'));
     expect(screen.getByTestId('request-type-series')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('shows Added link when request is fulfilled', async () => {
+    listContentRequests.mockResolvedValue({
+      items: [
+        {
+          id: 4,
+          request_type: 'movie',
+          title: 'Arrival',
+          status: 'added',
+          linked_detail_path: '/movie/arrival',
+          linked_title: 'Arrival',
+          public_response: 'Available now',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 50,
+    });
+    render(
+      <MemoryRouter>
+        <RequestContentPage />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByTestId('my-request-link-4')).toBeInTheDocument());
+    expect(screen.getByTestId('my-request-link-4')).toHaveAttribute('href', '/movie/arrival');
   });
 });

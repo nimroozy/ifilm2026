@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import ContentRequestsAdminPage from '@/pages/admin/ContentRequestsAdminPage';
 
@@ -71,7 +70,6 @@ describe('ContentRequestsAdminPage', () => {
   });
 
   it('opens detail and runs approve action', async () => {
-    const user = userEvent.setup();
     getContentRequest.mockResolvedValue({
       request: {
         id: 3,
@@ -96,9 +94,52 @@ describe('ContentRequestsAdminPage', () => {
         <ContentRequestsAdminPage />
       </MemoryRouter>
     );
-    await user.click(await screen.findByTestId('cr-row-3'));
+    fireEvent.click(await screen.findByTestId('cr-row-3'));
     await waitFor(() => expect(screen.getByTestId('cr-detail')).toBeInTheDocument());
-    await user.click(screen.getByTestId('cr-action-approve'));
-    await waitFor(() => expect(contentRequestAction).toHaveBeenCalledWith(3, expect.objectContaining({ action: 'approve' })));
+    fireEvent.click(screen.getByTestId('cr-action-approve'));
+    await waitFor(() =>
+      expect(contentRequestAction).toHaveBeenCalledWith(
+        3,
+        expect.objectContaining({ action: 'approve' })
+      )
+    );
+  });
+
+  it('links catalog id on mark added', async () => {
+    getContentRequest.mockResolvedValue({
+      request: {
+        id: 3,
+        request_type: 'movie',
+        title: 'Dune Part Three',
+        status: 'approved',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      events: [],
+    });
+    contentRequestAction.mockResolvedValue({
+      id: 3,
+      request_type: 'movie',
+      title: 'Dune Part Three',
+      status: 'added',
+      linked_movie_id: 42,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    render(
+      <MemoryRouter>
+        <ContentRequestsAdminPage />
+      </MemoryRouter>
+    );
+    fireEvent.click(await screen.findByTestId('cr-row-3'));
+    await waitFor(() => expect(screen.getByTestId('cr-link-id')).toBeInTheDocument());
+    fireEvent.change(screen.getByTestId('cr-link-id'), { target: { value: '42' } });
+    fireEvent.click(screen.getByTestId('cr-action-mark-added'));
+    await waitFor(() =>
+      expect(contentRequestAction).toHaveBeenCalledWith(
+        3,
+        expect.objectContaining({ action: 'mark_added', linked_movie_id: 42 })
+      )
+    );
   });
 });
