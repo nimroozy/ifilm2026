@@ -85,14 +85,21 @@ def store_tmdb_locale_bundle(
     fields: dict[str, str],
 ) -> int:
     """Persist TMDB fields for a locale without overwriting manual rows."""
-    count = 0
+    # Collapse aliases first so overview+description do not double-insert the same key.
+    normalized: dict[str, str] = {}
     for key, value in fields.items():
         if key not in TEXT_FIELDS:
             continue
-        # Map overview → description for customer API consistency when overview provided.
         field_key = "description" if key == "overview" else key
         if key == "name" and entity_type in {"movie", "series", "collection"}:
             field_key = "title"
+        text = (value or "").strip()
+        if not text:
+            continue
+        normalized[field_key] = text
+
+    count = 0
+    for field_key, value in normalized.items():
         row = upsert_translation(
             db,
             entity_type=entity_type,

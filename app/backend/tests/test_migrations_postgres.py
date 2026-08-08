@@ -1104,7 +1104,7 @@ def test_collections_v1_migration_roundtrip(postgres_url):
             )
         }
     engine.dispose()
-    assert version == "020_content_translations_v1"
+    assert version == "019_media_upload_reliability_v1"
     assert "collections" in tables
     assert "collection_items" in tables
     assert {
@@ -1149,7 +1149,7 @@ def test_collections_v1_migration_roundtrip(postgres_url):
             )
         }
     engine.dispose()
-    assert version == "020_content_translations_v1"
+    assert version == "019_media_upload_reliability_v1"
     assert "collections" in tables
 
 
