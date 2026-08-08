@@ -199,3 +199,92 @@ def test_refresh_title_missing_tmdb(client, db_session):
     )
     # TMDB disabled/missing token or movie_has_no_tmdb_id
     assert res.status_code in (400, 502)
+
+
+def test_public_movie_reads_cached_credits_without_tmdb_client(client, db_session, monkeypatch):
+    """Public detail must serve DB-cached credits — never hit TMDB on page load."""
+    movie = _movie(db_session, slug=f"cached-{new_uuid()[:6]}", tmdb_id=404)
+    replace_movie_credits(
+        db_session,
+        _settings(),
+        movie,
+        {"cast": [{"id": 9, "name": "Cached", "character": "Lead", "order": 0}]},
+    )
+    db_session.commit()
+
+    def _boom(*_a, **_k):
+        raise AssertionError("TMDB client must not be constructed for public movie detail")
+
+    monkeypatch.setattr("app.services.tmdb.client.TMDBClient.__init__", _boom)
+    res = client.get(f"/api/movies/{movie.id}")
+    assert res.status_code == 200
+    assert res.json()["credits"][0]["name"] == "Cached"
+
+
+def test_refresh_preserves_manual_admin_fields(db_session, monkeypatch):
+    from app.services.tmdb.refresh_title import refresh_movie_tmdb_details
+
+    movie = _movie(db_session, slug=f"manual-{new_uuid()[:6]}", tmdb_id=505)
+    movie.title = "Manual Title"
+    movie.description = "Manual description kept by admin"
+    movie.director = "Manual Director"
+    movie.poster_url = "https://example.test/manual-poster.jpg"
+    db_session.commit()
+
+    class FakeClient:
+        def movie_details(self, tmdb_id, *, language=None):
+            return {
+                "id": tmdb_id,
+                "title": "TMDB Overwrite Title",
+                "overview": "TMDB overview",
+                "vote_average": 9.1,
+                "spoken_languages": [{"iso_639_1": "en"}],
+                "external_ids": {"imdb_id": "tt9999999"},
+            }
+
+        def movie_videos(self, tmdb_id, *, language=None):
+            return {
+                "results": [
+                    {
+                        "site": "YouTube",
+                        "type": "Trailer",
+                        "key": "newTrail99",
+                        "official": True,
+                        "iso_639_1": "en",
+                        "name": "Official Trailer",
+                    }
+                ]
+            }
+
+        def movie_credits(self, tmdb_id, *, language=None):
+            return {"cast": [{"id": 77, "name": "Fresh Cast", "character": "X", "order": 0}]}
+
+    result = refresh_movie_tmdb_details(db_session, _settings(), movie, client=FakeClient())
+    db_session.commit()
+    db_session.refresh(movie)
+    assert movie.title == "Manual Title"
+    assert movie.description == "Manual description kept by admin"
+    assert movie.director == "Manual Director"
+    assert movie.poster_url == "https://example.test/manual-poster.jpg"
+    assert movie.trailer_key == "newTrail99"
+    assert result.credits_count == 1
+    assert db_session.query(MovieCastCredit).filter_by(movie_id=movie.id).count() == 1
+
+
+def test_similar_published_only_no_duplicates(db_session):
+    g = Genre(name="Drama", slug=f"dr-{new_uuid()[:6]}")
+    db_session.add(g)
+    db_session.flush()
+    base = _movie(db_session, slug=f"sim-base-{new_uuid()[:6]}", tmdb_id=10, genres=[g])
+    pub = _movie(db_session, slug=f"sim-pub-{new_uuid()[:6]}", tmdb_id=11, genres=[g])
+    draft = _movie(db_session, slug=f"sim-draft-{new_uuid()[:6]}", tmdb_id=12, genres=[g])
+    draft.status = "draft"
+    draft.published_at = None
+    db_session.commit()
+
+    similar = list_similar_movies(db_session, base, limit=12)
+    ids = [m.id for m in similar]
+    assert pub.id in ids
+    assert draft.id not in ids
+    assert base.id not in ids
+    assert len(ids) == len(set(ids))
