@@ -136,6 +136,11 @@ class Settings(BaseSettings):
     rec_signal_very_short: float = 0.05
     rec_cache_ttl_seconds: int = 45
 
+    # Subscriber content requests (Request Movie V1)
+    content_request_max_per_day: int = 5
+    content_request_max_open: int = 20
+    content_request_rate_window_seconds: int = 86400
+
     # Opaque playback token HMAC secret (required when streaming enabled).
     playback_token_secret: str = ""
     playback_token_ttl_seconds: int = 3600

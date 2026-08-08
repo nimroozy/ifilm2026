@@ -12,6 +12,7 @@ export type CustomerNavId =
   | 'newReleases'
   | 'myList'
   | 'whatToWatch'
+  | 'requestMovie'
   | 'search'
   | 'profile';
 
@@ -34,6 +35,7 @@ export const DESKTOP_NAV_ITEMS: CustomerNavItem[] = [
   { id: 'subtitled', path: '/subtitled' },
   { id: 'newReleases', path: '/new-releases' },
   { id: 'whatToWatch', path: '/what-to-watch' },
+  { id: 'requestMovie', path: '/request' },
   { id: 'myList', path: '/watchlist' },
 ];
 
@@ -58,6 +60,7 @@ export const FOOTER_DISCOVER_PATHS = [
   { id: 'genres' as const, path: '/genres' },
   { id: 'collections' as const, path: '/collections' },
   { id: 'whatToWatch' as const, path: '/what-to-watch' },
+  { id: 'requestMovie' as const, path: '/request' },
   { id: 'dubbed' as const, path: '/dubbed' },
   { id: 'subtitled' as const, path: '/subtitled' },
   { id: 'newReleases' as const, path: '/new-releases' },

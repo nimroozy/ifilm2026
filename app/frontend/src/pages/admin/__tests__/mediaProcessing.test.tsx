@@ -10,6 +10,7 @@ import { LangProvider } from '@/components/CustomerLayout';
 const getMediaAsset = vi.fn();
 const listAssetProcessingJobs = vi.fn();
 const listAssetPackages = vi.fn();
+const getMediaAssetUsages = vi.fn();
 const getProcessingStatus = vi.fn();
 const queueMediaProbe = vi.fn();
 const queueMediaEncodeHls = vi.fn();
@@ -23,9 +24,10 @@ vi.mock('@/lib/adminApi', async () => {
     ...actual,
     adminApi: {
       ...actual.adminApi,
-getMediaAsset: (...args: unknown[]) => getMediaAsset(...args),
+      getMediaAsset: (...args: unknown[]) => getMediaAsset(...args),
       listAssetProcessingJobs: (...args: unknown[]) => listAssetProcessingJobs(...args),
       listAssetPackages: (...args: unknown[]) => listAssetPackages(...args),
+      getMediaAssetUsages: (...args: unknown[]) => getMediaAssetUsages(...args),
       getProcessingStatus: (...args: unknown[]) => getProcessingStatus(...args),
       queueMediaProbe: (...args: unknown[]) => queueMediaProbe(...args),
       queueMediaEncodeHls: (...args: unknown[]) => queueMediaEncodeHls(...args),
@@ -82,6 +84,7 @@ describe('media processing admin UI', () => {
     getMediaAsset.mockResolvedValue(asset);
     listAssetProcessingJobs.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 1 });
     listAssetPackages.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 1 });
+    getMediaAssetUsages.mockResolvedValue({ asset_id: 'asset-1', usages: [] });
     getProcessingStatus.mockResolvedValue({
       enabled: true,
       hls_encoding_enabled: true,
@@ -219,6 +222,8 @@ describe('media processing admin UI', () => {
     expect(screen.getByTestId('job-error')).toHaveTextContent(/bad file/i);
     fireEvent.click(screen.getByTestId('retry-probe'));
     await waitFor(() => expect(retryProcessingJob).toHaveBeenCalledWith('job-1'));
+    // Wait for retry+reload busy cycle to finish so Probe is clickable.
+    await waitFor(() => expect(screen.getByTestId('probe-media')).not.toBeDisabled());
 
     listAssetProcessingJobs.mockResolvedValue({
       items: [
@@ -244,7 +249,11 @@ describe('media processing admin UI', () => {
       page_size: 1,
     });
     fireEvent.click(screen.getByTestId('probe-media'));
-    await waitFor(() => expect(screen.getByTestId('cancel-probe')).toBeInTheDocument());
+    await waitFor(() => expect(queueMediaProbe).toHaveBeenCalledWith('asset-1'));
+    await waitFor(
+      () => expect(screen.getByTestId('cancel-probe')).toBeInTheDocument(),
+      { timeout: 3000 }
+    );
     fireEvent.click(screen.getByTestId('cancel-probe'));
     await waitFor(() => expect(cancelProcessingJob).toHaveBeenCalled());
   });

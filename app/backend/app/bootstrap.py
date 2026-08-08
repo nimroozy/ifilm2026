@@ -38,6 +38,8 @@ SUPER_PERMISSIONS = [
     "catalog.publish",
     "catalog.archive",
     "recommendations.inspect",
+    "content_requests.read",
+    "content_requests.manage",
     "upload",
     "upload.read",
     "upload.manage",

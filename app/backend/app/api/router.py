@@ -7,6 +7,7 @@ from app.api.routes import (
     cdn,
     collections,
     config,
+    content_requests,
     encoding,
     genres,
     health,
@@ -32,6 +33,7 @@ api_router.include_router(config.router)
 api_router.include_router(auth.router)
 api_router.include_router(me.router)
 api_router.include_router(home.router)
+api_router.include_router(content_requests.router)
 api_router.include_router(recommendations.router)
 api_router.include_router(admin_auth.router)
 api_router.include_router(movies.router)
