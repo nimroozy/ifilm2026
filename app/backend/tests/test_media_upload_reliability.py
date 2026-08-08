@@ -368,8 +368,6 @@ def test_durable_move_falls_back_on_exdev(tmp_path, monkeypatch):
     payload = b"cross-device-bytes-123456"
     src.write_bytes(payload)
 
-    real_replace = os.replace
-
     def boom(a, b):
         raise OSError(errno.EXDEV, "Invalid cross-device link")
 
