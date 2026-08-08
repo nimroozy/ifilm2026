@@ -1112,6 +1112,8 @@ export interface WhatToWatchDto {
   mode: 'what_to_watch';
   ai: boolean;
   filters: Record<string, unknown>;
+  /** Filter dimensions loosened when exact match was too sparse. */
+  relaxed?: string[];
   count: number;
   items: RecommendationItemDto[];
 }

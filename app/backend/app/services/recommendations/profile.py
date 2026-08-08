@@ -176,7 +176,18 @@ def build_preference_profile(
                 profile.completed_movie_ids.add(movie.id)
             if progress.hidden_from_continue:
                 profile.dismissed_movie_ids.add(movie.id)
-            if strength > 0.2 and movie_is_public(movie):
+            elif (
+                not progress.completed
+                and float(progress.position_seconds or 0) >= min_seconds
+                and float(progress.progress_percent or 0) < 90
+            ):
+                profile.continue_watching_movie_ids.add(movie.id)
+            # Because-You-Watched anchors: meaningful progress only (not short/dismissed).
+            if (
+                strength >= float(signals.continue_watching)
+                and not progress.hidden_from_continue
+                and movie_is_public(movie)
+            ):
                 seed_candidates.append(("movie", movie.id, movie.title, strength, ts))
             type_w["movie"] += max(strength, 0)
             for g in movie.genre_links or []:
@@ -209,7 +220,17 @@ def build_preference_profile(
                 profile.completed_series_ids.add(series.id)
             if progress.hidden_from_continue:
                 profile.dismissed_series_ids.add(series.id)
-            if strength > 0.2 and series_is_public(series):
+            elif (
+                not progress.completed
+                and float(progress.position_seconds or 0) >= min_seconds
+                and float(progress.progress_percent or 0) < 90
+            ):
+                profile.continue_watching_series_ids.add(series.id)
+            if (
+                strength >= float(signals.continue_watching)
+                and not progress.hidden_from_continue
+                and series_is_public(series)
+            ):
                 seed_candidates.append(("series", series.id, series.title, strength, ts))
             type_w["series"] += max(strength, 0)
             for g in series.genre_links or []:
@@ -351,6 +372,8 @@ def profile_public_summary(profile: PreferenceProfile) -> dict:
         "watchlist_series_count": len(profile.watchlisted_series_ids),
         "dismissed_movie_count": len(profile.dismissed_movie_ids),
         "completed_movie_count": len(profile.completed_movie_ids),
+        "continue_watching_movie_count": len(profile.continue_watching_movie_ids),
+        "watchlist_excluded_from_recommended": True,
         "seed_titles": [
             {"content_type": k, "id": i, "title": t, "strength": round(s, 3)}
             for k, i, t, s in profile.seed_titles[:5]

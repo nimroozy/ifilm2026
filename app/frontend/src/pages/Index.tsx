@@ -25,6 +25,10 @@ import {
 } from '@/lib/api';
 import { isMockMode } from '@/lib/dataMode';
 import { hasDemoClip, canPlayFullMovie } from '@/lib/catalogPresentation';
+import {
+  localizeRecommendationExplanation,
+  localizeRecommendationShelfTitle,
+} from '@/lib/recommendationI18n';
 import { X } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
@@ -251,6 +255,7 @@ function RecommendationShelfRow({
   testId?: string;
 }) {
   const navigate = useNavigate();
+  const { lang } = useLang();
   if (!items.length) return null;
   return (
     <ContentShelf title={title} testId={testId}>
@@ -262,7 +267,7 @@ function RecommendationShelfRow({
           year={item.release_year ?? undefined}
           rating={item.imdb_rating ?? undefined}
           playable={Boolean(item.playable)}
-          status={item.explanation || undefined}
+          status={localizeRecommendationExplanation(item.explanation, lang)}
           badge={item.content_type === 'series' ? 'Series' : undefined}
           onActivate={() => navigate(item.detail_path)}
           data-testid={`rec-card-${item.id}`}
@@ -318,6 +323,7 @@ function MyListHomeRow() {
 
 function HomeRecommendationShelves({ usedIds }: { usedIds: Set<string> }) {
   const { isLoggedIn } = useAuth();
+  const { t } = useLang();
   const [payload, setPayload] = useState<HomeRecommendationsDto | null>(null);
 
   useEffect(() => {
@@ -356,7 +362,7 @@ function HomeRecommendationShelves({ usedIds }: { usedIds: Set<string> }) {
         return (
           <RecommendationShelfRow
             key={`${shelf.shelf_type}-${shelf.title}`}
-            title={shelf.title}
+            title={localizeRecommendationShelfTitle(shelf, t.sections as Record<string, string>)}
             items={items}
             testId={`home-shelf-${shelf.shelf_type}`}
           />

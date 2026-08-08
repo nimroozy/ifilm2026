@@ -64,6 +64,7 @@ class WhatToWatchOut(BaseModel):
     mode: Literal["what_to_watch"] = "what_to_watch"
     ai: bool = False
     filters: dict[str, Any] = Field(default_factory=dict)
+    relaxed: list[str] = Field(default_factory=list)
     count: int = 0
     items: list[RecommendationItemOut] = Field(default_factory=list)
 

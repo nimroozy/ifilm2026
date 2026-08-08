@@ -37,6 +37,8 @@ class PreferenceProfile:
     dismissed_series_ids: set[int] = field(default_factory=set)
     completed_movie_ids: set[int] = field(default_factory=set)
     completed_series_ids: set[int] = field(default_factory=set)
+    continue_watching_movie_ids: set[int] = field(default_factory=set)
+    continue_watching_series_ids: set[int] = field(default_factory=set)
     seed_titles: list[tuple[ContentKind, int, str, float]] = field(default_factory=list)
     # (kind, id, title, strength) for "Because You Watched"
     has_personal_signals: bool = False

@@ -5,6 +5,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useLang } from '@/components/CustomerLayout';
 import { ContentShelf, MediaCard } from '@/design-system';
 import { api, ApiError, type RecommendationItemDto, type WhatToWatchBody } from '@/lib/api';
+import {
+  localizeRecommendationExplanation,
+  localizeRelaxedNotes,
+} from '@/lib/recommendationI18n';
 import { cn } from '@/lib/utils';
 
 type StepId = 'type' | 'genre' | 'mood' | 'duration' | 'language' | 'subtitles' | 'period' | 'results';
@@ -54,7 +58,7 @@ function ChoiceGrid({
 }
 
 export default function WhatToWatchPage() {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const navigate = useNavigate();
   const w = t.whatToWatch;
   const [stepIndex, setStepIndex] = useState(0);
@@ -68,6 +72,7 @@ export default function WhatToWatchPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<RecommendationItemDto[] | null>(null);
+  const [relaxed, setRelaxed] = useState<string[]>([]);
 
   const step = STEPS[stepIndex];
 
@@ -81,6 +86,7 @@ export default function WhatToWatchPage() {
     setSubtitles(null);
     setPeriod(null);
     setItems(null);
+    setRelaxed([]);
     setError(null);
     setLoading(false);
   };
@@ -101,9 +107,11 @@ export default function WhatToWatchPage() {
       };
       const result = await api.whatToWatch(body);
       setItems(result.items);
+      setRelaxed(result.relaxed || []);
       setStepIndex(STEPS.indexOf('results'));
     } catch (err) {
       setItems([]);
+      setRelaxed([]);
       setError(
         err instanceof ApiError
           ? err.message
@@ -296,6 +304,11 @@ export default function WhatToWatchPage() {
             </div>
           ) : (
             <>
+              {localizeRelaxedNotes(relaxed, lang, w as Record<string, string>) ? (
+                <p className="text-sm text-muted-foreground" data-testid="wtw-relaxed">
+                  {localizeRelaxedNotes(relaxed, lang, w as Record<string, string>)}
+                </p>
+              ) : null}
               <ContentShelf title={w.resultsTitle}>
                 {items.map((item) => (
                   <MediaCard
@@ -305,7 +318,7 @@ export default function WhatToWatchPage() {
                     year={item.release_year ?? undefined}
                     rating={item.imdb_rating ?? undefined}
                     playable={Boolean(item.playable)}
-                    status={item.explanation || undefined}
+                    status={localizeRecommendationExplanation(item.explanation, lang)}
                     badge={item.content_type === 'series' ? 'Series' : undefined}
                     data-testid={`wtw-card-${item.id}`}
                     onActivate={() => navigate(item.detail_path)}

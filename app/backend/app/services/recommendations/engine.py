@@ -14,7 +14,11 @@ from app.models.content import Genre, Movie, Series, movie_genres, series_genres
 from app.models.credits import MovieCastCredit, SeriesCastCredit
 from app.models.user import Subscriber
 from app.services.catalog import content_playability
-from app.services.publishing.visibility import apply_public_visibility
+from app.services.publishing.visibility import (
+    apply_public_visibility,
+    movie_is_public,
+    series_is_public,
+)
 from app.services.recommendations.cache import cache_get, cache_set, catalog_feature_epoch
 from app.services.recommendations.moods import genres_for_mood, is_known_mood
 from app.services.recommendations.profile import build_preference_profile, profile_public_summary
@@ -177,11 +181,10 @@ def _candidate_pool(
                 _published_movies(db)
                 .join(movie_genres, movie_genres.c.movie_id == Movie.id)
                 .filter(movie_genres.c.genre_id.in_(movie_genre_ids))
-                .order_by(Movie.views.desc(), Movie.id.desc())
-                .limit(CANDIDATE_GENRE_LIMIT)
             )
-            if language:
-                q = q.filter(func.lower(Movie.language) == language.strip().lower())
+            # Language is applied in-memory below (supports dub/subtitle aliases).
+            # Never filter() after limit()/offset().
+            q = q.order_by(Movie.views.desc(), Movie.id.desc()).limit(CANDIDATE_GENRE_LIMIT)
             for m in q.all():
                 add_movie(m)
 
@@ -202,15 +205,11 @@ def _candidate_pool(
                 .order_by(Series.views.desc(), Series.id.desc())
                 .limit(CANDIDATE_GENRE_LIMIT)
             )
-            if language:
-                sq = sq.filter(func.lower(Series.language) == language.strip().lower())
             for s in sq.all():
                 add_series(s)
 
     if want_movies:
         q = _published_movies(db).order_by(Movie.views.desc(), Movie.id.desc()).limit(CANDIDATE_POPULAR_LIMIT)
-        if language:
-            q = q.filter(func.lower(Movie.language) == language.strip().lower())
         for m in q.all():
             add_movie(m)
         q = (
@@ -223,8 +222,6 @@ def _candidate_pool(
 
     if want_series:
         q = _published_series(db).order_by(Series.views.desc(), Series.id.desc()).limit(CANDIDATE_POPULAR_LIMIT)
-        if language:
-            q = q.filter(func.lower(Series.language) == language.strip().lower())
         for s in q.all():
             add_series(s)
         q = (
@@ -352,12 +349,59 @@ def _candidate_pool(
 
 
 def _exclude_set(profile: PreferenceProfile, *, extra: set[tuple[str, int]] | None = None) -> set[tuple[str, int]]:
+    """Titles kept out of Recommended for You / item shelves.
+
+    Semantics:
+    - completed → excluded (not recommended back immediately)
+    - continue watching → excluded (belongs on CW shelf)
+    - watchlisted → excluded from Recommended (influence prefs only; My List owns them)
+    - dismissed → not hard-excluded (downranked in scoring)
+    """
     exclude: set[tuple[str, int]] = set(extra or ())
     for mid in profile.completed_movie_ids:
         exclude.add(("movie", mid))
     for sid in profile.completed_series_ids:
         exclude.add(("series", sid))
+    for mid in profile.continue_watching_movie_ids:
+        exclude.add(("movie", mid))
+    for sid in profile.continue_watching_series_ids:
+        exclude.add(("series", sid))
+    for mid in profile.watchlisted_movie_ids:
+        exclude.add(("movie", mid))
+    for sid in profile.watchlisted_series_ids:
+        exclude.add(("series", sid))
     return exclude
+
+
+def filter_still_public(db: Session, items: list[ScoredCandidate]) -> list[ScoredCandidate]:
+    """Response-time publication gate — never trust candidate/cache alone."""
+    if not items:
+        return []
+    movie_ids = [i.id for i in items if i.kind == "movie"]
+    series_ids = [i.id for i in items if i.kind == "series"]
+    public_movies: set[int] = set()
+    public_series: set[int] = set()
+    if movie_ids:
+        public_movies = {
+            int(r[0])
+            for r in apply_public_visibility(db.query(Movie.id), Movie).filter(Movie.id.in_(movie_ids)).all()
+        }
+    if series_ids:
+        public_series = {
+            int(r[0])
+            for r in apply_public_visibility(db.query(Series.id), Series).filter(Series.id.in_(series_ids)).all()
+        }
+    out: list[ScoredCandidate] = []
+    for item in items:
+        if item.kind == "movie" and item.id in public_movies:
+            out.append(item)
+        elif item.kind == "series" and item.id in public_series:
+            out.append(item)
+    return out
+
+
+def _primary_genre(item: ScoredCandidate) -> str:
+    return (item.genres[0].lower() if item.genres else "") or ""
 
 
 def _rank(
@@ -386,16 +430,36 @@ def _rank(
             continue
         scored.append(item)
     scored.sort(key=stable_sort_key)
-    # Deduplicate by key (already unique) and stable truncate.
+    # Deduplicate by key, then lightly diversify genres when near-ties exist.
     seen: set[str] = set()
-    out: list[ScoredCandidate] = []
+    unique: list[ScoredCandidate] = []
     for item in scored:
         if item.key in seen:
             continue
         seen.add(item.key)
-        out.append(item)
-        if len(out) >= limit:
-            break
+        unique.append(item)
+    out: list[ScoredCandidate] = []
+    genre_streak = 0
+    last_genre = ""
+    remaining = list(unique)
+    while remaining and len(out) < limit:
+        pick_idx = 0
+        if out and genre_streak >= 2:
+            top_score = remaining[0].score
+            for idx, cand in enumerate(remaining):
+                if top_score - cand.score > 0.06:
+                    break
+                if _primary_genre(cand) != last_genre:
+                    pick_idx = idx
+                    break
+        chosen = remaining.pop(pick_idx)
+        genre = _primary_genre(chosen)
+        if genre and genre == last_genre:
+            genre_streak += 1
+        else:
+            genre_streak = 1
+            last_genre = genre
+        out.append(chosen)
     return out
 
 
@@ -441,7 +505,9 @@ def anonymous_fallback(
     )
     # Force popularity/recency-forward scoring with empty prefs.
     settings = get_settings()
-    ranked = _rank(features, profile, limit=limit, settings=settings, min_score=0.0)
+    ranked = filter_still_public(
+        db, _rank(features, profile, limit=limit, settings=settings, min_score=0.0)
+    )
     # Relabel reasons for anonymous honesty.
     for item in ranked:
         item.reasons = ["Popular in the catalog"] if item.views >= 1 else ["Featured in the catalog"]
@@ -472,12 +538,17 @@ def recommend_for_user(
         )
         cached = cache_get(cache_key)
         if cached is not None:
-            return cached
+            items, profile, mode = cached
+            # Multi-worker safe: publication filter always at response time.
+            return filter_still_public(db, list(items)), profile, mode
 
     profile = build_preference_profile(db, subscriber, settings=settings)
     if subscriber is None or not profile.has_personal_signals:
-        items = anonymous_fallback(
-            db, limit=limit, content_type=content_type, genre=genre, language=language
+        items = filter_still_public(
+            db,
+            anonymous_fallback(
+                db, limit=limit, content_type=content_type, genre=genre, language=language
+            ),
         )
         result = (items, profile, "popular")
         if cache_key:
@@ -499,12 +570,13 @@ def recommend_for_user(
         fill = anonymous_fallback(db, limit=limit, content_type=content_type, genre=genre, language=language)
         seen = {i.key for i in items}
         for row in fill:
-            if row.key in seen:
+            if row.key in seen or (row.kind, row.id) in exclude:
                 continue
             items.append(row)
             seen.add(row.key)
             if len(items) >= limit:
                 break
+    items = filter_still_public(db, items)
     result = (items, profile, "personalized")
     if cache_key:
         cache_set(cache_key, result)
@@ -543,14 +615,17 @@ def recommend_for_item(
             profile.preferred_actor_ids[mc.tmdb_person_id] = 1.0
         exclude = {("movie", source.id)}
         features = _candidate_pool(db, profile, content_type="movie", genre=None, language=None, exclude=exclude)
-        return _rank(
-            features,
-            profile,
-            limit=limit,
-            settings=settings,
-            similar_to_title=source.title,
-            exclude=exclude,
-            min_score=0.1,
+        return filter_still_public(
+            db,
+            _rank(
+                features,
+                profile,
+                limit=limit,
+                settings=settings,
+                similar_to_title=source.title,
+                exclude=exclude,
+                min_score=0.1,
+            ),
         )
 
     q = apply_public_visibility(db.query(Series).options(selectinload(Series.genre_links)), Series)
@@ -574,14 +649,17 @@ def recommend_for_item(
         profile.preferred_actor_ids[series_credit.tmdb_person_id] = 1.0
     exclude = {("series", source.id)}
     features = _candidate_pool(db, profile, content_type="series", genre=None, language=None, exclude=exclude)
-    return _rank(
-        features,
-        profile,
-        limit=limit,
-        settings=settings,
-        similar_to_title=source.title,
-        exclude=exclude,
-        min_score=0.1,
+    return filter_still_public(
+        db,
+        _rank(
+            features,
+            profile,
+            limit=limit,
+            settings=settings,
+            similar_to_title=source.title,
+            exclude=exclude,
+            min_score=0.1,
+        ),
     )
 
 
@@ -631,7 +709,7 @@ def because_you_watched_shelves(
                 .filter(Movie.id == cid)
                 .first()
             )
-            if movie is None:
+            if movie is None or not movie_is_public(movie):
                 continue
             seed_profile.preferred_genres = {g.name.lower(): 1.5 for g in (movie.genre_links or [])}
             if movie.language:
@@ -643,7 +721,7 @@ def because_you_watched_shelves(
                 .filter(Series.id == cid)
                 .first()
             )
-            if series is None:
+            if series is None or not series_is_public(series):
                 continue
             seed_profile.preferred_genres = {g.name.lower(): 1.5 for g in (series.genre_links or [])}
 
@@ -655,17 +733,21 @@ def because_you_watched_shelves(
             language=None,
             exclude=exclude,
         )
-        ranked = _rank(
-            features,
-            seed_profile,
-            limit=per_shelf + 6,
-            settings=settings,
-            similar_to_title=title,
-            exclude=exclude,
-            min_score=BECAUSE_MIN_TOP_SCORE,
+        ranked = filter_still_public(
+            db,
+            _rank(
+                features,
+                seed_profile,
+                limit=per_shelf + 6,
+                settings=settings,
+                similar_to_title=title,
+                exclude=exclude,
+                min_score=BECAUSE_MIN_TOP_SCORE,
+            ),
         )
-        items = [r for r in ranked if r.key not in used]
+        items = [r for r in ranked if r.key not in used and r.key != f"{kind}:{cid}"]
         if len(items) < BECAUSE_MIN_CANDIDATES:
+            # Omit shelf — do not pad with generic popularity.
             continue
         if items[0].score < BECAUSE_MIN_TOP_SCORE:
             continue
@@ -884,72 +966,113 @@ def what_to_watch(
         )
 
     exclude = _exclude_set(guide_profile)
+    # Broad pool — language/duration/subs/period applied in _apply_filters so
+    # progressive relaxation can widen results without inventing metadata.
     features = _candidate_pool(
         db,
         guide_profile,
         content_type=content_type,
         genre=genre,
-        language=None if language in (None, "", "any") else language,
+        language=None,
         exclude=exclude,
     )
 
     year_now = datetime.now(UTC).year
-    filtered: list[CatalogFeature] = []
-    for feat in features:
-        if duration and feat.kind == "movie":
-            mins = feat.duration_minutes
-            if mins is not None:
-                d = duration.strip().lower()
-                if d in ("under_90", "under 90 min", "<90") and mins >= 90:
-                    continue
-                if d in ("90_120", "90–120 min", "90-120") and not (90 <= mins <= 120):
-                    continue
-                if d in ("over_120", "over 120 min", ">120") and mins <= 120:
-                    continue
-            elif duration.strip().lower() not in ("any", ""):
-                # Series or unknown runtime: keep series for non-movie duration filters lightly.
-                if feat.kind == "movie":
-                    continue
-        if language and language.strip().lower() not in ("any", "original", ""):
-            lang = language.strip().lower()
-            # Persian/Dari/Pashto dub where metadata exists
-            dubbed_norm = {x.lower() for x in feat.dubbed}
-            spoken = feat.language.lower()
-            aliases = {
-                "persian": {"persian", "farsi", "fa", "dari"},
-                "dari": {"dari", "persian", "farsi", "fa"},
-                "pashto": {"pashto", "ps", "pushto"},
-                "farsi": {"farsi", "persian", "fa", "dari"},
-            }
-            accepted = aliases.get(lang, {lang})
-            if not (spoken in accepted or dubbed_norm & accepted):
-                continue
-        if subtitles and subtitles.strip().lower() == "required":
-            if not feat.subtitles:
-                continue
-        if release_period and release_period.strip().lower() not in ("any", ""):
-            rp = release_period.strip().lower()
-            year = feat.release_year or 0
-            if rp == "new" and year < year_now - 2:
-                continue
-            if rp == "modern" and not (year_now - 15 <= year <= year_now):
-                continue
-            if rp == "classic" and (year == 0 or year > year_now - 25):
-                continue
-        # Mood filter: require at least one mood genre when mood set.
-        if mood_genres:
-            names = {g.lower() for g in feat.genres}
-            if not names.intersection({g.lower() for g in mood_genres}):
-                continue
-        filtered.append(feat)
 
-    ranked = _rank(
-        filtered,
-        guide_profile,
-        limit=limit,
-        settings=settings,
-        exclude=exclude,
-        min_score=0.05,
+    def _apply_filters(
+        pool: list[CatalogFeature],
+        *,
+        apply_duration: bool,
+        apply_language: bool,
+        apply_subtitles: bool,
+        apply_period: bool,
+        apply_mood: bool,
+    ) -> list[CatalogFeature]:
+        out: list[CatalogFeature] = []
+        for feat in pool:
+            if apply_duration and duration and feat.kind == "movie":
+                mins = feat.duration_minutes
+                if mins is not None:
+                    d = duration.strip().lower()
+                    if d in ("under_90", "under 90 min", "<90") and mins >= 90:
+                        continue
+                    if d in ("90_120", "90–120 min", "90-120") and not (90 <= mins <= 120):
+                        continue
+                    if d in ("over_120", "over 120 min", ">120") and mins <= 120:
+                        continue
+                elif duration.strip().lower() not in ("any", ""):
+                    continue
+            if apply_language and language and language.strip().lower() not in ("any", "original", ""):
+                lang = language.strip().lower()
+                dubbed_norm = {x.lower() for x in feat.dubbed}
+                spoken = feat.language.lower()
+                aliases = {
+                    "persian": {"persian", "farsi", "fa", "dari"},
+                    "dari": {"dari", "persian", "farsi", "fa"},
+                    "pashto": {"pashto", "ps", "pushto"},
+                    "farsi": {"farsi", "persian", "fa", "dari"},
+                }
+                accepted = aliases.get(lang, {lang})
+                if not (spoken in accepted or dubbed_norm & accepted):
+                    continue
+            if apply_subtitles and subtitles and subtitles.strip().lower() == "required":
+                if not feat.subtitles:
+                    continue
+            if apply_period and release_period and release_period.strip().lower() not in ("any", ""):
+                rp = release_period.strip().lower()
+                year = feat.release_year or 0
+                if rp == "new" and year < year_now - 2:
+                    continue
+                if rp == "modern" and not (year_now - 15 <= year <= year_now):
+                    continue
+                if rp == "classic" and (year == 0 or year > year_now - 25):
+                    continue
+            if apply_mood and mood_genres:
+                names = {g.lower() for g in feat.genres}
+                if not names.intersection({g.lower() for g in mood_genres}):
+                    continue
+            if genre:
+                g = genre.strip().lower()
+                if g not in {x.lower() for x in feat.genres} and g not in {x.lower() for x in feat.genre_slugs}:
+                    # genre already applied in candidate pool when set; keep soft check
+                    pass
+            out.append(feat)
+        return out
+
+    filtered = _apply_filters(
+        features,
+        apply_duration=True,
+        apply_language=True,
+        apply_subtitles=True,
+        apply_period=True,
+        apply_mood=True,
+    )
+    relaxed_notes: list[str] = []
+    # Progressive relaxation — never invent dub/subtitle metadata; only drop filters.
+    if len(filtered) < 3:
+        for label, kwargs in (
+            ("duration", dict(apply_duration=False, apply_language=True, apply_subtitles=True, apply_period=True, apply_mood=True)),
+            ("release period", dict(apply_duration=False, apply_language=True, apply_subtitles=True, apply_period=False, apply_mood=True)),
+            ("language", dict(apply_duration=False, apply_language=False, apply_subtitles=True, apply_period=False, apply_mood=True)),
+            ("subtitles", dict(apply_duration=False, apply_language=False, apply_subtitles=False, apply_period=False, apply_mood=True)),
+        ):
+            relaxed = _apply_filters(features, **kwargs)
+            if len(relaxed) > len(filtered):
+                filtered = relaxed
+                relaxed_notes.append(label)
+            if len(filtered) >= 3:
+                break
+
+    ranked = filter_still_public(
+        db,
+        _rank(
+            filtered,
+            guide_profile,
+            limit=limit,
+            settings=settings,
+            exclude=exclude,
+            min_score=0.05,
+        ),
     )
     # Ensure explainable mood/genre reasons first.
     for item in ranked:
@@ -962,6 +1085,8 @@ def what_to_watch(
                 reasons = [prefix] + [r for r in reasons if r != prefix]
         if genre:
             reasons = [f"Matches {genre} genre"] + [r for r in reasons if "genre" not in r.lower()]
+        if relaxed_notes:
+            reasons.append(f"Relaxed match: ignored {', '.join(relaxed_notes)}")
         item.reasons = reasons[:4]
 
     return {
@@ -977,6 +1102,7 @@ def what_to_watch(
             "subtitles": subtitles,
             "release_period": release_period,
         },
+        "relaxed": relaxed_notes,
         "count": len(ranked),
         "items": [scored_to_public_dict(i) for i in ranked],
     }

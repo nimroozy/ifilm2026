@@ -170,11 +170,14 @@ def get_what_to_watch(
 @router.get("/admin/recommendations/inspect", response_model=RecommendationInspectOut)
 def admin_inspect_recommendations(
     db: DbSession,
-    _: Annotated[AdminUser, Depends(require_permissions("movies.read"))],
+    _: Annotated[AdminUser, Depends(require_permissions("recommendations.inspect"))],
     subscriber_id: int = Query(..., ge=1),
     limit: int = Query(20, ge=1, le=50),
 ) -> RecommendationInspectOut:
-    """Debug tool: preference signals + ranked candidates. Not a surveillance dashboard."""
+    """Debug tool: preference signals + ranked candidates. Not a surveillance dashboard.
+
+    Requires exact permission ``recommendations.inspect`` (not granted by movies.read).
+    """
     payload = inspect_recommendations(db, subscriber_id=subscriber_id, limit=limit)
     if payload.get("error") == "subscriber_not_found":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subscriber not found")

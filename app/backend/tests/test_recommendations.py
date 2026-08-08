@@ -564,7 +564,30 @@ def test_admin_inspect_rbac(client, db_session):
     _progress(db_session, user, cat["movies"]["inception"], percent=100, completed=True)
     db_session.commit()
 
-    role = AdminRole(name=f"rec-role-{new_uuid()[:6]}", permissions=["movies.read"])
+    # Ordinary catalog managers (movies.read) must NOT access inspect.
+    role_catalog = AdminRole(name=f"rec-cat-{new_uuid()[:6]}", permissions=["movies.read", "movies.manage"])
+    db_session.add(role_catalog)
+    db_session.flush()
+    admin_catalog = AdminUser(
+        username=f"rec-cat-{new_uuid()[:6]}",
+        email=f"{new_uuid()[:6]}@ex.test",
+        full_name="Catalog Admin",
+        hashed_password=hash_password("admin-pass-ok"),
+        role_id=role_catalog.id,
+        is_active=True,
+    )
+    db_session.add(admin_catalog)
+    db_session.commit()
+    token_catalog = create_access_token(
+        str(admin_catalog.id), {"typ": "admin", "username": admin_catalog.username}
+    )
+    denied_catalog = client.get(
+        f"/api/admin/recommendations/inspect?subscriber_id={user.id}",
+        headers=_headers(token_catalog),
+    )
+    assert denied_catalog.status_code == 403
+
+    role = AdminRole(name=f"rec-role-{new_uuid()[:6]}", permissions=["recommendations.inspect"])
     db_session.add(role)
     db_session.flush()
     admin = AdminUser(
@@ -589,6 +612,7 @@ def test_admin_inspect_rbac(client, db_session):
     assert "preference_signals" in body
     assert "candidates" in body
     assert "hashed_password" not in str(body).lower()
+    assert "access_token" not in str(body).lower()
     # Forbidden without permission
     role2 = AdminRole(name=f"rec-role2-{new_uuid()[:6]}", permissions=["genres.read"])
     db_session.add(role2)
@@ -655,3 +679,159 @@ def test_bump_catalog_epoch_clears_cache():
     cache_set("u:1:rec:x", "v")
     bump_catalog_feature_epoch()
     assert cache_get("u:1:rec:x") is None
+
+
+def test_completed_and_continue_watching_excluded_from_recommended(client, db_session):
+    cat = _seed_catalog(db_session)
+    user, token = _subscriber(db_session, username="excl-cw")
+    completed = cat["movies"]["inception"]
+    watching = cat["movies"]["mad_max"]
+    _progress(db_session, user, completed, percent=100, completed=True)
+    _progress(db_session, user, watching, percent=55, completed=False)
+    db_session.commit()
+    invalidate_user_recommendation_cache(user.id)
+
+    res = client.get("/api/me/recommendations?limit=12", headers=_headers(token))
+    assert res.status_code == 200
+    titles = {i["title"] for i in res.json()["items"]}
+    assert completed.title not in titles
+    assert watching.title not in titles
+
+
+def test_watchlisted_excluded_from_recommended_but_influences_prefs(client, db_session):
+    cat = _seed_catalog(db_session)
+    user, token = _subscriber(db_session, username="excl-wl")
+    listed = cat["movies"]["interstellar"]
+    db_session.add(WatchlistItem(subscriber_id=user.id, movie_id=listed.id, series_id=None))
+    # Give a weak completion signal so personalization engages.
+    _progress(db_session, user, cat["movies"]["inception"], percent=100, completed=True)
+    db_session.commit()
+    invalidate_user_recommendation_cache(user.id)
+
+    res = client.get("/api/me/recommendations?limit=12", headers=_headers(token))
+    assert res.status_code == 200
+    body = res.json()
+    titles = {i["title"] for i in body["items"]}
+    assert listed.title not in titles
+    assert body["personalized"] is True
+    # Sci-Fi preference from watchlist+history should still surface related titles.
+    assert any(t in titles for t in ("Foundation", "Catch Me If You Can", "Mad Max Fury Road"))
+
+
+def test_dismiss_downranks_not_hard_excludes_and_keeps_history(client, db_session):
+    cat = _seed_catalog(db_session)
+    user, token = _subscriber(db_session, username="dismiss-soft")
+    dismissed = cat["movies"]["home_alone"]
+    _progress(db_session, user, dismissed, percent=40, completed=False, hidden=True)
+    _progress(db_session, user, cat["movies"]["paddington"], percent=100, completed=True)
+    db_session.commit()
+    invalidate_user_recommendation_cache(user.id)
+
+    res = client.get("/api/me/recommendations?limit=12", headers=_headers(token))
+    assert res.status_code == 200
+    body = res.json()
+    assert body["personalized"] is True
+    # Dismissed title itself may appear only if not completed/CW; it is CW+dismissed so excluded
+    # via continue-watching exclusion when still in progress. History row remains in DB.
+    from app.models.watch_progress import UserWatchProgress
+
+    rows = (
+        db_session.query(UserWatchProgress)
+        .filter(
+            UserWatchProgress.subscriber_id == user.id,
+            UserWatchProgress.movie_id == dismissed.id,
+        )
+        .all()
+    )
+    assert len(rows) == 1
+    assert rows[0].hidden_from_continue is True
+
+
+def test_stale_cache_cannot_leak_unpublished(client, db_session):
+    cat = _seed_catalog(db_session)
+    user, token = _subscriber(db_session, username="pub-leak")
+    target = cat["movies"]["interstellar"]
+    _progress(db_session, user, cat["movies"]["inception"], percent=100, completed=True)
+    db_session.commit()
+    invalidate_user_recommendation_cache(user.id)
+
+    first = client.get("/api/me/recommendations?limit=12", headers=_headers(token))
+    assert first.status_code == 200
+    titles_before = {i["title"] for i in first.json()["items"]}
+    assert target.title in titles_before
+
+    # Unpublish while a process-local cache entry may still exist for this key.
+    target.status = "draft"
+    target.published_at = None
+    db_session.commit()
+    # Do NOT invalidate — simulate multi-worker / TTL lag; response-time filter must catch it.
+    second = client.get("/api/me/recommendations?limit=12", headers=_headers(token))
+    assert second.status_code == 200
+    titles_after = {i["title"] for i in second.json()["items"]}
+    assert target.title not in titles_after
+    assert "Secret Draft" not in titles_after
+
+
+def test_what_to_watch_relaxed_match_notes(client, db_session):
+    _seed_catalog(db_session)
+    # Impossible combo for the tiny seed catalog — engine should relax filters and explain.
+    res = client.post(
+        "/api/recommendations/what-to-watch",
+        json={
+            "content_type": "movie",
+            "genre": "Comedy",
+            "mood": "funny",
+            "duration": "under_90",
+            "language": "pashto",
+            "subtitles": "required",
+            "release_period": "new",
+            "limit": 5,
+        },
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["ai"] is False
+    assert "relaxed" in body
+    if body["count"] > 0:
+        assert body["relaxed"]
+        assert any("Relaxed match" in r for i in body["items"] for r in i["reasons"])
+    for item in body["items"]:
+        assert "source_path" not in item
+
+
+def test_home_because_you_watched_omits_when_weak(client, db_session):
+    cat = _seed_catalog(db_session)
+    user, token = _subscriber(db_session, username="byw-weak")
+    # Accidental short playback must not become a Because You Watched anchor.
+    _progress(db_session, user, cat["movies"]["inception"], percent=1, completed=False)
+    from app.models.watch_progress import UserWatchProgress
+
+    row = (
+        db_session.query(UserWatchProgress)
+        .filter(UserWatchProgress.subscriber_id == user.id)
+        .first()
+    )
+    row.position_seconds = 5.0
+    row.progress_percent = 0.1
+    db_session.commit()
+    invalidate_user_recommendation_cache(user.id)
+
+    res = client.get("/api/me/recommendations/home", headers=_headers(token))
+    assert res.status_code == 200
+    types = [s["shelf_type"] for s in res.json()["shelves"]]
+    assert "because_you_watched" not in types
+
+
+def test_cold_start_uses_popular_label(client, db_session):
+    _seed_catalog(db_session)
+    user, token = _subscriber(db_session, username="cold")
+    res = client.get("/api/me/recommendations?limit=8", headers=_headers(token))
+    assert res.status_code == 200
+    body = res.json()
+    assert body["personalized"] is False
+    assert body["mode"] == "popular"
+    assert body["label"] == "Popular Now"
+    home = client.get("/api/me/recommendations/home", headers=_headers(token)).json()
+    assert home["personalized"] is False
+    assert any(s["shelf_type"] == "popular" for s in home["shelves"])
+    assert not any(s["shelf_type"] == "recommended" for s in home["shelves"])
