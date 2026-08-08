@@ -81,6 +81,7 @@ const CopyrightPage = lazy(() =>
   import('@/pages/LegalPages').then((m) => ({ default: m.CopyrightPage }))
 );
 const WhatToWatchPage = lazy(() => import('@/pages/WhatToWatchPage'));
+const RequestContentPage = lazy(() => import('@/pages/RequestContentPage'));
 const PlayerPage = lazy(() => import('@/pages/PlayerPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 
@@ -110,6 +111,7 @@ const AdminPlaceholderPage = lazy(() => import('@/pages/admin/AdminPlaceholderPa
 const RecommendationsInspectPage = lazy(() =>
   import('@/pages/admin/RecommendationsInspectPage')
 );
+const ContentRequestsAdminPage = lazy(() => import('@/pages/admin/ContentRequestsAdminPage'));
 
 const queryClient = new QueryClient();
 
@@ -172,6 +174,8 @@ const router = createBrowserRouter([
       { path: '/subtitled', element: customerLazy(<SubtitledPage />) },
       { path: '/new-releases', element: customerLazy(<NewReleasesPage />) },
       { path: '/what-to-watch', element: customerLazy(<WhatToWatchPage />) },
+      { path: '/request', element: customerLazy(<RequestContentPage />) },
+      { path: '/requests', element: <Navigate to="/request" replace /> },
       { path: '/movie/:id', element: customerLazy(<MovieDetailsPage />) },
       { path: '/series/:id', element: customerLazy(<SeriesDetailsPage />) },
       { path: '/search', element: customerLazy(<SearchPage />) },
@@ -260,6 +264,7 @@ const router = createBrowserRouter([
           { path: 'tools/upload', element: <LazyPage><MediaUploadPage /></LazyPage> },
           { path: 'tools/tmdb', element: <LazyPage><TmdbToolsPage /></LazyPage> },
           { path: 'tools/recommendations', element: <LazyPage><RecommendationsInspectPage /></LazyPage> },
+          { path: 'content-requests', element: <LazyPage><ContentRequestsAdminPage /></LazyPage> },
           { path: 'media/storage-health', element: <LazyPage><MediaStorageHealthPage /></LazyPage> },
           { path: 'media/processing', element: <LazyPage><MediaProcessingJobsPage /></LazyPage> },
           { path: 'media/playback-sessions', element: <LazyPage><PlaybackSessionsPage /></LazyPage> },

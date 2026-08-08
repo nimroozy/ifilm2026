@@ -15,6 +15,7 @@ import {
   ArrowUpCircle,
   HardDrive,
   Sparkles,
+  Inbox,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -46,6 +47,7 @@ const navGroups: NavGroup[] = [
       { to: '/admin/series', label: 'Series', icon: Tv },
       { to: '/admin/genres', label: 'Genres', icon: Tags },
       { to: '/admin/collections', label: 'Collections', icon: Bookmark },
+      { to: '/admin/content-requests', label: 'Content Requests', icon: Inbox },
     ],
   },
   {

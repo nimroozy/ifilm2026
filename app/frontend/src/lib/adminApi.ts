@@ -38,6 +38,10 @@ import {
   type PublicationHistoryEventDto,
   type PublicationReadinessDto,
   type RecommendationInspectDto,
+  type ContentRequestAdminActionBody,
+  type ContentRequestAdminDetailDto,
+  type ContentRequestAdminListDto,
+  type ContentRequestDto,
   type SeasonCreatePayload,
   type SeasonDto,
   type SeasonUpdatePayload,
@@ -800,6 +804,32 @@ export const adminApi = {
     const { data } = await adminHttp.get<RecommendationInspectDto>('/admin/recommendations/inspect', {
       params: { subscriber_id: subscriberId, limit },
     });
+    return data;
+  },
+
+  async listContentRequests(params?: {
+    status?: string;
+    request_type?: string;
+    q?: string;
+    page?: number;
+    page_size?: number;
+  }) {
+    const { data } = await adminHttp.get<ContentRequestAdminListDto>('/admin/content-requests', {
+      params,
+    });
+    return data;
+  },
+
+  async getContentRequest(id: number) {
+    const { data } = await adminHttp.get<ContentRequestAdminDetailDto>(`/admin/content-requests/${id}`);
+    return data;
+  },
+
+  async contentRequestAction(id: number, body: ContentRequestAdminActionBody) {
+    const { data } = await adminHttp.post<ContentRequestDto>(
+      `/admin/content-requests/${id}/actions`,
+      body
+    );
     return data;
   },
 };

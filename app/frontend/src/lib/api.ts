@@ -1438,6 +1438,118 @@ export function clearSensitiveAuthState() {
 }
 
 const http = createHttp(() => tokenStore.get());
+export type ContentRequestStatus =
+  | 'new'
+  | 'reviewing'
+  | 'approved'
+  | 'rejected'
+  | 'added'
+  | 'withdrawn';
+
+export interface CatalogMatchDto {
+  content_type: 'movie' | 'series';
+  id: number;
+  slug: string;
+  title: string;
+  release_year?: number | null;
+  poster_url?: string;
+  detail_path: string;
+  match_strength?: 'exact' | 'likely';
+  match_reason?: string;
+}
+
+export interface ContentRequestDto {
+  id: number;
+  request_type: 'movie' | 'series';
+  title: string;
+  year?: number | null;
+  tmdb_id?: number | null;
+  imdb_id?: string | null;
+  tmdb_url?: string | null;
+  imdb_url?: string | null;
+  preferred_language?: string | null;
+  notes?: string | null;
+  status: ContentRequestStatus | string;
+  public_response?: string | null;
+  linked_movie_id?: number | null;
+  linked_series_id?: number | null;
+  linked_detail_path?: string | null;
+  linked_title?: string | null;
+  demand_count?: number;
+  created_at: string;
+  updated_at: string;
+  reviewed_at?: string | null;
+  subscriber_id?: number;
+  subscriber_username?: string | null;
+  admin_note?: string | null;
+  reviewed_by_admin_id?: number | null;
+  normalized_title?: string;
+}
+
+export interface ContentRequestCreateBody {
+  request_type: 'movie' | 'series';
+  title: string;
+  year?: number;
+  tmdb_url?: string;
+  imdb_url?: string;
+  tmdb_id?: number;
+  imdb_id?: string;
+  preferred_language?: string;
+  notes?: string;
+  force?: boolean;
+}
+
+export interface ContentRequestCreateResult {
+  outcome: 'created' | 'existing_request' | 'already_available' | 'suggestions';
+  message: string;
+  request?: ContentRequestDto | null;
+  catalog_item?: CatalogMatchDto | null;
+  suggestions: CatalogMatchDto[];
+}
+
+export interface ContentRequestAggregateDto {
+  request_type: 'movie' | 'series';
+  title: string;
+  normalized_title: string;
+  year?: number | null;
+  tmdb_id?: number | null;
+  imdb_id?: string | null;
+  request_count: number;
+  open_count: number;
+  preferred_languages: Record<string, number>;
+  latest_requested_at?: string | null;
+}
+
+export interface ContentRequestAdminListDto {
+  items: ContentRequestDto[];
+  total: number;
+  page: number;
+  page_size: number;
+  aggregates: ContentRequestAggregateDto[];
+}
+
+export interface ContentRequestAdminDetailDto {
+  request: ContentRequestDto;
+  events: Array<{
+    id: number;
+    event_type: string;
+    from_status?: string | null;
+    to_status?: string | null;
+    actor_admin_id?: number | null;
+    actor_subscriber_id?: number | null;
+    detail?: string | null;
+    created_at: string;
+  }>;
+}
+
+export interface ContentRequestAdminActionBody {
+  action: 'review' | 'approve' | 'reject' | 'mark_added' | 'reopen';
+  admin_note?: string;
+  public_response?: string;
+  linked_movie_id?: number;
+  linked_series_id?: number;
+}
+
 export const api = {
   async getConfig(): Promise<RuntimeConfig> {
     const { data } = await http.get('/config');
@@ -1708,6 +1820,26 @@ export const api = {
 
   async whatToWatch(body: WhatToWatchBody) {
     const { data } = await http.post<WhatToWatchDto>('/recommendations/what-to-watch', body);
+    return data;
+  },
+
+  async createContentRequest(body: ContentRequestCreateBody) {
+    const { data } = await http.post<ContentRequestCreateResult>('/me/content-requests', body);
+    return data;
+  },
+
+  async listContentRequests(params?: { page?: number; page_size?: number }) {
+    const { data } = await http.get<Envelope<ContentRequestDto>>('/me/content-requests', { params });
+    return unwrapList(data);
+  },
+
+  async getContentRequest(id: number) {
+    const { data } = await http.get<ContentRequestDto>(`/me/content-requests/${id}`);
+    return data;
+  },
+
+  async withdrawContentRequest(id: number) {
+    const { data } = await http.delete<ContentRequestDto>(`/me/content-requests/${id}`);
     return data;
   },
 };

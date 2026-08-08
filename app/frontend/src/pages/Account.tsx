@@ -180,6 +180,7 @@ export function ProfilePage() {
             {[
               { label: t.profile.devices, path: '/devices', count: deviceCount },
               { label: t.profile.watchlist, path: '/watchlist', count: 'Open' },
+              { label: t.profile.requestMovie, path: '/request', count: 'Open' },
               { label: t.profile.history, path: '/history', count: 'Open' },
             ].map(item => (
               <Card key={item.path} className="bg-card border-border hover:bg-card/80 cursor-pointer transition-colors" onClick={() => navigate(item.path)}>

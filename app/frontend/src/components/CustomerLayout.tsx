@@ -274,6 +274,7 @@ function customerNavLabel(id: CustomerNavId, t: typeof translations.en): string 
     newReleases: t.nav.newReleases,
     myList: t.nav.myList,
     whatToWatch: t.nav.whatToWatch,
+    requestMovie: t.nav.requestMovie,
     search: t.nav.search,
     profile: t.nav.profile,
   };
@@ -388,6 +389,7 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
                     <DropdownMenuItem onClick={() => navigate('/profile')}>{t.profile.title}</DropdownMenuItem>
                     <DropdownMenuItem onClick={() => navigate('/devices')}>{t.profile.devices}</DropdownMenuItem>
                     <DropdownMenuItem onClick={() => navigate('/watchlist')}>{t.profile.watchlist}</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate('/request')}>{t.profile.requestMovie}</DropdownMenuItem>
                     <DropdownMenuItem onClick={() => navigate('/history')}>{t.profile.history}</DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => {

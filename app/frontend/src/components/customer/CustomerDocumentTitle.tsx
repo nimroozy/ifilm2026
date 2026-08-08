@@ -18,6 +18,7 @@ export function resolveCustomerTitle(pathname: string, t: ReturnType<typeof useL
     '/subtitled': t.pages.subtitledTitle,
     '/new-releases': t.pages.newReleasesTitle,
     '/what-to-watch': t.nav.whatToWatch,
+    '/request': t.nav.requestMovie,
     '/collections': t.pages.collectionsTitle,
     '/search': t.nav.search,
     '/about': t.legal.aboutTitle,

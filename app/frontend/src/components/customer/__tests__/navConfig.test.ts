@@ -57,6 +57,13 @@ describe('customer nav active matching', () => {
       'search',
       'profile',
     ]);
+    expect(MOBILE_BOTTOM_NAV.map((i) => i.id)).not.toContain('requestMovie');
+  });
+
+  it('exposes Request Movie in desktop/more nav but not as a primary tab', () => {
+    expect(DESKTOP_NAV_ITEMS.map((i) => i.id)).toContain('requestMovie');
+    const item = DESKTOP_NAV_ITEMS.find((i) => i.id === 'requestMovie')!;
+    expect(isNavActive('/request', item)).toBe(true);
   });
 });
 
