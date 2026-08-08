@@ -12,6 +12,8 @@ export interface MediaCardProps {
   year?: number | string;
   rating?: number | string;
   runtime?: string;
+  /** Compact status/season note shown under the title (e.g. Ongoing). */
+  status?: string;
   quality?: string;
   showDemo?: boolean;
   /** When true, show the Play overlay. Never imply playback if not playable. */
@@ -46,6 +48,7 @@ export function MediaCard({
   year,
   rating,
   runtime,
+  status,
   quality,
   showDemo,
   playable = false,
@@ -166,11 +169,21 @@ export function MediaCard({
         ) : null}
       </div>
 
-      <h3 className="truncate text-sm font-semibold text-foreground md:text-[15px]">{title}</h3>
-      <div className="mt-0.5 flex min-h-[1rem] items-center gap-1.5 text-xs text-muted-foreground">
+      <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-foreground md:text-[15px]">
+        {title}
+      </h3>
+      <div className="mt-0.5 flex min-h-[1rem] flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
         {year ? <span>{year}</span> : null}
         {year && runtime ? <span aria-hidden>•</span> : null}
         {runtime ? <span>{runtime}</span> : null}
+        {(year || runtime) && status ? <span aria-hidden>•</span> : null}
+        {status ? <span>{status}</span> : null}
+        {badge && !availabilityBadges?.length && !status ? (
+          <>
+            {(year || runtime) ? <span aria-hidden>•</span> : null}
+            <span>{badge}</span>
+          </>
+        ) : null}
       </div>
     </div>
   );

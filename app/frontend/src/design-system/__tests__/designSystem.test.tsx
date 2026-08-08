@@ -1,6 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { ContentShelf, MediaCard, MetaRow, RatingBadge, StatusChip } from '@/design-system';
+import {
+  ContentShelf,
+  MediaCard,
+  MetaRow,
+  RatingBadge,
+  StatusChip,
+  mediaGridClass,
+  mediaSizes,
+} from '@/design-system';
 
 describe('design system', () => {
   it('renders MediaCard with rating, demo, quality, and progress', () => {
@@ -27,6 +35,26 @@ describe('design system', () => {
     expect(screen.getByTestId('media-card-play')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('media-card'));
     expect(onActivate).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses premium poster density tokens and two-line titles', () => {
+    expect(mediaSizes.posterMd).toMatch(/210px|220px/);
+    expect(mediaGridClass).toContain('grid-cols-2');
+    expect(mediaGridClass).toContain('xl:grid-cols-6');
+    expect(mediaGridClass).not.toContain('xl:grid-cols-8');
+    render(
+      <MediaCard
+        title="A Very Long Series Title That Should Clamp"
+        imageUrl="/poster.jpg"
+        year={2024}
+        status="Ongoing"
+        runtime="3 seasons"
+      />
+    );
+    const title = screen.getByText('A Very Long Series Title That Should Clamp');
+    expect(title.className).toMatch(/line-clamp-2/);
+    expect(screen.getByText('Ongoing')).toBeInTheDocument();
+    expect(screen.getByText('3 seasons')).toBeInTheDocument();
   });
 
   it('hides Play overlay unless content is playable', () => {

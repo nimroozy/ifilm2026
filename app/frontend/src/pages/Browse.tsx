@@ -30,13 +30,14 @@ import {
 } from '@/lib/catalogData';
 import { ApiError } from '@/lib/api';
 import {
+  catalogAvailabilityBadges,
   catalogAvailabilityChips,
   formatCatalogTracks,
   hasCatalogTracks,
 } from '@/lib/catalogAvailability';
 import { canPlayFullMovie, hasDemoClip, isDemoCatalogItem } from '@/lib/catalogPresentation';
 import { trailerEmbedUrl } from '@/lib/trailers';
-import { MediaCard } from '@/design-system';
+import { MediaCard, mediaGridClass } from '@/design-system';
 import { MovieDetailView } from '@/components/MovieDetailView';
 import { WatchlistButton } from '@/components/WatchlistButton';
 
@@ -44,7 +45,7 @@ function PageLoading() {
   return (
     <div className="container mx-auto px-4 pt-6 space-y-4" data-testid="browse-loading">
       <Skeleton className="h-8 w-48" />
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+      <div className={mediaGridClass}>
         {Array.from({ length: 12 }).map((_, i) => (
           <Skeleton key={i} className="aspect-[2/3] w-full" />
         ))}
@@ -101,7 +102,7 @@ function sortMergedMovies(movies: CatalogMovie[], sort: string): CatalogMovie[] 
 
 // ============ MOVIES PAGE ============
 export function MoviesPage({ audience = 'all' }: { audience?: 'all' | 'children' } = {}) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const genreFromUrl = searchParams.get('genre')?.trim() || 'all';
@@ -114,6 +115,11 @@ export function MoviesPage({ audience = 'all' }: { audience?: 'all' | 'children'
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const isChildren = audience === 'children';
+  const availabilityLabels = {
+    dubbed: t.nav.dubbed,
+    subtitled: t.nav.subtitled,
+    multiAudio: 'Multi',
+  };
 
   useEffect(() => {
     setGenre(genreFromUrl);
@@ -142,6 +148,7 @@ export function MoviesPage({ audience = 'all' }: { audience?: 'all' | 'children'
                   genre: selectedGenre,
                   sort: sortParam(sort),
                   page_size: 100,
+                  locale: lang,
                 }),
               ]
             : CHILDREN_GENRES.map((childGenre) =>
@@ -150,6 +157,7 @@ export function MoviesPage({ audience = 'all' }: { audience?: 'all' | 'children'
                   genre: childGenre,
                   sort: sortParam(sort),
                   page_size: 100,
+                  locale: lang,
                 })
               );
         const [genres, ...pages] = await Promise.all([fetchGenres(), ...genreFetches]);
@@ -163,6 +171,7 @@ export function MoviesPage({ audience = 'all' }: { audience?: 'all' | 'children'
             genre: genre === 'all' ? undefined : genre,
             sort: sortParam(sort),
             page_size: 100,
+            locale: lang,
           }),
           fetchGenres(),
         ]);
@@ -175,7 +184,7 @@ export function MoviesPage({ audience = 'all' }: { audience?: 'all' | 'children'
     } finally {
       setLoading(false);
     }
-  }, [search, genre, sort, isChildren]);
+  }, [search, genre, sort, isChildren, lang]);
 
   useEffect(() => {
     const timer = window.setTimeout(load, 200);
@@ -241,22 +250,27 @@ export function MoviesPage({ audience = 'all' }: { audience?: 'all' | 'children'
             <p className="text-lg">{t.search.noResults}</p>
           </div>
         ) : view === 'grid' ? (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-            {items.map((movie) => (
-              <MediaCard
-                key={movie.id}
-                className="!w-full max-w-none"
-                title={movie.title}
-                imageUrl={movie.poster}
-                year={movie.year}
-                rating={movie.rating}
-                runtime={movie.duration ? `${movie.duration} min` : undefined}
-                quality={movie.qualities?.[0] || undefined}
-                showDemo={hasDemoClip(movie)}
-                playable={canPlayFullMovie(movie) || hasDemoClip(movie)}
-                onActivate={() => navigate(`/movie/${movie.id}`)}
-              />
-            ))}
+          <div className={mediaGridClass}>
+            {items.map((movie) => {
+              const { badges, overflow } = catalogAvailabilityBadges(movie, availabilityLabels);
+              return (
+                <MediaCard
+                  key={movie.id}
+                  className="!w-full max-w-none"
+                  title={movie.title}
+                  imageUrl={movie.poster}
+                  year={movie.year}
+                  rating={movie.rating}
+                  runtime={movie.duration ? `${movie.duration} min` : undefined}
+                  quality={movie.qualities?.[0] || undefined}
+                  availabilityBadges={badges}
+                  availabilityOverflow={overflow}
+                  showDemo={hasDemoClip(movie)}
+                  playable={canPlayFullMovie(movie) || hasDemoClip(movie)}
+                  onActivate={() => navigate(`/movie/${movie.id}`)}
+                />
+              );
+            })}
           </div>
         ) : (
           <div className="space-y-3">
@@ -296,7 +310,7 @@ export function ChildrenPage() {
 
 // ============ SERIES PAGE ============
 export function SeriesPage() {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [genre, setGenre] = useState('all');
@@ -304,6 +318,11 @@ export function SeriesPage() {
   const [genreOptions, setGenreOptions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const availabilityLabels = {
+    dubbed: t.nav.dubbed,
+    subtitled: t.nav.subtitled,
+    multiAudio: 'Multi',
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -315,6 +334,7 @@ export function SeriesPage() {
           genre: genre === 'all' ? undefined : genre,
           sort: 'views_desc',
           page_size: 100,
+          locale: lang,
         }),
         fetchGenres(),
       ]);
@@ -326,7 +346,7 @@ export function SeriesPage() {
     } finally {
       setLoading(false);
     }
-  }, [search, genre]);
+  }, [search, genre, lang]);
 
   useEffect(() => {
     const timer = window.setTimeout(load, 200);
@@ -371,43 +391,28 @@ export function SeriesPage() {
             <p className="text-lg">{t.search.noResults}</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {items.map((s) => (
-              <div key={s.id} onClick={() => navigate(`/series/${s.id}`)} className="cursor-pointer group">
-                <div className="relative aspect-[2/3] rounded-lg overflow-hidden bg-muted mb-2">
-                  <img
-                    src={s.poster}
-                    alt={s.title}
-                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
-                    <Play className="h-10 w-10 text-white fill-white" />
-                  </div>
-                  {s.newEpisode && (
-                    <Badge className="absolute top-2 right-2 bg-destructive text-destructive-foreground text-[10px]">
-                      NEW
-                    </Badge>
-                  )}
-                  {hasDemoClip(s) && (
-                    <div className="absolute top-9 right-2">
-                      <DemoClipBadge item={s} />
-                    </div>
-                  )}
-                  <Badge className="absolute bottom-2 left-2 bg-background/80 text-foreground text-[10px]">
-                    {s.seasons}S • {s.episodes}E
-                  </Badge>
-                </div>
-                <h3 className="text-sm font-medium text-foreground truncate">{s.title}</h3>
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <span>{s.year}</span>
-                  <span>•</span>
-                  <Star className="h-3 w-3 text-primary fill-primary" />
-                  <span>{s.rating}</span>
-                  <span>•</span>
-                  <span>{s.status}</span>
-                </div>
-              </div>
-            ))}
+          <div className={mediaGridClass}>
+            {items.map((s) => {
+              const { badges, overflow } = catalogAvailabilityBadges(s, availabilityLabels);
+              const seasonLabel = s.seasons ? `${s.seasons} season${s.seasons === 1 ? '' : 's'}` : undefined;
+              return (
+                <MediaCard
+                  key={s.id}
+                  className="!w-full max-w-none"
+                  title={s.title}
+                  imageUrl={s.poster}
+                  year={s.year}
+                  rating={s.rating}
+                  runtime={seasonLabel}
+                  status={s.status || undefined}
+                  availabilityBadges={badges}
+                  availabilityOverflow={overflow}
+                  showDemo={hasDemoClip(s)}
+                  playable={hasDemoClip(s)}
+                  onActivate={() => navigate(`/series/${s.id}`)}
+                />
+              );
+            })}
           </div>
         )}
       </div>
@@ -418,6 +423,7 @@ export function SeriesPage() {
 // ============ MOVIE DETAILS PAGE ============
 export function MovieDetailsPage() {
   const { id } = useParams();
+  const { lang } = useLang();
   const [movie, setMovie] = useState<CatalogMovie | null>(null);
   const [related, setRelated] = useState<CatalogMovie[]>([]);
   const [loading, setLoading] = useState(true);
@@ -428,14 +434,14 @@ export function MovieDetailsPage() {
     setLoading(true);
     setError(null);
     try {
-      const item = await fetchMovie(id);
+      const item = await fetchMovie(id, lang);
       setMovie(item);
       try {
-        const similar = await fetchSimilarMovies(id, 12);
+        const similar = await fetchSimilarMovies(id, 12, lang);
         setRelated(similar);
       } catch {
         // Soft fallback: same-genre published titles if similar endpoint unavailable.
-        const more = await fetchMovies({ page_size: 20, sort: 'newest' });
+        const more = await fetchMovies({ page_size: 20, sort: 'newest', locale: lang });
         setRelated(
           more.items
             .filter((m) => m.id !== item.id && m.genres.some((g) => item.genres.includes(g)))
@@ -448,7 +454,7 @@ export function MovieDetailsPage() {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, lang]);
 
   useEffect(() => {
     load();
@@ -463,7 +469,7 @@ export function MovieDetailsPage() {
 // ============ SERIES DETAILS PAGE ============
 export function SeriesDetailsPage() {
   const { id } = useParams();
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const navigate = useNavigate();
   const [selectedSeason, setSelectedSeason] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -475,7 +481,7 @@ export function SeriesDetailsPage() {
     setLoading(true);
     setError(null);
     try {
-      const result = await fetchSeriesDetail(id);
+      const result = await fetchSeriesDetail(id, lang);
       setDetail(result);
       if (result.seasons.length) setSelectedSeason(result.seasons[0].number);
     } catch (err) {
@@ -484,7 +490,7 @@ export function SeriesDetailsPage() {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, lang]);
 
   useEffect(() => {
     load();
@@ -757,7 +763,7 @@ export function SeriesDetailsPage() {
 // ============ VIDEO PLAYER PAGE ============
 // ============ SEARCH PAGE ============
 export function SearchPage() {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
@@ -784,7 +790,7 @@ export function SearchPage() {
       setLoading(true);
       setError(null);
       try {
-        const data = await fetchSearch(query);
+        const data = await fetchSearch(query, lang);
         if (cancelled) return;
         setResults([
           ...data.movies.map((m) => ({ ...m, resultType: 'movie' as const })),
@@ -809,7 +815,7 @@ export function SearchPage() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [query, reloadToken]);
+  }, [query, reloadToken, lang]);
 
   useEffect(() => {
     if (!results.length) return;
@@ -933,7 +939,7 @@ export function SearchPage() {
             id="search-results"
             role="listbox"
             aria-label="Search results"
-            className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+            className={mediaGridClass}
           >
             {results.map((item, index) => (
               <div

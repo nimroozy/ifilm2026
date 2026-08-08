@@ -84,6 +84,11 @@ export default function SeriesFormPage() {
   const [error, setError] = useState<string | null>(null);
   const [previewBroken, setPreviewBroken] = useState(false);
   const [currentStatus, setCurrentStatus] = useState<CatalogStatus | string>('draft');
+  const [translationsRefreshing, setTranslationsRefreshing] = useState(false);
+  const [localizationSources, setLocalizationSources] = useState<Record<string, string> | null>(
+    null
+  );
+  const [seriesTmdbId, setSeriesTmdbId] = useState<number | null>(null);
 
   const form = useForm<SeriesFormValues>({
     resolver: zodResolver(seriesFormSchema),
@@ -110,6 +115,8 @@ export default function SeriesFormPage() {
         const item = await adminApi.getSeries(Number(id));
         if (cancelled) return;
         setCurrentStatus(item.status);
+        setSeriesTmdbId(item.tmdb_id ?? null);
+        setLocalizationSources(item.localization?.sources ?? null);
         form.reset({
           title: item.title,
           original_title: item.original_title || '',
@@ -149,6 +156,28 @@ export default function SeriesFormPage() {
     if (!posterUrl || previewBroken) return POSTER_FALLBACK;
     return posterUrl;
   }, [posterUrl, previewBroken]);
+
+  async function refreshTmdbTranslations() {
+    if (!id) return;
+    setTranslationsRefreshing(true);
+    try {
+      const res = await adminApi.refreshTmdbTranslations({
+        media_type: 'series',
+        entity_id: Number(id),
+        include_episodes: true,
+      });
+      if (res.item && 'localization' in res.item && res.item.localization?.sources) {
+        setLocalizationSources(res.item.localization.sources);
+      }
+      toast.success(
+        `TMDB translations refreshed (${res.result.fields_written} fields). Manual translations preserved.`
+      );
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'TMDB translation refresh failed');
+    } finally {
+      setTranslationsRefreshing(false);
+    }
+  }
 
   async function onSubmit(values: SeriesFormValues) {
     const payload = {
@@ -224,6 +253,41 @@ export default function SeriesFormPage() {
           onChanged={setCurrentStatus}
         />
       )}
+
+      {isEdit && id ? (
+        <Card className="bg-card border-border" data-testid="series-tmdb-translations">
+          <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+            <CardTitle className="text-base">Localized metadata</CardTitle>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={translationsRefreshing || !seriesTmdbId}
+              onClick={() => void refreshTmdbTranslations()}
+              data-testid="refresh-tmdb-translations"
+            >
+              {translationsRefreshing ? 'Refreshing…' : 'Refresh TMDB Translations'}
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <div data-testid="translation-sources">
+              {localizationSources ? (
+                <ul className="space-y-0.5 text-xs text-muted-foreground">
+                  {Object.entries(localizationSources).map(([field, source]) => (
+                    <li key={field}>
+                      <span className="text-foreground">{field}</span>: {source}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Sources show as manual, TMDB, or fallback after refresh.
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6" noValidate>

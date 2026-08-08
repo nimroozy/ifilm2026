@@ -94,8 +94,11 @@ def genre_out(genre: Genre, *, movie_count: int | None = None, series_count: int
     )
 
 
-def movie_out(movie: Movie, db: Session | None = None) -> MovieOut:
-    from app.schemas.content import CastCreditOut
+def movie_out(
+    movie: Movie, db: Session | None = None, *, locale: str | None = None
+) -> MovieOut:
+    from app.schemas.content import CastCreditOut, LocalizationSourcesOut
+    from app.services.content_i18n import localized_movie_fields, normalize_locale
     from app.services.tmdb.credits import list_movie_credits
 
     genres = [genre_out(g, movie_count=0, series_count=0) for g in (movie.genre_links or [])]
@@ -119,13 +122,28 @@ def movie_out(movie: Movie, db: Session | None = None) -> MovieOut:
                     order=row.credit_order,
                 )
             )
+    loc = normalize_locale(locale)
+    title = movie.title
+    description = movie.description or ""
+    short_description = movie.short_description or ""
+    tagline = ""
+    localization = None
+    if db is not None:
+        localized = localized_movie_fields(db, movie, loc)
+        title = localized["title"]
+        description = localized["description"]
+        short_description = localized["short_description"]
+        tagline = localized.get("tagline") or ""
+        localization = LocalizationSourcesOut.model_validate(localized["localization"])
     return MovieOut(
         id=movie.id,
-        title=movie.title,
+        title=title,
         original_title=movie.original_title or "",
         slug=movie.slug,
-        description=movie.description or "",
-        short_description=movie.short_description or "",
+        description=description,
+        short_description=short_description,
+        tagline=tagline,
+        localization=localization,
         release_year=movie.release_year,
         release_date=movie.release_date,
         duration_minutes=movie.duration_minutes,
@@ -185,7 +203,16 @@ def movie_out(movie: Movie, db: Session | None = None) -> MovieOut:
     )
 
 
-def series_out(series: Series, *, public_counts: bool = False, db: Session | None = None) -> SeriesOut:
+def series_out(
+    series: Series,
+    *,
+    public_counts: bool = False,
+    db: Session | None = None,
+    locale: str | None = None,
+) -> SeriesOut:
+    from app.schemas.content import LocalizationSourcesOut
+    from app.services.content_i18n import localized_series_fields, normalize_locale
+
     genres = [genre_out(g, movie_count=0, series_count=0) for g in (series.genre_links or [])]
     if public_counts:
         season_count = public_season_count(series)
@@ -195,13 +222,28 @@ def series_out(series: Series, *, public_counts: bool = False, db: Session | Non
         season_count = len(seasons)
         episode_count = sum(len([e for e in (s.episodes or []) if e.deleted_at is None]) for s in seasons)
     audio_av, sub_av = availability_for_series(series, db)
+    loc = normalize_locale(locale)
+    title = series.title
+    description = series.description or ""
+    short_description = series.short_description or ""
+    tagline = ""
+    localization = None
+    if db is not None:
+        localized = localized_series_fields(db, series, loc)
+        title = localized["title"]
+        description = localized["description"]
+        short_description = localized["short_description"]
+        tagline = localized.get("tagline") or ""
+        localization = LocalizationSourcesOut.model_validate(localized["localization"])
     return SeriesOut(
         id=series.id,
-        title=series.title,
+        title=title,
         original_title=series.original_title or "",
         slug=series.slug,
-        description=series.description or "",
-        short_description=series.short_description or "",
+        description=description,
+        short_description=short_description,
+        tagline=tagline,
+        localization=localization,
         release_year=series.release_year,
         end_year=series.end_year,
         age_rating=series.age_rating or "",
@@ -275,12 +317,22 @@ def season_out(season: Season, *, public_counts: bool = False) -> SeasonOut:
     )
 
 
-def episode_out(episode: Episode, db: Session | None = None) -> EpisodeOut:
+def episode_out(
+    episode: Episode, db: Session | None = None, *, locale: str | None = None
+) -> EpisodeOut:
+    from app.services.content_i18n import localized_episode_fields, normalize_locale
+
     playable, has_package, has_external = content_playability(db, episode_id=episode.id)
     series = episode.series if getattr(episode, "series", None) is not None else None
     if series is None and db is not None and episode.series_id:
         series = db.get(Series, episode.series_id)
     audio_av, sub_av = availability_for_episode(episode, db, series=series)
+    title = episode.title
+    description = episode.description or ""
+    if db is not None:
+        localized = localized_episode_fields(db, episode, normalize_locale(locale))
+        title = localized["title"]
+        description = localized["description"]
     return EpisodeOut(
         id=episode.id,
         season_id=episode.season_id,
@@ -290,8 +342,8 @@ def episode_out(episode: Episode, db: Session | None = None) -> EpisodeOut:
         metadata_source=getattr(episode, "metadata_source", "") or "",
         demo_owned=bool(getattr(episode, "demo_owned", False)),
         has_demo_clip=bool(getattr(episode, "has_demo_clip", False)),
-        title=episode.title,
-        description=episode.description or "",
+        title=title,
+        description=description,
         duration_minutes=episode.duration_minutes,
         release_date=episode.release_date,
         thumbnail_url=episode.thumbnail_url or "",

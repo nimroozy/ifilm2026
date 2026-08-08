@@ -12,7 +12,7 @@ import { useLang, useAuth } from '@/components/CustomerLayout';
 import { devices, episodes, watchHistory } from '@/data/mockData';
 import { api, ApiError, tokenStore, type DeviceDto, type WatchlistItemDto, type WatchProgressDto } from '@/lib/api';
 import { isMockMode } from '@/lib/dataMode';
-import { MediaCard } from '@/design-system';
+import { MediaCard, mediaGridClass } from '@/design-system';
 import { toast } from '@/hooks/use-toast';
 
 function loginErrorMessage(error: unknown): string {
@@ -467,7 +467,7 @@ export function WatchlistPage() {
             </CardContent>
           </Card>
         ) : loading ? (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+          <div className={mediaGridClass}>
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="aspect-[2/3] animate-pulse rounded-xl bg-muted" />
             ))}
@@ -491,7 +491,7 @@ export function WatchlistPage() {
           </Card>
         ) : (
           <div
-            className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6"
+            className={mediaGridClass}
             data-testid="watchlist-grid"
           >
             {items.map((item) => (

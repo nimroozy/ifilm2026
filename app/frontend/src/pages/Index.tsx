@@ -234,7 +234,7 @@ function ContinueWatchingRow() {
 }
 
 export default function HomePage() {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [data, setData] = useState<HomeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -244,7 +244,7 @@ export default function HomePage() {
     setLoading(true);
     setError(null);
     try {
-      const result = await fetchHomeCatalog();
+      const result = await fetchHomeCatalog(lang);
       setData(result);
     } catch (err) {
       setData(null);
@@ -258,7 +258,7 @@ export default function HomePage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [lang]);
 
   useEffect(() => {
     load();
