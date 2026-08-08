@@ -221,7 +221,10 @@ def refresh_tmdb_title(payload: TitleRefreshRequest, db: DbSession, _: TMDBAdmin
 @router.post("/admin/tools/tmdb/refresh-translations")
 def refresh_tmdb_translations(payload: RefreshTranslationsRequest, db: DbSession, _: TMDBAdmin):
     """Refresh stored TMDB translations. Never overwrites manual translations."""
-    from app.services.tmdb.translations_sync import sync_movie_translations, sync_series_translations
+    from app.services.tmdb.translations_sync import (
+        sync_movie_translations,
+        sync_series_translations,
+    )
 
     settings = get_settings()
     client = _client()
