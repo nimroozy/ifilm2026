@@ -21,6 +21,7 @@ from app.schemas.collections import (
     CollectionUpdate,
 )
 from app.services.catalog import movie_out, series_out
+from app.services.catalog_list import movies_card_out, series_card_out
 from app.services.publishing.visibility import apply_public_visibility
 from app.utils.slug import slug_or_from_title
 
@@ -254,6 +255,84 @@ def collection_public_out(
             payload = item_out(item, db, public_only=True)
             if payload is not None:
                 items_out.append(payload)
+    count = len(items_out) if include_items else visible_item_count(db, collection.id)
+    return CollectionPublicOut(
+        id=collection.id,
+        title=collection.title,
+        slug=collection.slug,
+        description=collection.description or "",
+        short_description=collection.short_description or "",
+        collection_type=collection.collection_type,
+        poster_url=collection.poster_url or "",
+        backdrop_url=collection.backdrop_url or "",
+        sort_order=collection.sort_order,
+        is_featured=bool(collection.is_featured),
+        item_count=count,
+        items=items_out if include_items else [],
+        published_at=collection.published_at,
+    )
+
+
+def collection_public_out_cards(
+    collection: Collection,
+    db: Session,
+    *,
+    include_items: bool = True,
+    locale: str | None = None,
+) -> CollectionPublicOut:
+    """Public collection payload using card serializers (batched, no cast credits)."""
+    items_out: list[CollectionItemOut] = []
+    if include_items:
+        ordered = sorted(collection.items or [], key=lambda i: (i.position, i.id))
+        movies = [i.movie for i in ordered if i.movie_id is not None and i.movie is not None]
+        series_rows = [i.series for i in ordered if i.series_id is not None and i.series is not None]
+        movie_cards = {c.id: c for c in movies_card_out(db, movies, locale=locale)}
+        series_cards = {c.id: c for c in series_card_out(db, series_rows, locale=locale)}
+        for item in ordered:
+            movie = item.movie
+            series = item.series
+            if not _is_content_publicly_visible(movie, series):
+                continue
+            if item.movie_id is not None:
+                payload = movie_cards.get(item.movie_id)
+                if payload is None:
+                    continue
+                items_out.append(
+                    CollectionItemOut(
+                        id=item.id,
+                        collection_id=item.collection_id,
+                        movie_id=item.movie_id,
+                        series_id=item.series_id,
+                        position=item.position,
+                        custom_title=item.custom_title,
+                        custom_description=item.custom_description,
+                        content_type="movie",
+                        movie=payload,
+                        series=None,
+                        created_at=item.created_at,
+                        publicly_visible=True,
+                    )
+                )
+            else:
+                payload = series_cards.get(item.series_id) if item.series_id else None
+                if payload is None:
+                    continue
+                items_out.append(
+                    CollectionItemOut(
+                        id=item.id,
+                        collection_id=item.collection_id,
+                        movie_id=item.movie_id,
+                        series_id=item.series_id,
+                        position=item.position,
+                        custom_title=item.custom_title,
+                        custom_description=item.custom_description,
+                        content_type="series",
+                        movie=None,
+                        series=payload,
+                        created_at=item.created_at,
+                        publicly_visible=True,
+                    )
+                )
     count = len(items_out) if include_items else visible_item_count(db, collection.id)
     return CollectionPublicOut(
         id=collection.id,

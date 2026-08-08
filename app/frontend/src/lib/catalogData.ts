@@ -326,10 +326,34 @@ export async function fetchHomeCatalog(locale?: AppLocale) {
         .filter((m) => m.genres.includes('Family') || m.genres.includes('Animation'))
         .slice(0, 12),
       popularSeries: [...series].sort((a, b) => b.views - a.views).slice(0, 12),
+      featuredCollections: [] as CatalogCollection[],
     };
   }
 
-  const loc = locale ? { locale } : {};
+  const loc = locale ? { locale } : undefined;
+  // Prefer bounded aggregate endpoint (one HTTP call). Fall back to legacy fan-out
+  // only if the aggregate route is unavailable on older backends.
+  try {
+    const home = await api.getCatalogHome(loc);
+    return {
+      featured: home.featured.map(mapMovieDto),
+      trending: home.trending.map(mapMovieDto),
+      recentlyAdded: home.recently_added.map(mapMovieDto),
+      popular: home.top_rated.map(mapMovieDto),
+      afghanMovies: home.afghan.map(mapMovieDto),
+      persianDubbed: home.persian_dubbed.map(mapMovieDto),
+      pashtoDubbed: home.pashto_dubbed.map(mapMovieDto),
+      actionMovies: home.action.map(mapMovieDto),
+      comedyMovies: home.comedy.map(mapMovieDto),
+      familyMovies: home.family.map(mapMovieDto),
+      popularSeries: home.popular_series.map(mapSeriesDto),
+      featuredCollections: home.featured_collections || [],
+    };
+  } catch {
+    /* fall through to legacy multi-call path */
+  }
+
+  const params = locale ? { locale } : {};
   const [
     featuredPage,
     trendingPage,
@@ -340,14 +364,14 @@ export async function fetchHomeCatalog(locale?: AppLocale) {
     actionPage,
     comedyPage,
   ] = await Promise.all([
-    api.listMovies({ featured: true, page_size: 8, sort: 'newest', ...loc }),
-    api.listMovies({ trending: true, page_size: 12, sort: 'views_desc', ...loc }),
-    api.listMovies({ page_size: 12, sort: 'newest', ...loc }),
-    api.listMovies({ page_size: 12, sort: 'rating_desc', ...loc }),
-    api.listMovies({ page_size: 40, sort: 'newest', ...loc }),
-    api.listSeries({ page_size: 12, sort: 'views_desc', ...loc }),
-    api.listMovies({ genre: 'Action', page_size: 12, sort: 'views_desc', ...loc }),
-    api.listMovies({ genre: 'Comedy', page_size: 12, sort: 'views_desc', ...loc }),
+    api.listMovies({ featured: true, page_size: 8, sort: 'newest', ...params }),
+    api.listMovies({ trending: true, page_size: 12, sort: 'views_desc', ...params }),
+    api.listMovies({ page_size: 12, sort: 'newest', ...params }),
+    api.listMovies({ page_size: 12, sort: 'rating_desc', ...params }),
+    api.listMovies({ page_size: 40, sort: 'newest', ...params }),
+    api.listSeries({ page_size: 12, sort: 'views_desc', ...params }),
+    api.listMovies({ genre: 'Action', page_size: 12, sort: 'views_desc', ...params }),
+    api.listMovies({ genre: 'Comedy', page_size: 12, sort: 'views_desc', ...params }),
   ]);
 
   const mapAll = (items: MovieDto[]) => items.map(mapMovieDto);
@@ -357,7 +381,7 @@ export async function fetchHomeCatalog(locale?: AppLocale) {
   const trending =
     trendingPage.items.length > 0
       ? mapAll(trendingPage.items)
-      : mapAll((await api.listMovies({ page_size: 12, sort: 'views_desc', ...loc })).items);
+      : mapAll((await api.listMovies({ page_size: 12, sort: 'views_desc', ...params })).items);
 
   return {
     featured: mapAll(featuredPage.items.length ? featuredPage.items : recentPage.items.slice(0, 5)),
@@ -373,6 +397,38 @@ export async function fetchHomeCatalog(locale?: AppLocale) {
       .filter((m) => m.genres.includes('Family') || m.genres.includes('Animation'))
       .slice(0, 12),
     popularSeries: mapSeries(seriesPage.items),
+    featuredCollections: [] as CatalogCollection[],
+  };
+}
+
+/** Authenticated homepage aggregate (catalog + CW + watchlist + recommendations). */
+export async function fetchMeHomeCatalog(locale?: AppLocale) {
+  if (isMockMode()) {
+    const catalog = await fetchHomeCatalog(locale);
+    return {
+      ...catalog,
+      continueWatching: [] as import('./api').WatchProgressDto[],
+      watchlist: [] as import('./api').WatchlistItemDto[],
+      recommendations: null as import('./api').HomeRecommendationsDto | null,
+    };
+  }
+  const home = await api.getMeHome(locale ? { locale } : undefined);
+  return {
+    featured: home.featured.map(mapMovieDto),
+    trending: home.trending.map(mapMovieDto),
+    recentlyAdded: home.recently_added.map(mapMovieDto),
+    popular: home.top_rated.map(mapMovieDto),
+    afghanMovies: home.afghan.map(mapMovieDto),
+    persianDubbed: home.persian_dubbed.map(mapMovieDto),
+    pashtoDubbed: home.pashto_dubbed.map(mapMovieDto),
+    actionMovies: home.action.map(mapMovieDto),
+    comedyMovies: home.comedy.map(mapMovieDto),
+    familyMovies: home.family.map(mapMovieDto),
+    popularSeries: home.popular_series.map(mapSeriesDto),
+    featuredCollections: home.featured_collections || [],
+    continueWatching: home.continue_watching || [],
+    watchlist: (home.watchlist || []).filter((i) => i.available),
+    recommendations: home.recommendations,
   };
 }
 

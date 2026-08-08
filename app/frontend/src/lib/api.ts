@@ -1097,6 +1097,29 @@ export interface HomeRecommendationsDto {
   shelves: RecommendationShelfDto[];
 }
 
+/** Aggregated anonymous homepage shelves (card payloads). */
+export interface CatalogHomeDto {
+  featured: MovieDto[];
+  trending: MovieDto[];
+  recently_added: MovieDto[];
+  top_rated: MovieDto[];
+  action: MovieDto[];
+  comedy: MovieDto[];
+  afghan: MovieDto[];
+  persian_dubbed: MovieDto[];
+  pashto_dubbed: MovieDto[];
+  family: MovieDto[];
+  popular_series: SeriesDto[];
+  featured_collections: CollectionPublicDto[];
+}
+
+/** Authenticated homepage: catalog shelves + personalized rails. */
+export interface MeHomeDto extends CatalogHomeDto {
+  continue_watching: WatchProgressDto[];
+  watchlist: WatchlistItemDto[];
+  recommendations: HomeRecommendationsDto | null;
+}
+
 export interface WhatToWatchBody {
   content_type?: 'movie' | 'series' | 'either';
   genre?: string | null;
@@ -1654,6 +1677,16 @@ export const api = {
     language?: string;
   }) {
     const { data } = await http.get<RecommendationListDto>('/me/recommendations', { params });
+    return data;
+  },
+
+  async getCatalogHome(params?: { locale?: string }) {
+    const { data } = await http.get<CatalogHomeDto>('/catalog/home', { params });
+    return data;
+  },
+
+  async getMeHome(params?: { locale?: string }) {
+    const { data } = await http.get<MeHomeDto>('/me/home', { params });
     return data;
   },
 

@@ -412,6 +412,7 @@ def apply_sort(query, model, sort: str):
     if sort not in SORT_OPTIONS:
         sort = "newest"
     rating_col = getattr(model, "imdb_rating", None)
+    views_col = getattr(model, "views", None)
     if sort == "oldest":
         return query.order_by(model.created_at.asc(), model.id.asc())
     if sort == "title_asc":
@@ -420,6 +421,8 @@ def apply_sort(query, model, sort: str):
         return query.order_by(model.title.desc(), model.id.desc())
     if sort == "rating_desc" and rating_col is not None:
         return query.order_by(rating_col.desc(), model.id.desc())
+    if sort == "views_desc" and views_col is not None:
+        return query.order_by(views_col.desc(), model.id.desc())
     if sort == "recently_updated":
         return query.order_by(model.updated_at.desc(), model.id.desc())
     return query.order_by(model.created_at.desc(), model.id.desc())

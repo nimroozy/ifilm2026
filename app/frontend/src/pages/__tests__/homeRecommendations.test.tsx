@@ -26,7 +26,11 @@ vi.mock('@/lib/catalogData', () => ({
     afghanMovies: [],
     persianDubbed: [],
     pashtoDubbed: [],
+    featuredCollections: [],
   })),
+  fetchMeHomeCatalog: vi.fn(async () => {
+    throw new Error('not authenticated in test');
+  }),
   fetchFeaturedHomeCollections: vi.fn(async () => []),
   mapCollectionItems: () => [],
 }));

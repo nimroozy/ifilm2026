@@ -10,6 +10,7 @@ from app.api.routes import (
     encoding,
     genres,
     health,
+    home,
     me,
     media_processing,
     media_upload,
@@ -30,6 +31,7 @@ api_router.include_router(health.router)
 api_router.include_router(config.router)
 api_router.include_router(auth.router)
 api_router.include_router(me.router)
+api_router.include_router(home.router)
 api_router.include_router(recommendations.router)
 api_router.include_router(admin_auth.router)
 api_router.include_router(movies.router)

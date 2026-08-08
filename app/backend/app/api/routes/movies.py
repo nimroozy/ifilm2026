@@ -25,6 +25,7 @@ from app.services.catalog import (
     soft_delete,
     utcnow,
 )
+from app.services.catalog_list import movies_card_out
 from app.services.catalog_availability import (
     availability_for_movie,
     item_has_dub,
@@ -80,7 +81,7 @@ def _paginate_movies(
         total = query.count()
         items = query.offset((page - 1) * page_size).limit(page_size).all()
         return paginated(
-            [movie_out(m, db, locale=locale) for m in items],
+            movies_card_out(db, items, locale=locale),
             total=total,
             page=page,
             page_size=page_size,

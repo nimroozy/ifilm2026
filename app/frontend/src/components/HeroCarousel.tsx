@@ -8,6 +8,7 @@ import { useLang } from '@/components/CustomerLayout';
 import type { CatalogMovie } from '@/lib/catalogData';
 import { canPlayFullMovie, fullMovieUnavailableLabel, hasDemoClip } from '@/lib/catalogPresentation';
 import { trailerEmbedUrl } from '@/lib/trailers';
+import { sizedArtworkUrl } from '@/lib/imageUrls';
 import { cn } from '@/lib/utils';
 
 const AUTOPLAY_MS = 8000;
@@ -53,6 +54,25 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
   }, []);
 
   const movie = featured[current] || featured[0];
+  const heroSrc = movie
+    ? sizedArtworkUrl(movie.backdrop || movie.poster, movie.backdrop ? 'backdrop' : 'poster', 'hero')
+    : '';
+
+  useEffect(() => {
+    if (!heroSrc || typeof document === 'undefined') return;
+    const existing = document.head.querySelector('link[data-hero-preload="1"]');
+    if (existing) existing.remove();
+    const link = document.createElement('link');
+    link.rel = 'preload';
+    link.as = 'image';
+    link.href = heroSrc;
+    link.setAttribute('data-hero-preload', '1');
+    document.head.appendChild(link);
+    return () => {
+      link.remove();
+    };
+  }, [heroSrc]);
+
   if (!movie) {
     return (
       <section className="relative -mt-16 flex h-[40vh] w-full items-center justify-center overflow-hidden bg-muted md:-mt-20">
@@ -117,14 +137,17 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
       <div className="absolute inset-0 bg-[hsl(222,28%,5%)]">
         <img
           key={movie.id}
-          src={movie.backdrop || movie.poster}
+          src={heroSrc}
           alt=""
+          width={1280}
+          height={720}
           className={cn(
             'h-full w-full object-cover object-center opacity-75',
             !reduceMotion && 'animate-fade-in'
           )}
           loading="eager"
           decoding="async"
+          {...({ fetchpriority: 'high' } as object)}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-transparent" />
         <div className="absolute inset-0 bg-gradient-to-r from-background via-background/55 to-transparent" />

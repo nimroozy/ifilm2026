@@ -13,7 +13,6 @@ from app.models.collections import Collection, CollectionItem
 from app.models.content import Genre, Movie, Series, movie_genres, series_genres
 from app.models.credits import MovieCastCredit, SeriesCastCredit
 from app.models.user import Subscriber
-from app.services.catalog import content_playability
 from app.services.publishing.visibility import (
     apply_public_visibility,
     movie_is_public,
@@ -107,15 +106,21 @@ def _movie_feature(
 
 def attach_playable(db: Session, items: list[ScoredCandidate]) -> list[ScoredCandidate]:
     """Batch-resolve playable flags for the final recommendation slice only."""
+    from app.services.catalog_list import batch_movie_playability
+
     movie_ids = [i.id for i in items if i.kind == "movie"]
-    playable_map: dict[int, bool] = {}
-    for mid in movie_ids:
-        # Still one call per final item (≤40), not per candidate pool member.
-        ok, _, _ = content_playability(db, movie_id=mid)
-        playable_map[mid] = bool(ok)
+    if not movie_ids:
+        return items
+    movies = (
+        apply_public_visibility(db.query(Movie), Movie)
+        .filter(Movie.id.in_(movie_ids))
+        .all()
+    )
+    play_map = batch_movie_playability(db, movies)
     for item in items:
         if item.kind == "movie":
-            item.playable = playable_map.get(item.id, False)
+            ok, _, _ = play_map.get(item.id, (False, False, False))
+            item.playable = bool(ok)
     return items
 
 

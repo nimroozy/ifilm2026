@@ -17,7 +17,6 @@ import {
   SearchPage,
 } from '@/pages/Browse';
 import { CollectionsIndexPage, CollectionDetailPage } from '@/pages/CollectionsPages';
-import PlayerPage from '@/pages/PlayerPage';
 import { LoginPage, ProfilePage, DevicesPage, WatchlistPage, HistoryPage } from '@/pages/Account';
 import RequireAdmin from '@/pages/admin/RequireAdmin';
 import AdminLayout from '@/pages/admin/AdminLayout';
@@ -48,7 +47,6 @@ import {
   SubtitledPage,
   NewReleasesPage,
 } from '@/pages/CatalogBrowsePages';
-import WhatToWatchPage from '@/pages/WhatToWatchPage';
 import RecommendationsInspectPage from '@/pages/admin/RecommendationsInspectPage';
 import NotFoundPage from '@/pages/NotFoundPage';
 
@@ -58,6 +56,8 @@ const HelpPage = lazy(() => import('@/pages/LegalPages').then((m) => ({ default:
 const PrivacyPage = lazy(() => import('@/pages/LegalPages').then((m) => ({ default: m.PrivacyPage })));
 const TermsPage = lazy(() => import('@/pages/LegalPages').then((m) => ({ default: m.TermsPage })));
 const CopyrightPage = lazy(() => import('@/pages/LegalPages').then((m) => ({ default: m.CopyrightPage })));
+const WhatToWatchPage = lazy(() => import('@/pages/WhatToWatchPage'));
+const PlayerPage = lazy(() => import('@/pages/PlayerPage'));
 
 const queryClient = new QueryClient();
 
@@ -95,7 +95,16 @@ const router = createBrowserRouter([
       { path: '/dubbed', element: <CustomerRoute><DubbedPage /></CustomerRoute> },
       { path: '/subtitled', element: <CustomerRoute><SubtitledPage /></CustomerRoute> },
       { path: '/new-releases', element: <CustomerRoute><NewReleasesPage /></CustomerRoute> },
-      { path: '/what-to-watch', element: <CustomerRoute><WhatToWatchPage /></CustomerRoute> },
+      {
+        path: '/what-to-watch',
+        element: (
+          <CustomerRoute>
+            <LazyPage>
+              <WhatToWatchPage />
+            </LazyPage>
+          </CustomerRoute>
+        ),
+      },
       { path: '/movie/:id', element: <CustomerRoute><MovieDetailsPage /></CustomerRoute> },
       { path: '/series/:id', element: <CustomerRoute><SeriesDetailsPage /></CustomerRoute> },
       { path: '/search', element: <CustomerRoute><SearchPage /></CustomerRoute> },
@@ -174,10 +183,38 @@ const router = createBrowserRouter([
       { path: '/devices', element: <CustomerRoute><DevicesPage /></CustomerRoute> },
       { path: '/watchlist', element: <CustomerRoute><WatchlistPage /></CustomerRoute> },
       { path: '/history', element: <CustomerRoute><HistoryPage /></CustomerRoute> },
-      { path: '/player/movie/:id', element: <PlayerPage /> },
-      { path: '/player/episode/:id', element: <PlayerPage /> },
-      { path: '/player/asset/:assetId', element: <PlayerPage /> },
-      { path: '/player/:id', element: <PlayerPage /> },
+      {
+        path: '/player/movie/:id',
+        element: (
+          <LazyPage>
+            <PlayerPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: '/player/episode/:id',
+        element: (
+          <LazyPage>
+            <PlayerPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: '/player/asset/:assetId',
+        element: (
+          <LazyPage>
+            <PlayerPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: '/player/:id',
+        element: (
+          <LazyPage>
+            <PlayerPage />
+          </LazyPage>
+        ),
+      },
       { path: '/admin/login', element: <AdminLoginPage /> },
       {
         path: '/admin',
