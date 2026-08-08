@@ -87,12 +87,16 @@ def _paginate_series(
     has_dubbed: bool | None = None,
     has_subtitles: bool | None = None,
     public_counts: bool = False,
+    locale: str | None = None,
 ):
     if not has_dubbed and not has_subtitles:
         total = query.count()
         items = query.offset((page - 1) * page_size).limit(page_size).all()
         return paginated(
-            [series_out(s, public_counts=public_counts, db=db) for s in items],
+            [
+                series_out(s, public_counts=public_counts, db=db, locale=locale)
+                for s in items
+            ],
             total=total,
             page=page,
             page_size=page_size,
@@ -106,7 +110,9 @@ def _paginate_series(
             continue
         if has_subtitles and not item_has_subtitles(sub_av):
             continue
-        filtered.append(series_out(series, public_counts=public_counts, db=db))
+        filtered.append(
+            series_out(series, public_counts=public_counts, db=db, locale=locale)
+        )
     total = len(filtered)
     start = (page - 1) * page_size
     return paginated(filtered[start : start + page_size], total=total, page=page, page_size=page_size)
@@ -166,6 +172,7 @@ def list_series(
     sort: SortParam = "newest",
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    locale: str | None = Query(None, description="UI locale: en|fa|ps"),
 ) -> Envelope[SeriesOut]:
     query = _list_query(
         db,
@@ -187,12 +194,22 @@ def list_series(
         has_dubbed=has_dubbed,
         has_subtitles=has_subtitles,
         public_counts=True,
+        locale=locale,
     )
 
 
 @router.get("/series/{id_or_slug}", response_model=SeriesOut)
-def get_public_series(id_or_slug: str, db: DbSession) -> SeriesOut:
-    return series_out(resolve_series(db, id_or_slug, published_only=True), public_counts=True, db=db)
+def get_public_series(
+    id_or_slug: str,
+    db: DbSession,
+    locale: str | None = Query(None, description="UI locale: en|fa|ps"),
+) -> SeriesOut:
+    return series_out(
+        resolve_series(db, id_or_slug, published_only=True),
+        public_counts=True,
+        db=db,
+        locale=locale,
+    )
 
 
 @router.get("/series/{id_or_slug}/seasons", response_model=list[SeasonOut])
@@ -216,9 +233,10 @@ def list_public_episodes(
     id_or_slug: str,
     db: DbSession,
     season: int | None = None,
+    locale: str | None = Query(None, description="UI locale: en|fa|ps"),
 ) -> list[EpisodeOut]:
     series = resolve_series(db, id_or_slug, published_only=True)
-    return [episode_out(e, db) for e in _public_episodes(series, season)]
+    return [episode_out(e, db, locale=locale) for e in _public_episodes(series, season)]
 
 
 @router.get("/admin/series", response_model=Envelope[SeriesOut])

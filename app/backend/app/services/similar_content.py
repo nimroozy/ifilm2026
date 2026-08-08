@@ -137,6 +137,7 @@ def list_similar_movies(
     limit: int = 12,
     settings: Settings | None = None,
     client: TMDBClient | None = None,
+    locale: str | None = None,
 ) -> list[MovieOut]:
     """Priority: same collection → same genres → TMDB similar ∩ catalog → popular."""
     settings = settings or get_settings()
@@ -162,7 +163,7 @@ def list_similar_movies(
 
     out: list[MovieOut] = []
     for row in picked[:limit]:
-        item = movie_out(row, db)
+        item = movie_out(row, db, locale=locale)
         # Prefer playable titles in the shelf ordering already established;
         # still include published-but-unplayable so the shelf isn't empty.
         out.append(item)

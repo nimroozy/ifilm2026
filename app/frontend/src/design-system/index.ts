@@ -1,4 +1,12 @@
-export { typography, spacing, motion, surfaces, mediaSizes, statusToneClass } from './tokens';
+export {
+  typography,
+  spacing,
+  motion,
+  surfaces,
+  mediaSizes,
+  mediaGridClass,
+  statusToneClass,
+} from './tokens';
 export type { StatusTone } from './tokens';
 export { GlassPanel } from './GlassPanel';
 export { SectionHeader } from './SectionHeader';

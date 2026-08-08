@@ -13,13 +13,13 @@ import {
 import { ApiError } from '@/lib/api';
 import { catalogAvailabilityBadges, itemIsDubbed, itemIsSubtitled } from '@/lib/catalogAvailability';
 import { canPlayFullMovie, hasDemoClip } from '@/lib/catalogPresentation';
-import { MediaCard } from '@/design-system';
+import { MediaCard, mediaGridClass } from '@/design-system';
 
 function PageLoading() {
   return (
     <div className="container mx-auto space-y-4 px-4 pt-6" data-testid="browse-loading">
       <Skeleton className="h-8 w-48" />
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+      <div className={mediaGridClass}>
         {Array.from({ length: 12 }).map((_, i) => (
           <Skeleton key={i} className="aspect-[2/3] w-full" />
         ))}
@@ -67,7 +67,7 @@ function CatalogGrid({
           <h2 id="catalog-movies-heading" className="mb-4 text-lg font-semibold text-foreground">
             {moviesLabel}
           </h2>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+          <div className={mediaGridClass}>
             {movies.map((movie) => {
               const { badges, overflow } = catalogAvailabilityBadges(movie, availabilityLabels);
               return (
@@ -96,7 +96,7 @@ function CatalogGrid({
           <h2 id="catalog-series-heading" className="mb-4 text-lg font-semibold text-foreground">
             {seriesLabel}
           </h2>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+          <div className={mediaGridClass}>
             {series.map((show) => {
               const { badges, overflow } = catalogAvailabilityBadges(show, availabilityLabels);
               return (
@@ -107,6 +107,12 @@ function CatalogGrid({
                   imageUrl={show.poster}
                   year={show.year}
                   rating={show.rating}
+                  runtime={
+                    show.seasons
+                      ? `${show.seasons} season${show.seasons === 1 ? '' : 's'}`
+                      : undefined
+                  }
+                  status={show.status || undefined}
                   availabilityBadges={badges}
                   availabilityOverflow={overflow}
                   showDemo={hasDemoClip(show)}
@@ -146,7 +152,7 @@ function sortNewestPublished<T extends { publishedAt?: string | null; createdAt?
 }
 
 export function GenresBrowsePage() {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [genres, setGenres] = useState<{ name: string; slug?: string; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -158,8 +164,8 @@ export function GenresBrowsePage() {
       // Only genres backed by published catalog items (public list endpoints are published-only).
       const [catalogGenres, moviePage, seriesPage] = await Promise.all([
         fetchGenres(),
-        fetchMovies({ page_size: 100, sort: 'newest' }),
-        fetchSeries({ page_size: 100, sort: 'newest' }),
+        fetchMovies({ page_size: 100, sort: 'newest', locale: lang }),
+        fetchSeries({ page_size: 100, sort: 'newest', locale: lang }),
       ]);
       const counts = new Map<string, number>();
       for (const movie of moviePage.items) {
@@ -188,7 +194,7 @@ export function GenresBrowsePage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [lang]);
 
   useEffect(() => {
     void load();
@@ -234,7 +240,7 @@ export function GenresBrowsePage() {
 type ShelfMode = 'dubbed' | 'subtitled' | 'new';
 
 export function CatalogShelfPage({ mode }: { mode: ShelfMode }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [movies, setMovies] = useState<CatalogMovie[]>([]);
   const [series, setSeries] = useState<CatalogSeries[]>([]);
   const [loading, setLoading] = useState(true);
@@ -256,10 +262,10 @@ export function CatalogShelfPage({ mode }: { mode: ShelfMode }) {
       // Published-only catalog. Dubbed/Subtitled use server semantic filters.
       const movieParams =
         mode === 'dubbed'
-          ? { sort: 'newest' as const, page_size: 100, has_dubbed: true }
+          ? { sort: 'newest' as const, page_size: 100, has_dubbed: true, locale: lang }
           : mode === 'subtitled'
-            ? { sort: 'newest' as const, page_size: 100, has_subtitles: true }
-            : { sort: 'newest' as const, page_size: 100 };
+            ? { sort: 'newest' as const, page_size: 100, has_subtitles: true, locale: lang }
+            : { sort: 'newest' as const, page_size: 100, locale: lang };
       const seriesParams = { ...movieParams };
       const [moviePage, seriesPage] = await Promise.all([
         fetchMovies(movieParams),
@@ -287,7 +293,7 @@ export function CatalogShelfPage({ mode }: { mode: ShelfMode }) {
     } finally {
       setLoading(false);
     }
-  }, [mode]);
+  }, [mode, lang]);
 
   useEffect(() => {
     void load();

@@ -102,6 +102,12 @@ def refresh_movie_tmdb_details(
     db.flush()
 
     credits_count = sync_movie_credits(db, settings, movie, client=client)
+    try:
+        from app.services.tmdb.translations_sync import sync_movie_translations
+
+        sync_movie_translations(db, settings=settings, movie=movie, client=client, commit=False)
+    except Exception:  # noqa: BLE001 — translation sync must not fail title refresh
+        pass
     status = similar_status(db, movie)
     return TitleRefreshResult(
         media_type="movie",
@@ -130,6 +136,19 @@ def refresh_series_tmdb_details(
     db.add(series)
     db.flush()
     credits_count = sync_series_credits(db, settings, series, client=client)
+    try:
+        from app.services.tmdb.translations_sync import sync_series_translations
+
+        sync_series_translations(
+            db,
+            settings=settings,
+            series=series,
+            client=client,
+            include_episodes=True,
+            commit=False,
+        )
+    except Exception:  # noqa: BLE001 — translation sync must not fail title refresh
+        pass
     return TitleRefreshResult(
         media_type="series",
         entity_id=series.id,

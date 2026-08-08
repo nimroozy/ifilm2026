@@ -65,7 +65,7 @@ export function ContentShelf({
 
   return (
     <section
-      className={cn('relative overflow-x-clip py-4 md:py-6', className)}
+      className={cn('relative overflow-x-clip py-3 md:py-5', className)}
       aria-label={ariaLabel || title}
       data-testid={testId}
     >
@@ -83,7 +83,7 @@ export function ContentShelf({
         ) : null}
         <div
           ref={scrollRef}
-          className="flex gap-3 overflow-x-auto scroll-smooth px-4 pb-2 sm:gap-4 sm:px-6 lg:px-8 hide-scrollbar"
+          className="flex gap-3.5 overflow-x-auto scroll-smooth px-4 pb-2 sm:gap-5 sm:px-6 lg:px-8 hide-scrollbar"
           onKeyDown={(event) => {
             if (event.key === 'ArrowLeft') {
               event.preventDefault();

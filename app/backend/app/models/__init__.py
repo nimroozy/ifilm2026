@@ -3,6 +3,7 @@ from app.models.app_settings import AppSetting
 from app.models.cdn import Branch, CDNNode, CDNSyncJob
 from app.models.collections import Collection, CollectionItem
 from app.models.content import Episode, Genre, Movie, Season, Series
+from app.models.content_translations import ContentTranslation
 from app.models.credits import MovieCastCredit, SeriesCastCredit
 from app.models.media import EncodingJob, UploadJob
 from app.models.media_admin_events import MediaAdminEvent
@@ -29,6 +30,7 @@ __all__ = [
     "CDNSyncJob",
     "Collection",
     "CollectionItem",
+    "ContentTranslation",
     "Device",
     "EncodingJob",
     "Episode",

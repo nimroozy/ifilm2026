@@ -16,6 +16,7 @@ import {
 } from './api';
 import { resolveAudioAvailability } from './catalogAvailability';
 import { isApiMode, isMockMode } from './dataMode';
+import type { AppLocale } from './locale';
 import {
   movies as mockMovies,
   series as mockSeries,
@@ -137,7 +138,10 @@ export async function fetchMovies(params?: CatalogListParams): Promise<CatalogLi
   };
 }
 
-export async function fetchMovie(idOrSlug: number | string): Promise<CatalogMovie> {
+export async function fetchMovie(
+  idOrSlug: number | string,
+  locale?: AppLocale,
+): Promise<CatalogMovie> {
   if (isMockMode()) {
     const id = typeof idOrSlug === 'number' ? idOrSlug : Number(idOrSlug);
     const movie = publishedMockItems(mockMovies).find(
@@ -146,21 +150,22 @@ export async function fetchMovie(idOrSlug: number | string): Promise<CatalogMovi
     if (!movie) throw new Error('Movie not found');
     return movie;
   }
-  return mapMovieDto(await api.getMovie(idOrSlug));
+  return mapMovieDto(await api.getMovie(idOrSlug, locale));
 }
 
 export async function fetchSimilarMovies(
   idOrSlug: number | string,
-  limit = 12
+  limit = 12,
+  locale?: AppLocale,
 ): Promise<CatalogMovie[]> {
   if (isMockMode()) {
-    const item = await fetchMovie(idOrSlug);
-    const page = await fetchMovies({ page_size: 40, sort: 'popular' });
+    const item = await fetchMovie(idOrSlug, locale);
+    const page = await fetchMovies({ page_size: 40, sort: 'popular', locale });
     return page.items
       .filter((m) => m.id !== item.id && m.genres.some((g) => item.genres.includes(g)))
       .slice(0, limit);
   }
-  const rows = await api.getSimilarMovies(idOrSlug, limit);
+  const rows = await api.getSimilarMovies(idOrSlug, limit, locale);
   return rows.map(mapMovieDto);
 }
 
@@ -177,7 +182,10 @@ export async function fetchSeries(params?: CatalogListParams): Promise<CatalogLi
   };
 }
 
-export async function fetchSeriesDetail(idOrSlug: number | string): Promise<SeriesDetailResult> {
+export async function fetchSeriesDetail(
+  idOrSlug: number | string,
+  locale?: AppLocale,
+): Promise<SeriesDetailResult> {
   if (isMockMode()) {
     const id = typeof idOrSlug === 'number' ? idOrSlug : Number(idOrSlug);
     const show = publishedMockItems(mockSeries).find(
@@ -219,7 +227,7 @@ export async function fetchSeriesDetail(idOrSlug: number | string): Promise<Seri
     return { series: show, seasons, episodes: eps };
   }
 
-  const dto = await api.getSeries(idOrSlug);
+  const dto = await api.getSeries(idOrSlug, locale);
   const mapped = mapSeriesDto(dto);
   const seasonsDto = await api.listSeasons(idOrSlug);
   const seasons = [...seasonsDto]
@@ -230,7 +238,7 @@ export async function fetchSeriesDetail(idOrSlug: number | string): Promise<Seri
       id: s.id,
       status: s.status,
     }));
-  const episodesDto = await api.listEpisodes(idOrSlug);
+  const episodesDto = await api.listEpisodes(idOrSlug, undefined, locale);
   const episodes = [...episodesDto]
     .sort((a, b) => {
       const sa = a.season ?? 0;
@@ -251,7 +259,7 @@ export async function fetchSeriesDetail(idOrSlug: number | string): Promise<Seri
   return { series: mapped, seasons, episodes };
 }
 
-export async function fetchSearch(q: string): Promise<CatalogSearchResult> {
+export async function fetchSearch(q: string, locale?: AppLocale): Promise<CatalogSearchResult> {
   if (isMockMode()) {
     const query = q.toLowerCase().trim();
     if (!query) return { movies: [], series: [] };
@@ -267,7 +275,7 @@ export async function fetchSearch(q: string): Promise<CatalogSearchResult> {
     );
     return { movies, series };
   }
-  const data = await api.search(q);
+  const data = await api.search(q, locale);
   return {
     movies: data.movies.map(mapMovieDto),
     series: data.series.map(mapSeriesDto),
@@ -300,7 +308,7 @@ export async function fetchTrendingMovies(limit = 12): Promise<CatalogMovie[]> {
   return fallback.items.map(mapMovieDto);
 }
 
-export async function fetchHomeCatalog() {
+export async function fetchHomeCatalog(locale?: AppLocale) {
   if (isMockMode()) {
     const movies = publishedMockItems(mockMovies);
     const series = publishedMockItems(mockSeries);
@@ -321,6 +329,7 @@ export async function fetchHomeCatalog() {
     };
   }
 
+  const loc = locale ? { locale } : {};
   const [
     featuredPage,
     trendingPage,
@@ -331,14 +340,14 @@ export async function fetchHomeCatalog() {
     actionPage,
     comedyPage,
   ] = await Promise.all([
-    api.listMovies({ featured: true, page_size: 8, sort: 'newest' }),
-    api.listMovies({ trending: true, page_size: 12, sort: 'views_desc' }),
-    api.listMovies({ page_size: 12, sort: 'newest' }),
-    api.listMovies({ page_size: 12, sort: 'rating_desc' }),
-    api.listMovies({ page_size: 40, sort: 'newest' }),
-    api.listSeries({ page_size: 12, sort: 'views_desc' }),
-    api.listMovies({ genre: 'Action', page_size: 12, sort: 'views_desc' }),
-    api.listMovies({ genre: 'Comedy', page_size: 12, sort: 'views_desc' }),
+    api.listMovies({ featured: true, page_size: 8, sort: 'newest', ...loc }),
+    api.listMovies({ trending: true, page_size: 12, sort: 'views_desc', ...loc }),
+    api.listMovies({ page_size: 12, sort: 'newest', ...loc }),
+    api.listMovies({ page_size: 12, sort: 'rating_desc', ...loc }),
+    api.listMovies({ page_size: 40, sort: 'newest', ...loc }),
+    api.listSeries({ page_size: 12, sort: 'views_desc', ...loc }),
+    api.listMovies({ genre: 'Action', page_size: 12, sort: 'views_desc', ...loc }),
+    api.listMovies({ genre: 'Comedy', page_size: 12, sort: 'views_desc', ...loc }),
   ]);
 
   const mapAll = (items: MovieDto[]) => items.map(mapMovieDto);
@@ -348,7 +357,7 @@ export async function fetchHomeCatalog() {
   const trending =
     trendingPage.items.length > 0
       ? mapAll(trendingPage.items)
-      : mapAll((await api.listMovies({ page_size: 12, sort: 'views_desc' })).items);
+      : mapAll((await api.listMovies({ page_size: 12, sort: 'views_desc', ...loc })).items);
 
   return {
     featured: mapAll(featuredPage.items.length ? featuredPage.items : recentPage.items.slice(0, 5)),

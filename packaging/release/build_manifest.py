@@ -40,7 +40,7 @@ def main() -> int:
     parser.add_argument("--version", required=True)
     parser.add_argument("--channel", default="stable")
     parser.add_argument("--archive", required=True, type=Path)
-    parser.add_argument("--migration-head", default="019_media_upload_reliability_v1")
+    parser.add_argument("--migration-head", default="020_content_translations_v1")
     parser.add_argument("--minimum-version", default="0.1.0")
     parser.add_argument("--rollback-supported", action="store_true", default=True)
     parser.add_argument("--database-backup-required", action="store_true", default=True)

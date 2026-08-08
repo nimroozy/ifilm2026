@@ -126,6 +126,8 @@ export interface MovieDto {
   slug: string;
   description?: string;
   short_description?: string;
+  tagline?: string;
+  localization?: { locale?: string; sources?: Record<string, string> } | null;
   release_year?: number | null;
   release_date?: string | null;
   duration_minutes?: number | null;
@@ -204,6 +206,8 @@ export interface SeriesDto {
   slug: string;
   description?: string;
   short_description?: string;
+  tagline?: string;
+  localization?: { locale?: string; sources?: Record<string, string> } | null;
   release_year?: number | null;
   end_year?: number | null;
   age_rating?: string;
@@ -550,6 +554,7 @@ export interface CatalogListParams {
   page_size?: number;
   has_dubbed?: boolean;
   has_subtitles?: boolean;
+  locale?: 'en' | 'fa' | 'ps';
 }
 
 export type MovieCreatePayload = {
@@ -1414,14 +1419,16 @@ export const api = {
     return unwrapList(data);
   },
 
-  async getMovie(idOrSlug: number | string) {
-    const { data } = await http.get<MovieDto>(`/movies/${idOrSlug}`);
+  async getMovie(idOrSlug: number | string, locale?: 'en' | 'fa' | 'ps') {
+    const { data } = await http.get<MovieDto>(`/movies/${idOrSlug}`, {
+      params: locale ? { locale } : undefined,
+    });
     return data;
   },
 
-  async getSimilarMovies(idOrSlug: number | string, limit = 12) {
+  async getSimilarMovies(idOrSlug: number | string, limit = 12, locale?: 'en' | 'fa' | 'ps') {
     const { data } = await http.get<MovieDto[]>(`/movies/${idOrSlug}/similar`, {
-      params: { limit },
+      params: { limit, ...(locale ? { locale } : {}) },
     });
     return data;
   },
@@ -1431,8 +1438,10 @@ export const api = {
     return unwrapList(data);
   },
 
-  async getSeries(idOrSlug: number | string) {
-    const { data } = await http.get<SeriesDto>(`/series/${idOrSlug}`);
+  async getSeries(idOrSlug: number | string, locale?: 'en' | 'fa' | 'ps') {
+    const { data } = await http.get<SeriesDto>(`/series/${idOrSlug}`, {
+      params: locale ? { locale } : undefined,
+    });
     return data;
   },
 
@@ -1441,9 +1450,12 @@ export const api = {
     return data;
   },
 
-  async listEpisodes(idOrSlug: number | string, season?: number) {
+  async listEpisodes(idOrSlug: number | string, season?: number, locale?: 'en' | 'fa' | 'ps') {
     const { data } = await http.get<EpisodeDto[]>(`/series/${idOrSlug}/episodes`, {
-      params: season != null ? { season } : undefined,
+      params: {
+        ...(season != null ? { season } : {}),
+        ...(locale ? { locale } : {}),
+      },
     });
     return data;
   },
@@ -1453,9 +1465,9 @@ export const api = {
     return unwrapList(data);
   },
 
-  async search(q: string) {
+  async search(q: string, locale?: 'en' | 'fa' | 'ps') {
     const { data } = await http.get<{ movies: MovieDto[]; series: SeriesDto[] }>('/search', {
-      params: { q },
+      params: { q, ...(locale ? { locale } : {}) },
     });
     return data;
   },
@@ -1841,6 +1853,26 @@ export const adminApi = {
       '/admin/tools/tmdb/refresh-title',
       payload
     );
+    return data;
+  },
+
+  async refreshTmdbTranslations(payload: {
+    media_type: TmdbMediaType;
+    entity_id: number;
+    include_episodes?: boolean;
+  }) {
+    const { data } = await adminHttp.post<{
+      result: {
+        entity_type: string;
+        entity_id: number;
+        tmdb_id: number | null;
+        locales_written: string[];
+        fields_written: number;
+        skipped_manual: number;
+        notes: string[];
+      };
+      item: MovieDto | SeriesDto | null;
+    }>('/admin/tools/tmdb/refresh-translations', payload);
     return data;
   },
 
@@ -2292,6 +2324,8 @@ export function mapMovieDto(dto: MovieDto) {
     })),
     creditsSyncedAt: dto.credits_synced_at ?? null,
     description: dto.description || '',
+    tagline: dto.tagline || '',
+    localization: dto.localization ?? null,
     poster,
     backdrop,
     logoUrl: dto.logo_url || '',
@@ -2356,6 +2390,8 @@ export function mapSeriesDto(dto: SeriesDto) {
     episodes,
     status: airing,
     description: dto.description || '',
+    tagline: dto.tagline || '',
+    localization: dto.localization ?? null,
     poster,
     backdrop,
     logoUrl: dto.logo_url || '',

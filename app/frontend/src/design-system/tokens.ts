@@ -56,14 +56,21 @@ export const surfaces = {
     'rounded-xl overflow-hidden bg-muted shadow-md ring-1 ring-white/5',
 } as const;
 
-/** Poster rail widths — Netflix-like density */
+/**
+ * Poster rail widths — premium streaming density (~190–230px desktop).
+ * Target: ~5–6 cards at 1440, ~6–7 at 1920, 2 on mobile.
+ */
 export const mediaSizes = {
-  posterSm: 'w-[132px] md:w-[160px]',
-  posterMd: 'w-[148px] md:w-[184px]',
-  posterLg: 'w-[160px] md:w-[200px]',
-  landscapeSm: 'w-[220px] md:w-[280px]',
-  landscapeMd: 'w-[260px] md:w-[320px]',
+  posterSm: 'w-[156px] md:w-[190px]',
+  posterMd: 'w-[168px] md:w-[210px] xl:w-[220px]',
+  posterLg: 'w-[180px] md:w-[230px]',
+  landscapeSm: 'w-[240px] md:w-[300px]',
+  landscapeMd: 'w-[280px] md:w-[340px]',
 } as const;
+
+/** Shared browse/search/collection grid — larger cards, fewer per row. */
+export const mediaGridClass =
+  'grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-6';
 
 export type StatusTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info' | 'gold';
 

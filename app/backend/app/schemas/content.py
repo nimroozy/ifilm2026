@@ -326,6 +326,11 @@ class CastCreditOut(BaseModel):
     order: int = 0
 
 
+class LocalizationSourcesOut(BaseModel):
+    locale: str = "en"
+    sources: dict[str, str] = Field(default_factory=dict)
+
+
 class MovieOut(ORMModel):
     id: int
     title: str
@@ -333,6 +338,8 @@ class MovieOut(ORMModel):
     slug: str
     description: str = ""
     short_description: str = ""
+    tagline: str = ""
+    localization: LocalizationSourcesOut | None = None
     release_year: int | None = None
     release_date: date | None = None
     duration_minutes: int | None = None
@@ -429,6 +436,8 @@ class SeriesOut(ORMModel):
     slug: str
     description: str = ""
     short_description: str = ""
+    tagline: str = ""
+    localization: LocalizationSourcesOut | None = None
     release_year: int | None = None
     end_year: int | None = None
     age_rating: str = ""

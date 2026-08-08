@@ -13,7 +13,11 @@ router = APIRouter(tags=["search"])
 
 
 @router.get("/search")
-def search(db: DbSession, q: str = Query("", min_length=0)) -> dict[str, list[MovieOut] | list[SeriesOut]]:
+def search(
+    db: DbSession,
+    q: str = Query("", min_length=0),
+    locale: str | None = Query(None, description="UI locale: en|fa|ps"),
+) -> dict[str, list[MovieOut] | list[SeriesOut]]:
     if not q.strip():
         return {"movies": [], "series": []}
     like = f"%{q.strip()}%"
@@ -43,6 +47,8 @@ def search(db: DbSession, q: str = Query("", min_length=0)) -> dict[str, list[Mo
         .all()
     )
     return {
-        "movies": [movie_out(m, db) for m in movies],
-        "series": [series_out(s, public_counts=True) for s in series_items],
+        "movies": [movie_out(m, db, locale=locale) for m in movies],
+        "series": [
+            series_out(s, public_counts=True, db=db, locale=locale) for s in series_items
+        ],
     }

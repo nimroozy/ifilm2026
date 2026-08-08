@@ -1,7 +1,7 @@
 import type { CatalogMovie, CatalogSeries } from '@/lib/catalogData';
 import { catalogAvailabilityBadges } from '@/lib/catalogAvailability';
 import { canPlayFullMovie, hasDemoClip } from '@/lib/catalogPresentation';
-import { MediaCard } from '@/design-system';
+import { MediaCard, mediaGridClass } from '@/design-system';
 
 export interface CollectionAvailabilityLabels {
   dubbed: string;
@@ -34,7 +34,7 @@ export function CollectionItemsGrid({
     <div
       className={
         className ||
-        'grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6'
+        mediaGridClass
       }
       data-testid={testId}
     >

@@ -74,11 +74,17 @@ def _paginate_movies(
     page_size: int,
     has_dubbed: bool | None = None,
     has_subtitles: bool | None = None,
+    locale: str | None = None,
 ):
     if not has_dubbed and not has_subtitles:
         total = query.count()
         items = query.offset((page - 1) * page_size).limit(page_size).all()
-        return paginated([movie_out(m, db) for m in items], total=total, page=page, page_size=page_size)
+        return paginated(
+            [movie_out(m, db, locale=locale) for m in items],
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
 
     # Semantic filter over candidates (no denormalized flags yet; catalog scale is modest).
     candidates = query.all()
@@ -92,7 +98,7 @@ def _paginate_movies(
             continue
         if has_subtitles and not item_has_subtitles(sub_av):
             continue
-        filtered.append(movie_out(movie, db))
+        filtered.append(movie_out(movie, db, locale=locale))
     total = len(filtered)
     start = (page - 1) * page_size
     return paginated(filtered[start : start + page_size], total=total, page=page, page_size=page_size)
@@ -109,6 +115,7 @@ def list_movies(
     trending: bool | None = None,
     has_dubbed: bool | None = None,
     has_subtitles: bool | None = None,
+    locale: str | None = Query(None, description="UI locale: en|fa|ps"),
     sort: SortParam = "newest",
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -132,6 +139,7 @@ def list_movies(
         page_size=page_size,
         has_dubbed=has_dubbed,
         has_subtitles=has_subtitles,
+        locale=locale,
     )
 
 
@@ -140,16 +148,21 @@ def get_similar_movies(
     id_or_slug: str,
     db: DbSession,
     limit: int = Query(12, ge=1, le=24),
+    locale: str | None = Query(None),
 ) -> list[MovieOut]:
     from app.services.similar_content import list_similar_movies
 
     movie = resolve_movie(db, id_or_slug, published_only=True)
-    return list_similar_movies(db, movie, limit=limit)
+    return list_similar_movies(db, movie, limit=limit, locale=locale)
 
 
 @router.get("/movies/{id_or_slug}", response_model=MovieOut)
-def get_public_movie(id_or_slug: str, db: DbSession) -> MovieOut:
-    return movie_out(resolve_movie(db, id_or_slug, published_only=True), db)
+def get_public_movie(
+    id_or_slug: str,
+    db: DbSession,
+    locale: str | None = Query(None, description="UI locale: en|fa|ps"),
+) -> MovieOut:
+    return movie_out(resolve_movie(db, id_or_slug, published_only=True), db, locale=locale)
 
 
 @router.get("/admin/movies", response_model=Envelope[MovieOut])

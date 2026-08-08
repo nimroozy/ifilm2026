@@ -603,6 +603,10 @@ export default function MovieFormPage() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [tmdbStatus, setTmdbStatus] = useState<TmdbDetailStatus | null>(null);
   const [tmdbRefreshing, setTmdbRefreshing] = useState(false);
+  const [translationsRefreshing, setTranslationsRefreshing] = useState(false);
+  const [localizationSources, setLocalizationSources] = useState<Record<string, string> | null>(
+    null
+  );
   const [similarStatus, setSimilarStatus] = useState<string>('Not checked');
 
   function applyTmdbStatus(movie: MovieDto, similarCount: number | null = null) {
@@ -619,6 +623,9 @@ export default function MovieFormPage() {
       tmdbId: movie.tmdb_id ?? null,
       similarCount,
     });
+    if (movie.localization?.sources) {
+      setLocalizationSources(movie.localization.sources);
+    }
   }
 
   const form = useForm<MovieFormValues>({
@@ -862,6 +869,29 @@ export default function MovieFormPage() {
     }
   }
 
+  async function refreshTmdbTranslations() {
+    if (!id) return;
+    setTranslationsRefreshing(true);
+    try {
+      const res = await adminApi.refreshTmdbTranslations({
+        media_type: 'movie',
+        entity_id: Number(id),
+      });
+      if (res.item && 'localization' in res.item && res.item.localization?.sources) {
+        setLocalizationSources(res.item.localization.sources);
+      }
+      toast.success(
+        `TMDB translations refreshed (${res.result.fields_written} fields, locales: ${
+          res.result.locales_written.join(', ') || 'none'
+        }). Manual translations are preserved.`
+      );
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'TMDB translation refresh failed');
+    } finally {
+      setTranslationsRefreshing(false);
+    }
+  }
+
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorState message={error} onRetry={() => window.location.reload()} />;
 
@@ -899,18 +929,30 @@ export default function MovieFormPage() {
                 <MetadataFields form={form} genres={genres} />
                 {isEdit ? (
                   <Card className="bg-card border-border" data-testid="tmdb-detail-status">
-                    <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+                    <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
                       <CardTitle className="text-base">TMDB detail status</CardTitle>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={tmdbRefreshing || !tmdbStatus?.tmdbId}
-                        onClick={() => void refreshTmdbDetails()}
-                        data-testid="refresh-tmdb-details"
-                      >
-                        {tmdbRefreshing ? 'Refreshing…' : 'Refresh TMDB Details'}
-                      </Button>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={tmdbRefreshing || !tmdbStatus?.tmdbId}
+                          onClick={() => void refreshTmdbDetails()}
+                          data-testid="refresh-tmdb-details"
+                        >
+                          {tmdbRefreshing ? 'Refreshing…' : 'Refresh TMDB Details'}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={translationsRefreshing || !tmdbStatus?.tmdbId}
+                          onClick={() => void refreshTmdbTranslations()}
+                          data-testid="refresh-tmdb-translations"
+                        >
+                          {translationsRefreshing ? 'Refreshing…' : 'Refresh TMDB Translations'}
+                        </Button>
+                      </div>
                     </CardHeader>
                     <CardContent className="space-y-2 text-sm">
                       <p>
@@ -936,8 +978,26 @@ export default function MovieFormPage() {
                         Similar content:{' '}
                         <span className="font-medium text-foreground">{similarStatus}</span>
                       </p>
+                      <div data-testid="translation-sources">
+                        <p className="mb-1 font-medium text-foreground">Translation sources</p>
+                        {localizationSources ? (
+                          <ul className="space-y-0.5 text-xs text-muted-foreground">
+                            {Object.entries(localizationSources).map(([field, source]) => (
+                              <li key={field}>
+                                <span className="text-foreground">{field}</span>: {source}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            Refresh TMDB Translations to populate stored en/fa metadata. Sources:
+                            manual, TMDB, or fallback.
+                          </p>
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground">
-                        Refresh updates TMDB-owned trailer/credits only and never overwrites manual admin edits.
+                        Refresh updates TMDB-owned trailer/credits/translations only and never
+                        overwrites manual admin translations.
                       </p>
                     </CardContent>
                   </Card>

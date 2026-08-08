@@ -61,6 +61,12 @@ class ReplaceArtworkRequest(BaseModel):
     kinds: list[Literal["poster", "backdrop", "logo"]] = Field(min_length=1)
 
 
+class RefreshTranslationsRequest(BaseModel):
+    media_type: Literal["movie", "series"]
+    entity_id: int
+    include_episodes: bool = True
+
+
 def _client() -> TMDBClient:
     settings = get_settings()
     client = TMDBClient(settings)
@@ -201,6 +207,45 @@ def refresh_tmdb_title(payload: TitleRefreshRequest, db: DbSession, _: TMDBAdmin
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except TMDBClientError as exc:
+        db.rollback()
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise
+
+
+@router.post("/admin/tools/tmdb/refresh-translations")
+def refresh_tmdb_translations(payload: RefreshTranslationsRequest, db: DbSession, _: TMDBAdmin):
+    """Refresh stored TMDB translations. Never overwrites manual translations."""
+    from app.services.tmdb.translations_sync import (
+        sync_movie_translations,
+        sync_series_translations,
+    )
+
+    settings = get_settings()
+    client = _client()
+    try:
+        if payload.media_type == "movie":
+            movie = db.get(Movie, payload.entity_id)
+            if movie is None or movie.deleted_at is not None:
+                raise HTTPException(status_code=404, detail="Movie not found")
+            result = sync_movie_translations(db, settings=settings, movie=movie, client=client)
+            return {"result": result.as_dict(), "item": movie_out(movie, db)}
+        series = db.get(Series, payload.entity_id)
+        if series is None or series.deleted_at is not None:
+            raise HTTPException(status_code=404, detail="Series not found")
+        result = sync_series_translations(
+            db,
+            settings=settings,
+            series=series,
+            client=client,
+            include_episodes=payload.include_episodes,
+        )
+        return {"result": result.as_dict(), "item": series_out(series, db=db)}
     except TMDBClientError as exc:
         db.rollback()
         raise HTTPException(status_code=502, detail=str(exc)) from exc

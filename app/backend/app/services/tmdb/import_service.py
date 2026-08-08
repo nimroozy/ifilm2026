@@ -336,8 +336,13 @@ def import_movie(
     db.add(movie)
     db.flush()
     from app.services.tmdb.credits import replace_movie_credits
+    from app.services.tmdb.translations_sync import sync_movie_translations
 
     replace_movie_credits(db, settings, movie, credits_payload)
+    try:
+        sync_movie_translations(db, settings=settings, movie=movie, client=client, commit=False)
+    except Exception:  # noqa: BLE001
+        warnings.append("translation_sync_failed")
     return ImportResult(
         "movie",
         movie.id,
@@ -496,6 +501,19 @@ def import_series(
             episode_ids.append(episode.id)
 
     db.flush()
+    try:
+        from app.services.tmdb.translations_sync import sync_series_translations
+
+        sync_series_translations(
+            db,
+            settings=settings,
+            series=series,
+            client=client,
+            include_episodes=True,
+            commit=False,
+        )
+    except Exception:  # noqa: BLE001
+        warnings.append("translation_sync_failed")
     return ImportResult(
         "series",
         series.id,
