@@ -1,8 +1,7 @@
 """File-backed SQLite must not use StaticPool under concurrent requests."""
 
-from sqlalchemy.pool import NullPool, StaticPool
-
 from app.db.session import _build_engine, _is_memory_sqlite
+from sqlalchemy.pool import NullPool, StaticPool
 
 
 def test_memory_sqlite_detection() -> None:
