@@ -155,9 +155,11 @@ def delete_media_asset(
 
     root = media_root().resolve()
     art_root = artwork_root().resolve()
-    removed_file = False
     storage_key = asset.storage_path
+    path: Path | None = None
 
+    # Resolve + validate containment before mutating DB. Never unlink first —
+    # a commit failure after unlink would leave a completed asset with a missing file.
     if storage_key:
         path = _safe_resolve_under(root, storage_key)
         if path is None:
@@ -168,24 +170,13 @@ def delete_media_asset(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Storage path is outside owned media roots",
             )
-        if path.exists():
-            if path.is_file():
-                path.unlink()
-                removed_file = True
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Refusing to delete non-file storage path",
-                )
-            # Remove empty asset directory under category/<asset_id>/
-            parent = path.parent
-            try:
-                if parent.is_dir() and parent.name == asset.id and not any(parent.iterdir()):
-                    parent.rmdir()
-            except OSError:
-                pass
+        if path.exists() and not path.is_file():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Refusing to delete non-file storage path",
+            )
 
-    # Soft-delete DB row markers; keep id for audit joinability.
+    # Soft-delete DB first so playable catalog never sees a completed+missing race.
     asset.upload_status = "deleted"
     asset.processing_status = "none"
     asset.storage_path = None
@@ -199,12 +190,28 @@ def delete_media_asset(
         details={
             "category": asset.category,
             "storage_key": storage_key,
-            "removed_file": removed_file,
             "prior_usages": usages,
             "original_filename": asset.original_filename,
+            "file_removal": "pending" if path is not None else "none",
         },
     )
     db.commit()
+
+    removed_file = False
+    if path is not None and path.exists() and path.is_file():
+        try:
+            path.unlink()
+            removed_file = True
+            parent = path.parent
+            try:
+                if parent.is_dir() and parent.name == asset.id and not any(parent.iterdir()):
+                    parent.rmdir()
+            except OSError:
+                pass
+        except OSError:
+            # DB already marks deleted; leftover file is an orphan (health reports it).
+            removed_file = False
+
     return {
         "id": asset.id,
         "deleted": True,

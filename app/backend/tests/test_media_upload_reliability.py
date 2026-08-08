@@ -274,3 +274,85 @@ def test_probe_queue_requires_existing_file(client, admin_headers):
     detail = resp.json()["detail"]
     assert isinstance(detail, dict)
     assert detail["code"] == "file_missing"
+
+
+def test_retry_probe_blocked_when_file_missing(client, admin_headers, db_session):
+    from app.models.media_assets import new_uuid, utcnow
+    from app.models.media_processing import MediaProcessingJob
+
+    payload = minimal_mp4(b"retry-missing-file!!")
+    created = _create_session(client, admin_headers, filename="retry.mp4", size=len(payload))
+    asset_id = created.json()["media_asset"]["id"]
+    assert (
+        _put(
+            client, admin_headers, created.json()["session"]["id"], payload, offset=0, complete=True
+        ).status_code
+        == 200
+    )
+    meta = client.get(f"/api/admin/media/assets/{asset_id}", headers=admin_headers).json()
+    stored = media_root() / meta["storage_path"]
+    assert stored.is_file()
+    stored.unlink()
+
+    job = MediaProcessingJob(
+        id=new_uuid(),
+        media_asset_id=asset_id,
+        job_type="probe",
+        status="failed",
+        priority=100,
+        attempt_count=1,
+        max_attempts=5,
+        progress_percent=0,
+        current_step="failed",
+        error_code="file_missing",
+        error_message="Uploaded media file is missing",
+        queued_at=utcnow(),
+    )
+    db_session.add(job)
+    db_session.commit()
+
+    resp = client.post(f"/api/admin/media/processing/jobs/{job.id}/retry", headers=admin_headers)
+    assert resp.status_code == 409, resp.text
+    detail = resp.json()["detail"]
+    assert isinstance(detail, dict)
+    assert detail["code"] == "file_missing"
+    assert detail["asset_id"] == asset_id
+
+
+def test_delete_commits_before_unlink(client, admin_headers, db_session, monkeypatch):
+    """DB soft-delete must succeed even if filesystem unlink fails afterward."""
+    payload = minimal_mp4(b"delete-order-bytes!!")
+    created = _create_session(client, admin_headers, filename="order.mp4", size=len(payload))
+    asset_id = created.json()["media_asset"]["id"]
+    assert (
+        _put(
+            client, admin_headers, created.json()["session"]["id"], payload, offset=0, complete=True
+        ).status_code
+        == 200
+    )
+    meta = client.get(f"/api/admin/media/assets/{asset_id}", headers=admin_headers).json()
+    stored = media_root() / meta["storage_path"]
+    assert stored.is_file()
+
+    real_unlink = type(stored).unlink
+
+    def boom(self, *args, **kwargs):
+        raise OSError("simulated unlink failure")
+
+    monkeypatch.setattr(type(stored), "unlink", boom)
+    resp = client.post(
+        f"/api/admin/media/assets/{asset_id}/delete",
+        headers=admin_headers,
+        json={"confirm": True},
+    )
+    monkeypatch.setattr(type(stored), "unlink", real_unlink)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["deleted"] is True
+    assert body["removed_file"] is False
+    asset = db_session.get(MediaAsset, asset_id)
+    assert asset is not None
+    assert asset.upload_status == "deleted"
+    assert asset.storage_path is None
+    # Physical file may remain as orphan; health tooling reports it (no auto-delete).
+    assert stored.is_file()

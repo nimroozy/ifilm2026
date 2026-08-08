@@ -95,6 +95,26 @@ export default function MediaAssetDetailPage() {
     };
   }, [jobs, packages, load]);
 
+  function formatProcessingError(err: unknown, fallback: string): string {
+    if (!(err instanceof ApiError)) return fallback;
+    const detail = err.details;
+    if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+      const obj = detail as { code?: unknown; message?: unknown };
+      const code = typeof obj.code === 'string' ? obj.code : '';
+      const message = typeof obj.message === 'string' && obj.message.trim() ? obj.message : err.message;
+      if (code === 'file_missing') return `File missing: ${message}`;
+      if (code === 'size_mismatch') return `Size mismatch: ${message}`;
+      if (code === 'unsupported_codec' || code === 'unsupported_container') {
+        return `Unsupported media: ${message}`;
+      }
+      if (code === 'permission_error') return `Permission error: ${message}`;
+      if (code === 'ffprobe_timeout') return `ffprobe timeout: ${message}`;
+      if (code === 'corrupt_media') return `Corrupt media: ${message}`;
+      if (code) return `${code}: ${message}`;
+    }
+    return err.message || fallback;
+  }
+
   async function queueProbe() {
     if (!assetId) return;
     setBusy(true);
@@ -103,7 +123,7 @@ export default function MediaAssetDetailPage() {
       await adminApi.queueMediaProbe(assetId);
       await load();
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : 'Failed to queue probe');
+      setActionError(formatProcessingError(err, 'Failed to queue probe'));
     } finally {
       setBusy(false);
     }
@@ -130,7 +150,7 @@ export default function MediaAssetDetailPage() {
       await adminApi.retryProcessingJob(jobId);
       await load();
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : 'Failed to retry job');
+      setActionError(formatProcessingError(err, 'Failed to retry job'));
     } finally {
       setBusy(false);
     }

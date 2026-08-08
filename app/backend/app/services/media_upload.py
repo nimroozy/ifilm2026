@@ -372,22 +372,34 @@ async def _finalize_session(
         session = get_session(db, session.id)
         if final_path.exists():
             final_path.unlink(missing_ok=True)
+        # Prefer durable completed/stored rows; fall back to any matching checksum.
         existing = (
             db.query(MediaAsset)
             .filter(
                 MediaAsset.checksum_sha256 == checksum,
-                MediaAsset.upload_status == "completed",
+                MediaAsset.upload_status.in_(("completed", "stored")),
             )
+            .order_by(MediaAsset.created_at.asc())
             .first()
         )
+        if existing is None:
+            existing = (
+                db.query(MediaAsset)
+                .filter(MediaAsset.checksum_sha256 == checksum)
+                .order_by(MediaAsset.created_at.asc())
+                .first()
+            )
         if existing is not None:
             _raise_duplicate(db, session, None, existing)
         _fail_session(db, session, None, "Duplicate upload checksum")
+        # Still return a deterministic duplicate-shaped payload (no vague error).
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "code": "duplicate_checksum",
                 "message": "This file already exists.",
+                "existing_asset_id": None,
+                "existing_asset": None,
                 "actions": ["view_existing", "link_existing", "cancel"],
             },
         ) from exc
