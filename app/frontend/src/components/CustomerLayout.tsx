@@ -246,6 +246,7 @@ function customerNavLabel(id: CustomerNavId, t: typeof translations.en): string 
     subtitled: t.nav.subtitled,
     newReleases: t.nav.newReleases,
     myList: t.nav.myList,
+    whatToWatch: t.nav.whatToWatch,
     search: t.nav.search,
     profile: t.nav.profile,
   };

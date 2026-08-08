@@ -172,6 +172,9 @@ def add_item(db: Session, subscriber: Subscriber, payload: WatchlistAddIn) -> Wa
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": "duplicate_membership", "message": "Already in watchlist"},
         ) from exc
+    from app.services.recommendations.cache import invalidate_user_recommendation_cache
+
+    invalidate_user_recommendation_cache(subscriber.id)
     return _serialize(db, row)
 
 
@@ -181,6 +184,10 @@ def remove_item(db: Session, subscriber: Subscriber, item_id: int) -> int:
         .filter(WatchlistItem.subscriber_id == subscriber.id, WatchlistItem.id == item_id)
         .delete(synchronize_session=False)
     )
+    if deleted:
+        from app.services.recommendations.cache import invalidate_user_recommendation_cache
+
+        invalidate_user_recommendation_cache(subscriber.id)
     return int(deleted)
 
 
@@ -201,7 +208,12 @@ def remove_by_content(
         q = q.filter(WatchlistItem.movie_id == movie_id)
     else:
         q = q.filter(WatchlistItem.series_id == series_id)
-    return int(q.delete(synchronize_session=False))
+    deleted = int(q.delete(synchronize_session=False))
+    if deleted:
+        from app.services.recommendations.cache import invalidate_user_recommendation_cache
+
+        invalidate_user_recommendation_cache(subscriber.id)
+    return deleted
 
 
 def clear_all(db: Session, subscriber: Subscriber) -> int:
@@ -210,6 +222,10 @@ def clear_all(db: Session, subscriber: Subscriber) -> int:
         .filter(WatchlistItem.subscriber_id == subscriber.id)
         .delete(synchronize_session=False)
     )
+    if deleted:
+        from app.services.recommendations.cache import invalidate_user_recommendation_cache
+
+        invalidate_user_recommendation_cache(subscriber.id)
     return int(deleted)
 
 

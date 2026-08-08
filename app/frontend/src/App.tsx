@@ -48,6 +48,8 @@ import {
   SubtitledPage,
   NewReleasesPage,
 } from '@/pages/CatalogBrowsePages';
+import WhatToWatchPage from '@/pages/WhatToWatchPage';
+import RecommendationsInspectPage from '@/pages/admin/RecommendationsInspectPage';
 import NotFoundPage from '@/pages/NotFoundPage';
 
 const AboutPage = lazy(() => import('@/pages/LegalPages'));
@@ -93,6 +95,7 @@ const router = createBrowserRouter([
       { path: '/dubbed', element: <CustomerRoute><DubbedPage /></CustomerRoute> },
       { path: '/subtitled', element: <CustomerRoute><SubtitledPage /></CustomerRoute> },
       { path: '/new-releases', element: <CustomerRoute><NewReleasesPage /></CustomerRoute> },
+      { path: '/what-to-watch', element: <CustomerRoute><WhatToWatchPage /></CustomerRoute> },
       { path: '/movie/:id', element: <CustomerRoute><MovieDetailsPage /></CustomerRoute> },
       { path: '/series/:id', element: <CustomerRoute><SeriesDetailsPage /></CustomerRoute> },
       { path: '/search', element: <CustomerRoute><SearchPage /></CustomerRoute> },
@@ -201,6 +204,7 @@ const router = createBrowserRouter([
           { path: 'collections/:id/edit', element: <CollectionFormPage /> },
           { path: 'tools/upload', element: <MediaUploadPage /> },
           { path: 'tools/tmdb', element: <TmdbToolsPage /> },
+          { path: 'tools/recommendations', element: <RecommendationsInspectPage /> },
           { path: 'media/storage-health', element: <MediaStorageHealthPage /> },
           { path: 'media/processing', element: <MediaProcessingJobsPage /> },
           { path: 'media/playback-sessions', element: <PlaybackSessionsPage /> },

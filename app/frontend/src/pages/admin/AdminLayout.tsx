@@ -14,6 +14,7 @@ import {
   LogOut,
   ArrowUpCircle,
   HardDrive,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -57,7 +58,10 @@ const navGroups: NavGroup[] = [
   },
   {
     label: 'Metadata',
-    items: [{ to: '/admin/tools/tmdb', label: 'TMDB Import', icon: Database }],
+    items: [
+      { to: '/admin/tools/tmdb', label: 'TMDB Import', icon: Database },
+      { to: '/admin/tools/recommendations', label: 'Recommendations', icon: Sparkles },
+    ],
   },
   {
     label: 'System',

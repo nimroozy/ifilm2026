@@ -31,6 +31,7 @@ function navLabel(id: CustomerNavId, t: ReturnType<typeof useLang>['t']): string
     subtitled: t.nav.subtitled,
     newReleases: t.nav.newReleases,
     myList: t.nav.myList,
+    whatToWatch: t.nav.whatToWatch,
     search: t.nav.search,
     profile: t.nav.profile,
   };
