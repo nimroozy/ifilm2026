@@ -119,6 +119,23 @@ class Settings(BaseSettings):
     watch_progress_resume_margin_seconds: int = 10
     continue_watching_limit: int = 20
 
+    # Recommendations V1 — explainable scoring weights (normalized at runtime)
+    rec_weight_genre: float = 0.30
+    rec_weight_history: float = 0.20
+    rec_weight_cast: float = 0.15
+    rec_weight_collection: float = 0.10
+    rec_weight_language: float = 0.10
+    rec_weight_recency: float = 0.05
+    rec_weight_popularity: float = 0.10
+    rec_signal_completed: float = 1.0
+    rec_signal_watched_high: float = 0.9
+    rec_signal_watched_medium: float = 0.55
+    rec_signal_watchlist: float = 0.5
+    rec_signal_continue_watching: float = 0.45
+    rec_signal_dismissed: float = -0.35
+    rec_signal_very_short: float = 0.05
+    rec_cache_ttl_seconds: int = 45
+
     # Opaque playback token HMAC secret (required when streaming enabled).
     playback_token_secret: str = ""
     playback_token_ttl_seconds: int = 3600

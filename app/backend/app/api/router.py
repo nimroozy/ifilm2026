@@ -15,6 +15,7 @@ from app.api.routes import (
     media_upload,
     movies,
     publishing,
+    recommendations,
     search,
     seasons,
     series,
@@ -29,6 +30,7 @@ api_router.include_router(health.router)
 api_router.include_router(config.router)
 api_router.include_router(auth.router)
 api_router.include_router(me.router)
+api_router.include_router(recommendations.router)
 api_router.include_router(admin_auth.router)
 api_router.include_router(movies.router)
 api_router.include_router(series.router)

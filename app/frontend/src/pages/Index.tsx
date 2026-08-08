@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth, useLang } from '@/components/CustomerLayout';
@@ -14,9 +14,21 @@ import {
   type CatalogMovie,
   type CatalogSeries,
 } from '@/lib/catalogData';
-import { api, ApiError, tokenStore, type WatchProgressDto } from '@/lib/api';
+import {
+  api,
+  ApiError,
+  tokenStore,
+  type HomeRecommendationsDto,
+  type RecommendationItemDto,
+  type WatchlistItemDto,
+  type WatchProgressDto,
+} from '@/lib/api';
 import { isMockMode } from '@/lib/dataMode';
 import { hasDemoClip, canPlayFullMovie } from '@/lib/catalogPresentation';
+import {
+  localizeRecommendationExplanation,
+  localizeRecommendationShelfTitle,
+} from '@/lib/recommendationI18n';
 import { X } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
@@ -233,6 +245,133 @@ function ContinueWatchingRow() {
   );
 }
 
+function RecommendationShelfRow({
+  title,
+  items,
+  testId,
+}: {
+  title: string;
+  items: RecommendationItemDto[];
+  testId?: string;
+}) {
+  const navigate = useNavigate();
+  const { lang } = useLang();
+  if (!items.length) return null;
+  return (
+    <ContentShelf title={title} testId={testId}>
+      {items.map((item) => (
+        <MediaCard
+          key={`${item.content_type}-${item.id}`}
+          title={item.title}
+          imageUrl={item.poster_url}
+          year={item.release_year ?? undefined}
+          rating={item.imdb_rating ?? undefined}
+          playable={Boolean(item.playable)}
+          status={localizeRecommendationExplanation(item.explanation, lang)}
+          badge={item.content_type === 'series' ? 'Series' : undefined}
+          onActivate={() => navigate(item.detail_path)}
+          data-testid={`rec-card-${item.id}`}
+        />
+      ))}
+    </ContentShelf>
+  );
+}
+
+function MyListHomeRow() {
+  const { t } = useLang();
+  const { isLoggedIn } = useAuth();
+  const navigate = useNavigate();
+  const mockMode = isMockMode();
+  const [items, setItems] = useState<WatchlistItemDto[]>([]);
+
+  useEffect(() => {
+    if (mockMode || !isLoggedIn || !tokenStore.get()) {
+      setItems([]);
+      return;
+    }
+    let cancelled = false;
+    api
+      .listWatchlist({ page: 1, page_size: 20 })
+      .then((page) => {
+        if (!cancelled) setItems((page.items || []).filter((i) => i.available));
+      })
+      .catch(() => {
+        if (!cancelled) setItems([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoggedIn, mockMode]);
+
+  if (!items.length) return null;
+  return (
+    <ContentShelf title={t.sections.myList || t.nav.myList} testId="home-my-list">
+      {items.map((item) => (
+        <MediaCard
+          key={`wl-${item.id}`}
+          title={item.title}
+          imageUrl={item.poster_url}
+          year={item.release_year ?? undefined}
+          playable={Boolean(item.player_path)}
+          badge={item.content_type === 'series' ? 'Series' : undefined}
+          onActivate={() => navigate(item.detail_path)}
+        />
+      ))}
+    </ContentShelf>
+  );
+}
+
+function HomeRecommendationShelves({ usedIds }: { usedIds: Set<string> }) {
+  const { isLoggedIn } = useAuth();
+  const { t } = useLang();
+  const [payload, setPayload] = useState<HomeRecommendationsDto | null>(null);
+
+  useEffect(() => {
+    if (isMockMode()) {
+      setPayload(null);
+      return;
+    }
+    let cancelled = false;
+    const fetcher =
+      isLoggedIn && tokenStore.get() ? api.getMyHomeRecommendations() : api.getHomeRecommendations();
+    fetcher
+      .then((data) => {
+        if (!cancelled) setPayload(data);
+      })
+      .catch(() => {
+        if (!cancelled) setPayload(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoggedIn]);
+
+  if (!payload?.shelves?.length) return null;
+
+  return (
+    <>
+      {payload.shelves.map((shelf) => {
+        if (shelf.shelf_type === 'editorial_collections') return null;
+        const items = (shelf.items || []).filter((item) => {
+          const key = `${item.content_type}:${item.id}`;
+          if (usedIds.has(key)) return false;
+          usedIds.add(key);
+          return true;
+        });
+        if (!items.length) return null;
+        return (
+          <RecommendationShelfRow
+            key={`${shelf.shelf_type}-${shelf.title}`}
+            title={localizeRecommendationShelfTitle(shelf, t.sections as Record<string, string>)}
+            items={items}
+            testId={`home-shelf-${shelf.shelf_type}`}
+          />
+        );
+      })}
+    </>
+  );
+}
+
 export default function HomePage() {
   const { t, lang } = useLang();
   const [data, setData] = useState<HomeData | null>(null);
@@ -285,16 +424,28 @@ export default function HomePage() {
     .map((collection) => ({ collection, items: mapCollectionItems(collection.items) }))
     .filter(({ items }) => items.length > 0);
 
+  const usedIds = new Set<string>();
+
   return (
     <div className="pb-8">
       <HeroCarousel featured={data.featured} />
       <div className="relative z-10 -mt-10 space-y-1 md:-mt-14">
         <ContinueWatchingRow />
-        <ContentRow title={t.sections.trending} items={data.trending} />
+        <MyListHomeRow />
+        <HomeRecommendationShelves usedIds={usedIds} />
+        <div className="px-4 sm:px-6 lg:px-8">
+          <Button asChild variant="secondary" className="mt-2" data-testid="home-what-to-watch-cta">
+            <Link to="/what-to-watch">{t.nav.whatToWatch}</Link>
+          </Button>
+        </div>
+        {collectionShelves.map(({ collection, items }) => (
+          <ContentRow key={`collection-${collection.id}`} title={collection.title} items={items} />
+        ))}
         <ContentRow title={t.sections.recentlyAdded} items={newReleases} />
-        <ContentRow title="Top Rated" items={topRated} />
         <ContentRow title={t.sections.popularMovies} items={data.popular} />
         <ContentRow title={t.sections.popularSeries} items={data.popularSeries} type="series" />
+        <ContentRow title={t.sections.trending} items={data.trending} />
+        <ContentRow title={t.sections.topRated || 'Top Rated'} items={topRated} />
         <ContentRow title={t.sections.action} items={data.actionMovies} />
         <ContentRow title="Drama" items={dramaMovies} />
         <ContentRow title={t.sections.comedy} items={data.comedyMovies} />
@@ -302,9 +453,6 @@ export default function HomePage() {
         <ContentRow title={t.sections.afghanMovies} items={data.afghanMovies} />
         <ContentRow title={t.sections.persianDubbed} items={data.persianDubbed} />
         <ContentRow title={t.sections.pashtoDubbed} items={data.pashtoDubbed} />
-        {collectionShelves.map(({ collection, items }) => (
-          <ContentRow key={`collection-${collection.id}`} title={collection.title} items={items} />
-        ))}
       </div>
     </div>
   );

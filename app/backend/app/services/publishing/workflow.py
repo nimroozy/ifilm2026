@@ -299,7 +299,7 @@ def publish(db: Session, *, entity_type: str, entity_id: int, actor: AdminUser |
     entity = get_entity(db, entity_type, entity_id, for_update=True)
     # Allow approved → published and unpublished → published
     if entity.status == "scheduled":
-        return transition(
+        result = transition(
             db,
             entity_type=entity_type,
             entity_id=entity_id,
@@ -308,15 +308,20 @@ def publish(db: Session, *, entity_type: str, entity_id: int, actor: AdminUser |
             reason=reason,
             event_type="publication_executed",
         )
-    return transition(
-        db,
-        entity_type=entity_type,
-        entity_id=entity_id,
-        to_status="published",
-        actor=actor,
-        reason=reason,
-        event_type="publication_executed",
-    )
+    else:
+        result = transition(
+            db,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            to_status="published",
+            actor=actor,
+            reason=reason,
+            event_type="publication_executed",
+        )
+    from app.services.recommendations.cache import bump_catalog_feature_epoch
+
+    bump_catalog_feature_epoch()
+    return result
 
 
 def schedule(
@@ -358,7 +363,7 @@ def unpublish(db: Session, *, entity_type: str, entity_id: int, actor: AdminUser
     entity = get_entity(db, entity_type, entity_id, for_update=True)
     if entity.status == "scheduled":
         # Cancel schedule → unpublished (or approved). Spec: scheduled → unpublished.
-        return transition(
+        result = transition(
             db,
             entity_type=entity_type,
             entity_id=entity_id,
@@ -368,18 +373,23 @@ def unpublish(db: Session, *, entity_type: str, entity_id: int, actor: AdminUser
             event_type="unpublished",
             skip_readiness=True,
         )
-    return transition(
-        db,
-        entity_type=entity_type,
-        entity_id=entity_id,
-        to_status="unpublished",
-        actor=actor,
-        reason=reason,
-    )
+    else:
+        result = transition(
+            db,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            to_status="unpublished",
+            actor=actor,
+            reason=reason,
+        )
+    from app.services.recommendations.cache import bump_catalog_feature_epoch
+
+    bump_catalog_feature_epoch()
+    return result
 
 
 def archive(db: Session, *, entity_type: str, entity_id: int, actor: AdminUser, reason: str | None = None):
-    return transition(
+    result = transition(
         db,
         entity_type=entity_type,
         entity_id=entity_id,
@@ -388,6 +398,10 @@ def archive(db: Session, *, entity_type: str, entity_id: int, actor: AdminUser, 
         reason=reason,
         skip_readiness=True,
     )
+    from app.services.recommendations.cache import bump_catalog_feature_epoch
+
+    bump_catalog_feature_epoch()
+    return result
 
 
 def list_history(db: Session, *, entity_type: str, entity_id: int, limit: int = 100) -> list[MediaPublicationEvent]:

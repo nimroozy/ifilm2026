@@ -1055,6 +1055,79 @@ export interface WatchlistAddBody {
   series_id?: number;
 }
 
+export interface RecommendationItemDto {
+  content_type: 'movie' | 'series';
+  id: number;
+  slug: string;
+  title: string;
+  poster_url?: string;
+  backdrop_url?: string;
+  release_year?: number | null;
+  imdb_rating?: number | null;
+  genres?: string[];
+  score: number;
+  reasons: string[];
+  explanation?: string | null;
+  playable?: boolean;
+  detail_path: string;
+  components?: Record<string, number> | null;
+}
+
+export interface RecommendationListDto {
+  mode: string;
+  personalized: boolean;
+  label: string;
+  count: number;
+  items: RecommendationItemDto[];
+}
+
+export interface RecommendationShelfDto {
+  shelf_type: string;
+  title: string;
+  personalized: boolean;
+  source?: Record<string, unknown> | null;
+  collections?: { id: number; slug: string; title: string }[] | null;
+  items: RecommendationItemDto[];
+}
+
+export interface HomeRecommendationsDto {
+  mode: string;
+  personalized: boolean;
+  preference_summary?: Record<string, unknown> | null;
+  shelves: RecommendationShelfDto[];
+}
+
+export interface WhatToWatchBody {
+  content_type?: 'movie' | 'series' | 'either';
+  genre?: string | null;
+  mood?: string | null;
+  duration?: 'under_90' | '90_120' | 'over_120' | 'any' | null;
+  language?: string | null;
+  subtitles?: 'required' | 'optional' | 'any' | null;
+  release_period?: 'new' | 'modern' | 'classic' | 'any' | null;
+  limit?: number;
+}
+
+export interface WhatToWatchDto {
+  mode: 'what_to_watch';
+  ai: boolean;
+  filters: Record<string, unknown>;
+  /** Filter dimensions loosened when exact match was too sparse. */
+  relaxed?: string[];
+  count: number;
+  items: RecommendationItemDto[];
+}
+
+export interface RecommendationInspectDto {
+  subscriber_id?: number | null;
+  username?: string | null;
+  mode?: string | null;
+  preference_signals?: Record<string, unknown> | null;
+  weights?: Record<string, number> | null;
+  candidates?: RecommendationItemDto[];
+  error?: string | null;
+}
+
 export interface StreamingStatusDto {
   enabled: boolean;
   supported_principals: string[];
@@ -1572,6 +1645,47 @@ export const api = {
       params,
     });
     return unwrapList(data);
+  },
+
+  async getMyRecommendations(params?: {
+    limit?: number;
+    content_type?: 'movie' | 'series' | 'either';
+    genre?: string;
+    language?: string;
+  }) {
+    const { data } = await http.get<RecommendationListDto>('/me/recommendations', { params });
+    return data;
+  },
+
+  async getHomeRecommendations() {
+    const { data } = await http.get<HomeRecommendationsDto>('/recommendations/home');
+    return data;
+  },
+
+  async getMyHomeRecommendations() {
+    const { data } = await http.get<HomeRecommendationsDto>('/me/recommendations/home');
+    return data;
+  },
+
+  async getMovieRecommendations(idOrSlug: string | number, limit = 12) {
+    const { data } = await http.get<RecommendationListDto>(
+      `/catalog/movies/${idOrSlug}/recommendations`,
+      { params: { limit } }
+    );
+    return data;
+  },
+
+  async getSeriesRecommendations(idOrSlug: string | number, limit = 12) {
+    const { data } = await http.get<RecommendationListDto>(
+      `/catalog/series/${idOrSlug}/recommendations`,
+      { params: { limit } }
+    );
+    return data;
+  },
+
+  async whatToWatch(body: WhatToWatchBody) {
+    const { data } = await http.post<WhatToWatchDto>('/recommendations/what-to-watch', body);
+    return data;
   },
 };
 
@@ -2287,6 +2401,13 @@ export const adminApi = {
     const { data } = await adminHttp.put<CollectionDto>(`/admin/collections/${id}/items/reorder`, {
       item_ids: itemIds,
       expected_updated_at: expectedUpdatedAt ?? undefined,
+    });
+    return data;
+  },
+
+  async inspectRecommendations(subscriberId: number, limit = 20) {
+    const { data } = await adminHttp.get<RecommendationInspectDto>('/admin/recommendations/inspect', {
+      params: { subscriber_id: subscriberId, limit },
     });
     return data;
   },

@@ -348,6 +348,9 @@ def upsert_progress(
         db.add(row)
 
     db.flush()
+    from app.services.recommendations.cache import invalidate_user_recommendation_cache
+
+    invalidate_user_recommendation_cache(subscriber.id)
     return _serialize(db, row, settings=settings)
 
 
@@ -412,6 +415,10 @@ def delete_one(db: Session, subscriber: Subscriber, asset_id: str) -> int:
         )
         .delete(synchronize_session=False)
     )
+    if deleted:
+        from app.services.recommendations.cache import invalidate_user_recommendation_cache
+
+        invalidate_user_recommendation_cache(subscriber.id)
     return int(deleted)
 
 
@@ -421,6 +428,10 @@ def delete_all(db: Session, subscriber: Subscriber) -> int:
         .filter(UserWatchProgress.subscriber_id == subscriber.id)
         .delete(synchronize_session=False)
     )
+    if deleted:
+        from app.services.recommendations.cache import invalidate_user_recommendation_cache
+
+        invalidate_user_recommendation_cache(subscriber.id)
     return int(deleted)
 
 
@@ -440,4 +451,7 @@ def dismiss_continue_watching(db: Session, subscriber: Subscriber, asset_id: str
     row.updated_at = utcnow()
     db.add(row)
     db.flush()
+    from app.services.recommendations.cache import invalidate_user_recommendation_cache
+
+    invalidate_user_recommendation_cache(subscriber.id)
     return 1
