@@ -164,7 +164,9 @@ def test_postgresql_migration_succeeds(postgres_url):
     assert "system_update_jobs" in tables
     assert "system_update_events" in tables
     assert "app_settings" in tables
-    assert version == "015_external_media_playability"
+    assert "collections" in tables
+    assert "collection_items" in tables
+    assert version == "016_collections_v1"
 
 
 def test_postgresql_migration_from_previous_revision(postgres_url):
@@ -197,7 +199,7 @@ def test_postgresql_migration_from_previous_revision(postgres_url):
     assert movie_slug == "ordinary-film"
     assert series_slug == "ordinary-show"
     assert null_imdb >= 1
-    assert version == "015_external_media_playability"
+    assert version == "016_collections_v1"
 
 
 def test_002_to_head_duplicate_and_messy_titles(postgres_url):
@@ -1071,10 +1073,90 @@ def test_external_media_playability_migration_roundtrip(postgres_url):
     assert "source_type" in media_cols
 
 
+def test_collections_v1_migration_roundtrip(postgres_url):
+    """015 → 016 → 015 → 016 round-trip for collections tables."""
+    _reset_schema(postgres_url)
+    assert _run_alembic(postgres_url, "upgrade", "015_external_media_playability").returncode == 0
+    assert _run_alembic(postgres_url, "upgrade", "016_collections_v1").returncode == 0
+
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        tables = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT tablename FROM pg_tables WHERE schemaname='public'")
+            )
+        }
+        indexes = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT indexname FROM pg_indexes WHERE schemaname='public'")
+            )
+        }
+        collection_cols = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='collections'"
+                )
+            )
+        }
+    engine.dispose()
+    assert version == "016_collections_v1"
+    assert "collections" in tables
+    assert "collection_items" in tables
+    assert {
+        "title",
+        "slug",
+        "collection_type",
+        "status",
+        "visibility",
+        "poster_url",
+        "backdrop_url",
+        "is_featured",
+        "demo_owned",
+        "demo_seed_version",
+    }.issubset(collection_cols)
+    assert "uq_collections_slug" in indexes or any("slug" in i for i in indexes)
+    assert "uq_collection_items_movie" in indexes
+    assert "uq_collection_items_series" in indexes
+
+    assert _run_alembic(postgres_url, "downgrade", "015_external_media_playability").returncode == 0
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        tables = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT tablename FROM pg_tables WHERE schemaname='public'")
+            )
+        }
+    engine.dispose()
+    assert version == "015_external_media_playability"
+    assert "collections" not in tables
+    assert "collection_items" not in tables
+
+    assert _run_alembic(postgres_url, "upgrade", "016_collections_v1").returncode == 0
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        tables = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT tablename FROM pg_tables WHERE schemaname='public'")
+            )
+        }
+    engine.dispose()
+    assert version == "016_collections_v1"
+    assert "collections" in tables
+
+
 def test_alembic_heads_single(postgres_url):
     result = _run_alembic(postgres_url, "heads")
     assert result.returncode == 0, result.stdout + result.stderr
     lines = [ln for ln in (result.stdout + result.stderr).splitlines() if ln.strip()]
-    head_lines = [ln for ln in lines if "015_external_media_playability" in ln]
+    head_lines = [ln for ln in lines if "016_collections_v1" in ln]
     assert head_lines, result.stdout + result.stderr
-    assert sum(1 for ln in lines if ln.strip().startswith("015_external_media_playability")) >= 1
+    assert sum(1 for ln in lines if ln.strip().startswith("016_collections_v1")) >= 1

@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.models.admin import AdminRole, AdminUser
+from app.models.collections import Collection, CollectionItem
 from app.models.content import Episode, Genre, Movie, Season, Series
 from app.models.media_assets import MediaAsset, UploadSession
 from app.models.media_encoding import MediaPackage, MediaRendition
@@ -73,6 +74,7 @@ class CleanupPlan:
     artwork_files: list[str] = field(default_factory=list)
     media_files: list[str] = field(default_factory=list)
     watch_progress_ids: list[int] = field(default_factory=list)
+    collection_ids: list[int] = field(default_factory=list)
     movie_titles: list[str] = field(default_factory=list)
     series_titles: list[str] = field(default_factory=list)
     # Detached (FK nulling only — never used to enable admin deletion)
@@ -116,6 +118,7 @@ class CleanupPlan:
                 f"    artwork_files: {len(self.artwork_files)}",
                 f"    media_files: {len(self.media_files)}",
                 f"    watch_progress: {len(self.watch_progress_ids)}",
+                f"    collections: {len(self.collection_ids)}",
                 "  DETACH:",
                 f"    media_asset.created_by_admin_id nulls: {len(self.detached_media_asset_admin_refs)}",
                 f"    media_package.created_by_admin_id nulls: {len(self.detached_package_admin_refs)}",
@@ -184,6 +187,7 @@ def build_cleanup_plan(
         artwork_files=list(ownership.artwork_files),
         media_files=list(ownership.media_files),
         watch_progress_ids=list(ownership.watch_progress_ids),
+        collection_ids=list(ownership.collection_ids),
     )
 
     # Discover demo-owned catalog. Never treat demo-* slugs alone as deletable.
@@ -193,6 +197,10 @@ def build_cleanup_plan(
     plan.series_ids = sorted(set(plan.series_ids + discovered_series))
     discovered_episodes = [e.id for e in db.query(Episode).filter(Episode.demo_owned.is_(True)).all()]
     plan.episode_ids = sorted(set(plan.episode_ids + discovered_episodes))
+    discovered_collections = [
+        c.id for c in db.query(Collection).filter(Collection.demo_owned.is_(True)).all()
+    ]
+    plan.collection_ids = sorted(set(plan.collection_ids + discovered_collections))
 
     _restrict_plan_to_demo_owned(db, plan)
 
@@ -311,6 +319,11 @@ def _restrict_plan_to_demo_owned(db: Session, plan: CleanupPlan) -> None:
 
     plan.movie_ids = sorted(set(plan.movie_ids) & demo_movie_ids)
     plan.series_ids = sorted(set(plan.series_ids) & demo_series_ids)
+
+    demo_collection_ids = {
+        row[0] for row in db.query(Collection.id).filter(Collection.demo_owned.is_(True)).all()
+    }
+    plan.collection_ids = sorted(set(plan.collection_ids) & demo_collection_ids)
 
     if plan.series_ids:
         plan.season_ids = sorted(
@@ -638,6 +651,12 @@ def _rewrite_ownership_after_partial_cleanup(
         artwork_files=[],
         media_files=[],
         watch_progress_ids=[],
+        collection_ids=[
+            c.id for c in db.query(Collection).filter(Collection.demo_owned.is_(True)).all()
+        ],
+        collection_slugs=[
+            c.slug for c in db.query(Collection).filter(Collection.demo_owned.is_(True)).all()
+        ],
     )
     save_ownership(settings, updated)
 
@@ -703,6 +722,15 @@ def execute_cleanup(db: Session, settings: Settings, plan: CleanupPlan) -> None:
 
     # Audit: tombstone then keep rows (no FK to catalog entities).
     _tombstone_publication_events(db, plan)
+
+    # Collections before movies/series so item FKs are cleared via cascade.
+    if plan.collection_ids:
+        db.query(CollectionItem).filter(
+            CollectionItem.collection_id.in_(plan.collection_ids)
+        ).delete(synchronize_session=False)
+        db.query(Collection).filter(Collection.id.in_(plan.collection_ids)).delete(
+            synchronize_session=False
+        )
 
     if plan.episode_ids:
         db.query(Episode).filter(Episode.id.in_(plan.episode_ids)).delete(synchronize_session=False)

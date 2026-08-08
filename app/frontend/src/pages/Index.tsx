@@ -6,7 +6,14 @@ import { useAuth, useLang } from '@/components/CustomerLayout';
 import { ContentShelf, MediaCard } from '@/design-system';
 import { HeroCarousel } from '@/components/HeroCarousel';
 import { watchHistory } from '@/data/mockData';
-import { fetchHomeCatalog, type CatalogMovie, type CatalogSeries } from '@/lib/catalogData';
+import {
+  fetchFeaturedHomeCollections,
+  fetchHomeCatalog,
+  mapCollectionItems,
+  type CatalogCollection,
+  type CatalogMovie,
+  type CatalogSeries,
+} from '@/lib/catalogData';
 import { api, ApiError, tokenStore, type WatchProgressDto } from '@/lib/api';
 import { isMockMode } from '@/lib/dataMode';
 import { hasDemoClip, canPlayFullMovie } from '@/lib/catalogPresentation';
@@ -199,6 +206,7 @@ export default function HomePage() {
   const [data, setData] = useState<HomeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [collections, setCollections] = useState<CatalogCollection[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -224,6 +232,13 @@ export default function HomePage() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    // Collections are additive shelves; a failure here must never break the homepage.
+    fetchFeaturedHomeCollections({ page_size: 6 })
+      .then(setCollections)
+      .catch(() => setCollections([]));
+  }, []);
+
   if (loading) return <HomeLoading />;
   if (error) return <HomeError message={error} onRetry={load} />;
   if (!data) return <HomeError message="No catalog data" onRetry={load} />;
@@ -232,6 +247,11 @@ export default function HomePage() {
   const topRated = [...data.popular].sort((a, b) => b.rating - a.rating).slice(0, 12);
   const newReleases = [...data.recentlyAdded].slice(0, 12);
   const animationFamily = data.familyMovies.slice(0, 12);
+  // Backend already filters near-empty featured collections; re-check client-side
+  // in case mapping drops items whose embedded movie/series payload is missing.
+  const collectionShelves = collections
+    .map((collection) => ({ collection, items: mapCollectionItems(collection.items) }))
+    .filter(({ items }) => items.length > 0);
 
   return (
     <div className="pb-8">
@@ -250,6 +270,9 @@ export default function HomePage() {
         <ContentRow title={t.sections.afghanMovies} items={data.afghanMovies} />
         <ContentRow title={t.sections.persianDubbed} items={data.persianDubbed} />
         <ContentRow title={t.sections.pashtoDubbed} items={data.pashtoDubbed} />
+        {collectionShelves.map(({ collection, items }) => (
+          <ContentRow key={`collection-${collection.id}`} title={collection.title} items={items} />
+        ))}
       </div>
     </div>
   );

@@ -8,6 +8,9 @@ import {
   mapMovieDto,
   mapSeriesDto,
   type CatalogListParams,
+  type CollectionItemDto,
+  type CollectionListParams,
+  type CollectionPublicDto,
   type MovieDto,
   type SeriesDto,
 } from './api';
@@ -33,6 +36,8 @@ function hasDubCode(item: { dubbed?: string[]; audioAvailability?: unknown }, co
 
 export type CatalogMovie = ReturnType<typeof mapMovieDto> | Movie;
 export type CatalogSeries = ReturnType<typeof mapSeriesDto> | Series;
+/** Collections V1 — public payload is API-only; no mock fixtures exist yet. */
+export type CatalogCollection = CollectionPublicDto;
 
 export interface CatalogListResult<T> {
   items: T[];
@@ -345,4 +350,52 @@ export async function fetchHomeCatalog() {
       .slice(0, 12),
     popularSeries: mapSeries(seriesPage.items),
   };
+}
+
+// ============ COLLECTIONS V1 ============
+// Public collections are backend-only (Collections V1 has no mock fixtures);
+// mock mode returns empty results so existing demo pages are unaffected.
+
+export async function fetchCollections(
+  params?: CollectionListParams
+): Promise<CatalogListResult<CatalogCollection>> {
+  if (isMockMode()) {
+    return { items: [], total: 0, page: params?.page ?? 1, page_size: params?.page_size ?? 20 };
+  }
+  const page = await api.listCollections(params);
+  return {
+    items: page.items,
+    total: page.total,
+    page: page.page,
+    page_size: page.page_size,
+  };
+}
+
+export async function fetchCollection(slug: string): Promise<CatalogCollection> {
+  if (isMockMode()) {
+    throw new Error('Collection not found');
+  }
+  return api.getCollection(slug);
+}
+
+export async function fetchFeaturedHomeCollections(params?: {
+  page_size?: number;
+  min_items?: number;
+}): Promise<CatalogCollection[]> {
+  if (isMockMode()) return [];
+  const page = await api.listFeaturedHomeCollections(params);
+  return page.items;
+}
+
+/** Map ordered collection items to catalog cards, dropping items missing embedded content. */
+export function mapCollectionItems(items: CollectionItemDto[]): (CatalogMovie | CatalogSeries)[] {
+  const mapped: (CatalogMovie | CatalogSeries)[] = [];
+  for (const item of items) {
+    if (item.content_type === 'movie' && item.movie) {
+      mapped.push(mapMovieDto(item.movie));
+    } else if (item.content_type === 'series' && item.series) {
+      mapped.push(mapSeriesDto(item.series));
+    }
+  }
+  return mapped;
 }
