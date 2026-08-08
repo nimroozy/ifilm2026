@@ -9,9 +9,9 @@ from app.models.collections import Collection, CollectionItem
 from app.models.content import Genre, Movie
 from app.models.credits import MovieCastCredit
 from app.models.media_assets import new_uuid, utcnow
+from app.services.similar_content import list_similar_movies
 from app.services.tmdb.credits import parse_cast_entries, replace_movie_credits
 from app.services.tmdb.trailers import select_trailer
-from app.services.similar_content import list_similar_movies
 
 
 def _settings() -> Settings:

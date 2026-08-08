@@ -357,7 +357,7 @@ export function MovieDetailView({
                   data-testid="movie-mylist-button"
                 >
                   <Plus className="h-5 w-5" />
-                  + My List
+                  My List
                 </Button>
                 <Button
                   size="lg"

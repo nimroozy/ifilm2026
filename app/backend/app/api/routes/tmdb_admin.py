@@ -173,7 +173,10 @@ class TitleRefreshRequest(BaseModel):
 @router.post("/admin/tools/tmdb/refresh-title")
 def refresh_tmdb_title(payload: TitleRefreshRequest, db: DbSession, _: TMDBAdmin):
     """Refresh TMDB-owned trailer/credits for one title without overwriting manual edits."""
-    from app.services.tmdb.refresh_title import refresh_movie_tmdb_details, refresh_series_tmdb_details
+    from app.services.tmdb.refresh_title import (
+        refresh_movie_tmdb_details,
+        refresh_series_tmdb_details,
+    )
 
     settings = get_settings()
     client = _client()

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.models.content import Movie, Series
+from app.services.similar_content import similar_status
 from app.services.tmdb.client import TMDBClient
 from app.services.tmdb.credits import sync_movie_credits, sync_series_credits
 from app.services.tmdb.import_service import (
@@ -18,7 +19,6 @@ from app.services.tmdb.import_service import (
     _ensure_genres,
 )
 from app.services.tmdb.trailers import select_trailer
-from app.services.similar_content import similar_status
 
 
 def utcnow() -> datetime:
