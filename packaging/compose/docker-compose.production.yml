@@ -165,6 +165,13 @@ services:
     depends_on:
       backend-api:
         condition: service_healthy
+    healthcheck:
+      # Override image API live-probe. Publishing worker has no HTTP server.
+      test: ["CMD", "python", "-m", "app.workers.publishing", "--healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     networks: [ifilm_net]
 
   frontend:
