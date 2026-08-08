@@ -67,4 +67,4 @@ existing CMS artwork infrastructure when present; form accepts URL selection.
 
 ## Status
 
-Implementation complete on PR #48 (Draft until Ready gate).
+Shipped in **v1.7.0** (PR #48 merged). Migration tip: `016_collections_v1`.
