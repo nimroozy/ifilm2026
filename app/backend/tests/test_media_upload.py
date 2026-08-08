@@ -490,13 +490,18 @@ def test_duplicate_checksum_rejected(client, admin_headers, monkeypatch):
         ).status_code
         == 200
     )
+    existing_id = first.json()["media_asset"]["id"]
 
     second = _create_session(client, admin_headers, filename="two.mp4", size=len(payload))
     dup = _put(
         client, admin_headers, second.json()["session"]["id"], payload, offset=0, complete=True
     )
     assert dup.status_code == 409
-    assert "Duplicate" in dup.json()["detail"]
+    detail = dup.json()["detail"]
+    assert isinstance(detail, dict)
+    assert detail["code"] == "duplicate_checksum"
+    assert detail["existing_asset_id"] == existing_id
+    assert "already exists" in detail["message"].lower()
     monkeypatch.delenv("UPLOAD_REJECT_DUPLICATE_CHECKSUM", raising=False)
     get_settings.cache_clear()
 

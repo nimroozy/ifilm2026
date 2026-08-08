@@ -5,6 +5,7 @@ from app.models.collections import Collection, CollectionItem
 from app.models.content import Episode, Genre, Movie, Season, Series
 from app.models.credits import MovieCastCredit, SeriesCastCredit
 from app.models.media import EncodingJob, UploadJob
+from app.models.media_admin_events import MediaAdminEvent
 from app.models.media_assets import MediaAsset, UploadSession
 from app.models.media_encoding import MediaEncodingProfile, MediaPackage, MediaRendition
 from app.models.media_playback import MediaPlaybackSession
@@ -32,6 +33,7 @@ __all__ = [
     "EncodingJob",
     "Episode",
     "Genre",
+    "MediaAdminEvent",
     "MediaAsset",
     "MediaEncodingProfile",
     "MediaPackage",

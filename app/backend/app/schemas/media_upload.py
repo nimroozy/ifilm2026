@@ -140,3 +140,27 @@ class ExternalMediaAttachRequest(BaseModel):
         if normalized not in MEDIA_CATEGORIES:
             raise ValueError(f"category must be one of {', '.join(MEDIA_CATEGORIES)}")
         return normalized
+
+
+class MediaAssetDeleteRequest(BaseModel):
+    """Explicit confirmation required before destructive delete."""
+
+    confirm: bool = False
+
+
+class MediaAssetDeleteOut(BaseModel):
+    id: str
+    deleted: bool
+    removed_file: bool
+    upload_status: str
+
+
+class MediaAssetUsagesOut(BaseModel):
+    asset_id: str
+    usages: list[dict]
+
+
+class StaleTempCleanupOut(BaseModel):
+    scanned: int
+    removed: int
+    max_age_seconds: int

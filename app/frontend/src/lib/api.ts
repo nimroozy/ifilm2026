@@ -80,7 +80,14 @@ export function normalizeApiError(error: unknown): ApiError {
         })
         .join('; ');
     } else if (detail && typeof detail === 'object') {
-      message = JSON.stringify(detail);
+      const obj = detail as { message?: unknown; code?: unknown; detail?: unknown };
+      if (typeof obj.message === 'string' && obj.message.trim()) {
+        message = obj.message;
+      } else if (typeof obj.detail === 'string' && obj.detail.trim()) {
+        message = obj.detail;
+      } else {
+        message = JSON.stringify(detail);
+      }
     } else if (ax.response?.data?.message) {
       message = ax.response.data.message;
     }
@@ -693,6 +700,45 @@ export interface MediaAssetDto {
   created_by_admin_id: number | null;
   created_at?: string | null;
   updated_at?: string | null;
+}
+
+export interface MediaAssetUsageDto {
+  kind: string;
+  id: string | number;
+  label?: string;
+  status?: string | null;
+  is_active?: boolean;
+}
+
+export interface MediaDuplicateDetail {
+  code: 'duplicate_checksum';
+  message: string;
+  existing_asset_id: string;
+  existing_asset?: Partial<MediaAssetDto> & { id: string };
+  actions?: string[];
+}
+
+export interface MediaStorageHealthDto {
+  ok: boolean;
+  summary: {
+    healthy: number;
+    missing_files: number;
+    size_mismatches: number;
+    bad_paths: number;
+    orphan_files: number;
+    duplicate_hashes: number;
+    failed_probes: number;
+    stuck_uploads: number;
+  };
+  mounts?: Record<string, unknown>;
+  missing_files: Array<Record<string, unknown>>;
+  size_mismatches: Array<Record<string, unknown>>;
+  bad_paths: Array<Record<string, unknown>>;
+  orphan_files: Array<Record<string, unknown>>;
+  duplicate_hashes: Array<Record<string, unknown>>;
+  failed_probes: Array<Record<string, unknown>>;
+  stuck_uploads: Array<Record<string, unknown>>;
+  healthy_sample?: Array<Record<string, unknown>>;
 }
 
 export interface ProcessingJobDto {
@@ -1903,6 +1949,39 @@ export const adminApi = {
       `/admin/media/assets/${assetId}/detach`,
       payload ?? {}
     );
+    return data;
+  },
+
+  async getMediaAssetUsages(assetId: string) {
+    const { data } = await adminHttp.get<{ asset_id: string; usages: MediaAssetUsageDto[] }>(
+      `/admin/media/assets/${assetId}/usages`
+    );
+    return data;
+  },
+
+  async deleteMediaAsset(assetId: string, confirm = true) {
+    const { data } = await adminHttp.post<{
+      id: string;
+      deleted: boolean;
+      removed_file: boolean;
+      upload_status: string;
+    }>(`/admin/media/assets/${assetId}/delete`, { confirm });
+    return data;
+  },
+
+  async getMediaStorageHealth(params?: { include_orphans?: boolean }) {
+    const { data } = await adminHttp.get<MediaStorageHealthDto>('/admin/media/storage-health', {
+      params,
+    });
+    return data;
+  },
+
+  async cleanupStaleTempUploads(maxAgeSeconds = 86400) {
+    const { data } = await adminHttp.post<{
+      scanned: number;
+      removed: number;
+      max_age_seconds: number;
+    }>('/admin/media/temp-cleanup', null, { params: { max_age_seconds: maxAgeSeconds } });
     return data;
   },
 

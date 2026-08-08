@@ -14,14 +14,18 @@ from app.models.media_assets import MediaAsset
 from app.schemas.common import Envelope, paginated
 from app.schemas.media_upload import (
     ExternalMediaAttachRequest,
+    MediaAssetDeleteOut,
+    MediaAssetDeleteRequest,
     MediaAssetDetachRequest,
     MediaAssetLinkRequest,
     MediaAssetOut,
+    MediaAssetUsagesOut,
+    StaleTempCleanupOut,
     UploadSessionCreate,
     UploadSessionCreateOut,
     UploadSessionOut,
 )
-from app.services import media_linking
+from app.services import media_delete, media_linking, media_storage_health
 from app.services import media_upload as upload_service
 from app.services.media_external_attach import attach_external_media, media_asset_to_out
 
@@ -270,3 +274,66 @@ def detach_media_asset(
         allow_force_unpublish=allow_force,
     )
     return MediaAssetOut.model_validate(media_asset_to_out(asset))
+
+
+@router.get("/admin/media/assets/{asset_id}/usages", response_model=MediaAssetUsagesOut)
+def get_media_asset_usages(
+    asset_id: str,
+    db: DbSession,
+    _: Annotated[AdminUser, Depends(require_permissions("upload.read"))],
+):
+    settings = get_settings()
+    require_feature("enable_uploads", settings)
+    asset = upload_service.get_asset(db, asset_id)
+    return MediaAssetUsagesOut(asset_id=asset.id, usages=media_delete.collect_asset_usages(db, asset))
+
+
+@router.post("/admin/media/assets/{asset_id}/delete", response_model=MediaAssetDeleteOut)
+def delete_media_asset(
+    asset_id: str,
+    db: DbSession,
+    admin: Annotated[AdminUser, Depends(require_permissions("upload.manage"))],
+    payload: MediaAssetDeleteRequest | None = None,
+):
+    """Delete an unlinked uploaded asset and its owned file under MEDIA_ROOT."""
+    settings = get_settings()
+    require_feature("enable_uploads", settings)
+    body = payload or MediaAssetDeleteRequest()
+    asset = upload_service.get_asset(db, asset_id)
+    result = media_delete.delete_media_asset(
+        db, asset=asset, admin_id=admin.id, confirm=bool(body.confirm)
+    )
+    return MediaAssetDeleteOut.model_validate(result)
+
+
+@router.get("/admin/media/storage-health")
+def media_storage_health_report(
+    db: DbSession,
+    _: Annotated[AdminUser, Depends(require_permissions("upload.read"))],
+    include_orphans: bool = Query(True),
+):
+    settings = get_settings()
+    require_feature("enable_uploads", settings)
+    return media_storage_health.run_storage_health_check(db, include_orphans=include_orphans)
+
+
+@router.post("/admin/media/temp-cleanup", response_model=StaleTempCleanupOut)
+def cleanup_stale_temp_uploads(
+    db: DbSession,
+    admin: Annotated[AdminUser, Depends(require_permissions("upload.manage"))],
+    max_age_seconds: int = Query(86400, ge=3600, le=604800),
+):
+    """Remove stale ``*.part`` files under MEDIA_ROOT/temp only."""
+    settings = get_settings()
+    require_feature("enable_uploads", settings)
+    from app.services.media_audit import record_media_event
+
+    result = media_delete.cleanup_stale_temp_uploads(max_age_seconds=max_age_seconds)
+    record_media_event(
+        db,
+        event_type="media_temp_cleanup",
+        admin_id=admin.id,
+        details=result,
+    )
+    db.commit()
+    return StaleTempCleanupOut(**result, max_age_seconds=max_age_seconds)

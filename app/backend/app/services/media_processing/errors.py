@@ -33,6 +33,16 @@ class PathSecurityError(PermanentProcessingError):
     code = "path_security"
 
 
+class FileMissingError(TransientProcessingError):
+    """Source file not visible yet — may be a short-lived mount/visibility race."""
+
+    code = "file_missing"
+
+
+class FileMissingPermanentError(PermanentProcessingError):
+    code = "file_missing"
+
+
 class AssetNotReadyError(PermanentProcessingError):
     code = "asset_not_ready"
 

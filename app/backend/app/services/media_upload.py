@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import hashlib
-import shutil
+import logging
+import os
 from datetime import UTC, timedelta
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.config import Settings
 from app.models.media_assets import MediaAsset, UploadSession, new_uuid, utcnow
 from app.services.content_sniff import PROBE_BYTES, validate_content_compatibility
+from app.services.media_audit import record_media_event
 from app.services.storage import (
     asset_storage_path,
     ensure_media_layout,
@@ -28,6 +30,8 @@ from app.services.uploads import (
     sanitize_upload_filename,
     validate_upload_content_type,
 )
+
+logger = logging.getLogger("app.media_upload")
 
 SESSION_TTL = timedelta(hours=24)
 CHUNK_SIZE = 1024 * 1024
@@ -187,6 +191,87 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _fsync_path(path: Path) -> None:
+    """Durably flush file bytes (and best-effort parent directory entry)."""
+    with path.open("rb+") as handle:
+        handle.flush()
+        os.fsync(handle.fileno())
+    try:
+        dir_fd = os.open(str(path.parent), os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(dir_fd)
+    finally:
+        os.close(dir_fd)
+
+
+def _duplicate_detail(existing: MediaAsset) -> dict:
+    return {
+        "code": "duplicate_checksum",
+        "message": "This file already exists.",
+        "existing_asset_id": existing.id,
+        "existing_asset": {
+            "id": existing.id,
+            "original_filename": existing.original_filename,
+            "category": existing.category,
+            "size_bytes": existing.size_bytes,
+            "checksum_sha256": existing.checksum_sha256,
+            "upload_status": existing.upload_status,
+            "processing_status": existing.processing_status,
+            "movie_id": existing.movie_id,
+            "episode_id": existing.episode_id,
+            "created_at": existing.created_at.isoformat() if existing.created_at else None,
+        },
+        "actions": ["view_existing", "link_existing", "cancel"],
+    }
+
+
+def _raise_duplicate(db: Session, session: UploadSession, temp_path: Path | None, existing: MediaAsset) -> None:
+    if temp_path is not None and temp_path.exists():
+        temp_path.unlink(missing_ok=True)
+    session.status = "failed"
+    session.error = "Duplicate upload checksum — reuse existing asset"
+    if session.media_asset:
+        session.media_asset.upload_status = "failed"
+        session.media_asset.checksum_sha256 = None
+        db.add(session.media_asset)
+    db.add(session)
+    record_media_event(
+        db,
+        event_type="media_upload_duplicate",
+        admin_id=session.created_by_admin_id,
+        media_asset_id=session.media_asset_id,
+        details={
+            "existing_asset_id": existing.id,
+            "checksum_sha256": existing.checksum_sha256,
+            "category": getattr(session.media_asset, "category", None),
+        },
+    )
+    db.commit()
+    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_duplicate_detail(existing))
+
+
+def _verify_stored_file(*, path: Path, expected_size: int, expected_checksum: str) -> None:
+    if not path.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Stored media file missing after finalize",
+        )
+    actual_size = path.stat().st_size
+    if actual_size != expected_size:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Stored media size mismatch: expected {expected_size}, got {actual_size}",
+        )
+    actual_checksum = _sha256_file(path)
+    if actual_checksum != expected_checksum:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Stored media checksum mismatch after finalize",
+        )
+
+
 async def _finalize_session(
     db: Session,
     *,
@@ -209,6 +294,9 @@ async def _finalize_session(
             ),
         )
 
+    # Durably flush temp bytes before hashing / moving.
+    _fsync_path(temp_path)
+
     # Re-validate content from the start of the assembled temp file.
     with temp_path.open("rb") as handle:
         prefix = handle.read(PROBE_BYTES)
@@ -220,6 +308,8 @@ async def _finalize_session(
 
     checksum = _sha256_file(temp_path)
     asset = session.media_asset
+
+    # SHA256 is the sole duplicate identity. Never store a second physical copy.
     if settings.upload_reject_duplicate_checksum:
         existing = (
             db.query(MediaAsset)
@@ -230,11 +320,7 @@ async def _finalize_session(
             .first()
         )
         if existing is not None:
-            _fail_session(db, session, temp_path, "Duplicate upload checksum")
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Duplicate completed upload with identical checksum",
-            )
+            _raise_duplicate(db, session, temp_path, existing)
 
     final_path = asset_storage_path(
         category=asset.category,
@@ -243,12 +329,21 @@ async def _finalize_session(
     )
 
     try:
-        # Move first so a failed unique insert does not leave orphans in category dirs.
-        shutil.move(str(temp_path), str(final_path))
+        # Mark stored before commit so workers never race a half-written path.
+        asset.upload_status = "stored"
+        db.add(asset)
+        db.flush()
+
+        # Atomic replace into final category path, then fsync.
+        os.replace(str(temp_path), str(final_path))
+        _fsync_path(final_path)
+        _verify_stored_file(path=final_path, expected_size=size, expected_checksum=checksum)
+
         asset.size_bytes = size
         asset.checksum_sha256 = checksum
         asset.storage_path = relative_media_path(final_path)
         asset.storage_backend = "local"
+        # completed == durable STORED in the product state machine
         asset.upload_status = "completed"
         asset.processing_status = "none"
         session.bytes_received = size
@@ -258,18 +353,66 @@ async def _finalize_session(
         db.add(asset)
         db.add(session)
         db.flush()
+        # Commit only after file exists, size+checksum match — enqueue/probe may follow.
         db.commit()
+        logger.info(
+            "media_upload_finalized asset_id=%s category=%s size=%s checksum=%s",
+            asset.id,
+            asset.category,
+            size,
+            checksum[:12],
+        )
+    except HTTPException:
+        if final_path.exists():
+            final_path.unlink(missing_ok=True)
+        _fail_session(db, session, temp_path if temp_path.exists() else None, "Finalize verification failed")
+        raise
     except IntegrityError as exc:
         db.rollback()
         session = get_session(db, session.id)
         if final_path.exists():
             final_path.unlink(missing_ok=True)
+        # Prefer durable completed/stored rows; fall back to any matching checksum.
+        existing = (
+            db.query(MediaAsset)
+            .filter(
+                MediaAsset.checksum_sha256 == checksum,
+                MediaAsset.upload_status.in_(("completed", "stored")),
+            )
+            .order_by(MediaAsset.created_at.asc())
+            .first()
+        )
+        if existing is None:
+            existing = (
+                db.query(MediaAsset)
+                .filter(MediaAsset.checksum_sha256 == checksum)
+                .order_by(MediaAsset.created_at.asc())
+                .first()
+            )
+        if existing is not None:
+            _raise_duplicate(db, session, None, existing)
         _fail_session(db, session, None, "Duplicate upload checksum")
-        # Partial unique index is the concurrency-safe backstop.
+        # Still return a deterministic duplicate-shaped payload (no vague error).
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Duplicate completed upload with identical checksum",
+            detail={
+                "code": "duplicate_checksum",
+                "message": "This file already exists.",
+                "existing_asset_id": None,
+                "existing_asset": None,
+                "actions": ["view_existing", "link_existing", "cancel"],
+            },
         ) from exc
+    except Exception:
+        if final_path.exists():
+            final_path.unlink(missing_ok=True)
+        _fail_session(
+            db,
+            session,
+            temp_path if temp_path.exists() else None,
+            "Finalize failed",
+        )
+        raise
 
     db.refresh(session)
     if session.media_asset_id:
