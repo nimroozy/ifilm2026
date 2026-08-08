@@ -15,16 +15,14 @@ import {
   type SeriesDto,
 } from './api';
 import { resolveAudioAvailability } from './catalogAvailability';
-import { isApiMode, isMockMode } from './dataMode';
+import { isMockMode } from './dataMode';
 import type { AppLocale } from './locale';
-import {
-  movies as mockMovies,
-  series as mockSeries,
-  episodes as mockEpisodes,
-  genres as mockGenreNames,
-  type Movie,
-  type Series,
-} from '@/data/mockData';
+import type { Movie, Series } from '@/data/mockData';
+
+/** Lazy mock fixtures — excluded from customer production builds (VITE_DATA_MODE=api). */
+async function loadMockData() {
+  return import('@/data/mockData');
+}
 
 function hasDubCode(item: { dubbed?: string[]; audioAvailability?: unknown }, code: string): boolean {
   const audio = resolveAudioAvailability(item as never);
@@ -62,7 +60,8 @@ function publishedMockItems<T extends { catalogStatus?: string }>(items: T[]): T
   return items.filter((item) => (item.catalogStatus ?? 'published') === 'published');
 }
 
-function filterMockMovies(params?: CatalogListParams): Movie[] {
+async function filterMockMovies(params?: CatalogListParams): Promise<Movie[]> {
+  const { movies: mockMovies } = await loadMockData();
   let result = publishedMockItems(mockMovies);
   if (params?.q) {
     const q = params.q.toLowerCase();
@@ -93,7 +92,8 @@ function filterMockMovies(params?: CatalogListParams): Movie[] {
   return result;
 }
 
-function filterMockSeries(params?: CatalogListParams): Series[] {
+async function filterMockSeries(params?: CatalogListParams): Promise<Series[]> {
+  const { series: mockSeries } = await loadMockData();
   let result = publishedMockItems(mockSeries);
   if (params?.q) {
     const q = params.q.toLowerCase();
@@ -126,8 +126,8 @@ function paginateMock<T>(items: T[], page = 1, pageSize = 20): CatalogListResult
 }
 
 export async function fetchMovies(params?: CatalogListParams): Promise<CatalogListResult<CatalogMovie>> {
-  if (isMockMode()) {
-    return paginateMock(filterMockMovies(params), params?.page ?? 1, params?.page_size ?? 100);
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
+    return paginateMock(await filterMockMovies(params), params?.page ?? 1, params?.page_size ?? 100);
   }
   const page = await api.listMovies(params);
   return {
@@ -142,7 +142,8 @@ export async function fetchMovie(
   idOrSlug: number | string,
   locale?: AppLocale,
 ): Promise<CatalogMovie> {
-  if (isMockMode()) {
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
+    const { movies: mockMovies } = await loadMockData();
     const id = typeof idOrSlug === 'number' ? idOrSlug : Number(idOrSlug);
     const movie = publishedMockItems(mockMovies).find(
       (m) => m.id === id || String(m.id) === String(idOrSlug)
@@ -158,7 +159,7 @@ export async function fetchSimilarMovies(
   limit = 12,
   locale?: AppLocale,
 ): Promise<CatalogMovie[]> {
-  if (isMockMode()) {
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
     const item = await fetchMovie(idOrSlug, locale);
     const page = await fetchMovies({ page_size: 40, sort: 'popular', locale });
     return page.items
@@ -170,8 +171,8 @@ export async function fetchSimilarMovies(
 }
 
 export async function fetchSeries(params?: CatalogListParams): Promise<CatalogListResult<CatalogSeries>> {
-  if (isMockMode()) {
-    return paginateMock(filterMockSeries(params), params?.page ?? 1, params?.page_size ?? 100);
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
+    return paginateMock(await filterMockSeries(params), params?.page ?? 1, params?.page_size ?? 100);
   }
   const page = await api.listSeries(params);
   return {
@@ -186,7 +187,8 @@ export async function fetchSeriesDetail(
   idOrSlug: number | string,
   locale?: AppLocale,
 ): Promise<SeriesDetailResult> {
-  if (isMockMode()) {
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
+    const { series: mockSeries, episodes: mockEpisodes } = await loadMockData();
     const id = typeof idOrSlug === 'number' ? idOrSlug : Number(idOrSlug);
     const show = publishedMockItems(mockSeries).find(
       (s) => s.id === id || String(s.id) === String(idOrSlug)
@@ -260,7 +262,8 @@ export async function fetchSeriesDetail(
 }
 
 export async function fetchSearch(q: string, locale?: AppLocale): Promise<CatalogSearchResult> {
-  if (isMockMode()) {
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
+    const { movies: mockMovies, series: mockSeries } = await loadMockData();
     const query = q.toLowerCase().trim();
     if (!query) return { movies: [], series: [] };
     const movies = publishedMockItems(mockMovies).filter(
@@ -283,7 +286,8 @@ export async function fetchSearch(q: string, locale?: AppLocale): Promise<Catalo
 }
 
 export async function fetchGenres(): Promise<{ id?: number; name: string; slug?: string }[]> {
-  if (isMockMode()) {
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
+    const { genres: mockGenreNames } = await loadMockData();
     return mockGenreNames.map((name) => ({ name, slug: name.toLowerCase() }));
   }
   const page = await api.listGenres({ page_size: 100 });
@@ -291,7 +295,8 @@ export async function fetchGenres(): Promise<{ id?: number; name: string; slug?:
 }
 
 export async function fetchFeaturedMovies(limit = 8): Promise<CatalogMovie[]> {
-  if (isMockMode()) {
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
+    const { movies: mockMovies } = await loadMockData();
     return publishedMockItems(mockMovies).filter((m) => m.featured).slice(0, limit);
   }
   const page = await api.listMovies({ featured: true, page_size: limit, sort: 'newest' });
@@ -299,7 +304,8 @@ export async function fetchFeaturedMovies(limit = 8): Promise<CatalogMovie[]> {
 }
 
 export async function fetchTrendingMovies(limit = 12): Promise<CatalogMovie[]> {
-  if (isMockMode()) {
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
+    const { movies: mockMovies } = await loadMockData();
     return publishedMockItems(mockMovies).sort((a, b) => b.views - a.views).slice(0, limit);
   }
   const page = await api.listMovies({ trending: true, page_size: limit, sort: 'views_desc' });
@@ -309,7 +315,8 @@ export async function fetchTrendingMovies(limit = 12): Promise<CatalogMovie[]> {
 }
 
 export async function fetchHomeCatalog(locale?: AppLocale) {
-  if (isMockMode()) {
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
+    const { movies: mockMovies, series: mockSeries } = await loadMockData();
     const movies = publishedMockItems(mockMovies);
     const series = publishedMockItems(mockSeries);
     return {
@@ -326,10 +333,36 @@ export async function fetchHomeCatalog(locale?: AppLocale) {
         .filter((m) => m.genres.includes('Family') || m.genres.includes('Animation'))
         .slice(0, 12),
       popularSeries: [...series].sort((a, b) => b.views - a.views).slice(0, 12),
+      featuredCollections: [] as CatalogCollection[],
+      recommendations: null as import('./api').HomeRecommendationsDto | null,
     };
   }
 
-  const loc = locale ? { locale } : {};
+  const loc = locale ? { locale } : undefined;
+  // Prefer bounded aggregate endpoint (one HTTP call). Fall back to legacy fan-out
+  // only if the aggregate route is unavailable on older backends.
+  try {
+    const home = await api.getCatalogHome(loc);
+    return {
+      featured: home.featured.map(mapMovieDto),
+      trending: home.trending.map(mapMovieDto),
+      recentlyAdded: home.recently_added.map(mapMovieDto),
+      popular: home.top_rated.map(mapMovieDto),
+      afghanMovies: home.afghan.map(mapMovieDto),
+      persianDubbed: home.persian_dubbed.map(mapMovieDto),
+      pashtoDubbed: home.pashto_dubbed.map(mapMovieDto),
+      actionMovies: home.action.map(mapMovieDto),
+      comedyMovies: home.comedy.map(mapMovieDto),
+      familyMovies: home.family.map(mapMovieDto),
+      popularSeries: home.popular_series.map(mapSeriesDto),
+      featuredCollections: home.featured_collections || [],
+      recommendations: home.recommendations ?? null,
+    };
+  } catch {
+    /* fall through to legacy multi-call path */
+  }
+
+  const params = locale ? { locale } : {};
   const [
     featuredPage,
     trendingPage,
@@ -340,14 +373,14 @@ export async function fetchHomeCatalog(locale?: AppLocale) {
     actionPage,
     comedyPage,
   ] = await Promise.all([
-    api.listMovies({ featured: true, page_size: 8, sort: 'newest', ...loc }),
-    api.listMovies({ trending: true, page_size: 12, sort: 'views_desc', ...loc }),
-    api.listMovies({ page_size: 12, sort: 'newest', ...loc }),
-    api.listMovies({ page_size: 12, sort: 'rating_desc', ...loc }),
-    api.listMovies({ page_size: 40, sort: 'newest', ...loc }),
-    api.listSeries({ page_size: 12, sort: 'views_desc', ...loc }),
-    api.listMovies({ genre: 'Action', page_size: 12, sort: 'views_desc', ...loc }),
-    api.listMovies({ genre: 'Comedy', page_size: 12, sort: 'views_desc', ...loc }),
+    api.listMovies({ featured: true, page_size: 8, sort: 'newest', ...params }),
+    api.listMovies({ trending: true, page_size: 12, sort: 'views_desc', ...params }),
+    api.listMovies({ page_size: 12, sort: 'newest', ...params }),
+    api.listMovies({ page_size: 12, sort: 'rating_desc', ...params }),
+    api.listMovies({ page_size: 40, sort: 'newest', ...params }),
+    api.listSeries({ page_size: 12, sort: 'views_desc', ...params }),
+    api.listMovies({ genre: 'Action', page_size: 12, sort: 'views_desc', ...params }),
+    api.listMovies({ genre: 'Comedy', page_size: 12, sort: 'views_desc', ...params }),
   ]);
 
   const mapAll = (items: MovieDto[]) => items.map(mapMovieDto);
@@ -357,7 +390,7 @@ export async function fetchHomeCatalog(locale?: AppLocale) {
   const trending =
     trendingPage.items.length > 0
       ? mapAll(trendingPage.items)
-      : mapAll((await api.listMovies({ page_size: 12, sort: 'views_desc', ...loc })).items);
+      : mapAll((await api.listMovies({ page_size: 12, sort: 'views_desc', ...params })).items);
 
   return {
     featured: mapAll(featuredPage.items.length ? featuredPage.items : recentPage.items.slice(0, 5)),
@@ -373,6 +406,39 @@ export async function fetchHomeCatalog(locale?: AppLocale) {
       .filter((m) => m.genres.includes('Family') || m.genres.includes('Animation'))
       .slice(0, 12),
     popularSeries: mapSeries(seriesPage.items),
+    featuredCollections: [] as CatalogCollection[],
+    recommendations: null as import('./api').HomeRecommendationsDto | null,
+  };
+}
+
+/** Authenticated homepage aggregate (catalog + CW + watchlist + recommendations). */
+export async function fetchMeHomeCatalog(locale?: AppLocale) {
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
+    const catalog = await fetchHomeCatalog(locale);
+    return {
+      ...catalog,
+      continueWatching: [] as import('./api').WatchProgressDto[],
+      watchlist: [] as import('./api').WatchlistItemDto[],
+      recommendations: null as import('./api').HomeRecommendationsDto | null,
+    };
+  }
+  const home = await api.getMeHome(locale ? { locale } : undefined);
+  return {
+    featured: home.featured.map(mapMovieDto),
+    trending: home.trending.map(mapMovieDto),
+    recentlyAdded: home.recently_added.map(mapMovieDto),
+    popular: home.top_rated.map(mapMovieDto),
+    afghanMovies: home.afghan.map(mapMovieDto),
+    persianDubbed: home.persian_dubbed.map(mapMovieDto),
+    pashtoDubbed: home.pashto_dubbed.map(mapMovieDto),
+    actionMovies: home.action.map(mapMovieDto),
+    comedyMovies: home.comedy.map(mapMovieDto),
+    familyMovies: home.family.map(mapMovieDto),
+    popularSeries: home.popular_series.map(mapSeriesDto),
+    featuredCollections: home.featured_collections || [],
+    continueWatching: home.continue_watching || [],
+    watchlist: (home.watchlist || []).filter((i) => i.available),
+    recommendations: home.recommendations,
   };
 }
 
@@ -383,7 +449,7 @@ export async function fetchHomeCatalog(locale?: AppLocale) {
 export async function fetchCollections(
   params?: CollectionListParams
 ): Promise<CatalogListResult<CatalogCollection>> {
-  if (isMockMode()) {
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
     return { items: [], total: 0, page: params?.page ?? 1, page_size: params?.page_size ?? 20 };
   }
   const page = await api.listCollections(params);
@@ -396,7 +462,7 @@ export async function fetchCollections(
 }
 
 export async function fetchCollection(slug: string): Promise<CatalogCollection> {
-  if (isMockMode()) {
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
     throw new Error('Collection not found');
   }
   return api.getCollection(slug);
@@ -406,7 +472,7 @@ export async function fetchFeaturedHomeCollections(params?: {
   page_size?: number;
   min_items?: number;
 }): Promise<CatalogCollection[]> {
-  if (isMockMode()) return [];
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) return [];
   const page = await api.listFeaturedHomeCollections(params);
   return page.items;
 }

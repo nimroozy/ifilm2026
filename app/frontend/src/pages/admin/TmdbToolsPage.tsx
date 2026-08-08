@@ -13,15 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  ApiError,
-  adminApi,
-  type TmdbMediaType,
-  type TmdbPreviewDto,
-  type TmdbSearchResultDto,
-  type TmdbTrailerDto,
-  type TmdbTranslationDto,
-} from '@/lib/api';
+import { ApiError, type TmdbMediaType, type TmdbPreviewDto, type TmdbSearchResultDto, type TmdbTrailerDto, type TmdbTranslationDto,  } from '@/lib/api';
+import { adminApi } from '@/lib/adminApi';
 import { safeYoutubeEmbedUrl, youtubeEmbedUrlFromKey } from '@/lib/trailers';
 import { ErrorState, PosterThumb, StatusBadge } from './adminShared';
 

@@ -49,3 +49,6 @@ jobs:
 
       - name: Build
         run: pnpm run build
+
+      - name: Customer initial JS budget
+        run: pnpm run check:bundle-budget

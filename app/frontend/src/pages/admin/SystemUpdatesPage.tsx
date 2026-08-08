@@ -3,15 +3,8 @@ import { RefreshCw, ShieldAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  adminApi,
-  ApiError,
-  type AdminUserDto,
-  type SystemPreflightDto,
-  type SystemUpdateCheckDto,
-  type SystemUpdateJobDto,
-  type SystemVersionDto,
-} from '@/lib/api';
+import { ApiError, type AdminUserDto, type SystemPreflightDto, type SystemUpdateCheckDto, type SystemUpdateJobDto, type SystemVersionDto,  } from '@/lib/api';
+import { adminApi } from '@/lib/adminApi';
 import { LoadingBlock, ErrorState } from './adminShared';
 
 function hasPerm(admin: AdminUserDto | null, key: string): boolean {

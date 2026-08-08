@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { ADMIN_UNAUTHORIZED_EVENT, adminApi, ApiError, tokenStore } from '@/lib/api';
+import { ADMIN_UNAUTHORIZED_EVENT, ApiError, tokenStore } from '@/lib/api';
+import { adminApi } from '@/lib/adminApi';
 import { LoadingBlock } from './adminShared';
 
 interface RequireAdminProps {

@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Home, Film, Tv, Search, User, Bell, Menu, Globe, ChevronDown } from 'lucide-react';
-import { translations } from '@/data/mockData';
+import { translations } from '@/data/translations';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
@@ -147,22 +147,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => (mockMode ? mockUser : null));
   const [isLoggedIn, setIsLoggedIn] = useState(mockMode);
 
-  const refreshProfile = async () => {
+  const refreshEntitlement = async () => {
+    if (mockMode || !tokenStore.get()) return;
+    try {
+      const entitlement = await api.entitlement();
+      setUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              maxDevices: entitlement.max_devices ?? prev.maxDevices,
+              entitlementAllowed: entitlement.allowed,
+              denialCode: entitlement.denial_code,
+              safeReason: entitlement.safe_reason,
+            }
+          : prev
+      );
+    } catch {
+      // Player re-checks entitlement; home must not block on this call.
+    }
+  };
+
+  const refreshProfile = async (opts?: { includeEntitlement?: boolean }) => {
     if (mockMode) return;
     if (!tokenStore.get()) {
       setUser(null);
       setIsLoggedIn(false);
       return;
     }
+    // Critical path: /me only. Entitlement is deferred so home/LCP is not blocked
+    // by a second authenticated round-trip (Player still enforces entitlement).
     const me = await api.me();
-    let entitlement = null;
-    try {
-      entitlement = await api.entitlement();
-    } catch {
-      entitlement = null;
-    }
-    setUser(mapSubscriber(me, entitlement));
+    setUser(mapSubscriber(me, null));
     setIsLoggedIn(true);
+    if (opts?.includeEntitlement) {
+      await refreshEntitlement();
+      return;
+    }
+    const schedule =
+      typeof window !== 'undefined' && 'requestIdleCallback' in window
+        ? (cb: () => void) => window.requestIdleCallback(cb, { timeout: 2500 })
+        : (cb: () => void) => window.setTimeout(cb, 1200);
+    schedule(() => {
+      void refreshEntitlement();
+    });
   };
 
   useEffect(() => {
@@ -281,8 +308,9 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
   } as const;
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
+    <div className="flex min-h-screen flex-col bg-background" data-testid="customer-shell">
       <header
+        data-testid="customer-header"
         className={cn(
           'fixed left-0 right-0 top-0 z-50 transition-all duration-300',
           scrolled

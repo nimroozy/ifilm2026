@@ -37,12 +37,8 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import {
-  adminApi,
-  ApiError,
-  type MediaAssetDto,
-  type MediaPackageDto,
-} from '@/lib/api';
+import { ApiError, type MediaAssetDto, type MediaPackageDto,  } from '@/lib/api';
+import { adminApi } from '@/lib/adminApi';
 import { EmptyState, ErrorState, LoadingBlock } from './adminShared';
 
 type OwnerType = 'movie' | 'episode';

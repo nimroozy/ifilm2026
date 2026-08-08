@@ -125,6 +125,26 @@ def _rows_for(
     )
 
 
+def load_translations_for_entities(
+    db: Session, *, entity_type: EntityType, entity_ids: list[int]
+) -> dict[int, list[ContentTranslation]]:
+    """Batch-load translations for many entities (one query)."""
+    if not entity_ids:
+        return {}
+    rows = (
+        db.query(ContentTranslation)
+        .filter(
+            ContentTranslation.entity_type == entity_type,
+            ContentTranslation.entity_id.in_(list(dict.fromkeys(entity_ids))),
+        )
+        .all()
+    )
+    out: dict[int, list[ContentTranslation]] = {eid: [] for eid in entity_ids}
+    for row in rows:
+        out.setdefault(row.entity_id, []).append(row)
+    return out
+
+
 def resolve_text(
     db: Session,
     *,
@@ -133,12 +153,15 @@ def resolve_text(
     field_key: str,
     locale: Locale,
     canonical: str,
+    preloaded_rows: list[ContentTranslation] | None = None,
 ) -> tuple[str, Source]:
     """Return (value, source) for a field under locale rules."""
-    rows = {
-        (r.locale, r.field_key): r
-        for r in _rows_for(db, entity_type=entity_type, entity_id=entity_id)
-    }
+    source_rows = (
+        preloaded_rows
+        if preloaded_rows is not None
+        else _rows_for(db, entity_type=entity_type, entity_id=entity_id)
+    )
+    rows = {(r.locale, r.field_key): r for r in source_rows}
     # Prefer explicit field; also accept overview alias for description.
     candidates_keys = [field_key]
     if field_key == "description":
@@ -196,45 +219,56 @@ def resolve_text(
     return "", "fallback"
 
 
-def localized_movie_fields(
-    db: Session, movie: Any, locale: Locale
+def _localized_fields_from_rows(
+    *,
+    db: Session,
+    entity_type: EntityType,
+    entity_id: int,
+    locale: Locale,
+    canonical: dict[str, str],
+    preloaded_rows: list[ContentTranslation] | None,
 ) -> dict[str, Any]:
+    rows = preloaded_rows
     title, title_src = resolve_text(
         db,
-        entity_type="movie",
-        entity_id=movie.id,
+        entity_type=entity_type,
+        entity_id=entity_id,
         field_key="title",
         locale=locale,
-        canonical=str(movie.title or ""),
+        canonical=canonical.get("title", ""),
+        preloaded_rows=rows,
     )
     description, desc_src = resolve_text(
         db,
-        entity_type="movie",
-        entity_id=movie.id,
+        entity_type=entity_type,
+        entity_id=entity_id,
         field_key="description",
         locale=locale,
-        canonical=str(movie.description or ""),
+        canonical=canonical.get("description", ""),
+        preloaded_rows=rows,
     )
     short, short_src = resolve_text(
         db,
-        entity_type="movie",
-        entity_id=movie.id,
+        entity_type=entity_type,
+        entity_id=entity_id,
         field_key="short_description",
         locale=locale,
-        canonical=str(movie.short_description or ""),
+        canonical=canonical.get("short_description", ""),
+        preloaded_rows=rows,
     )
     tagline, tag_src = resolve_text(
         db,
-        entity_type="movie",
-        entity_id=movie.id,
+        entity_type=entity_type,
+        entity_id=entity_id,
         field_key="tagline",
         locale=locale,
-        canonical="",
+        canonical=canonical.get("tagline", ""),
+        preloaded_rows=rows,
     )
     return {
-        "title": title or movie.title,
-        "description": description or movie.description,
-        "short_description": short or movie.short_description,
+        "title": title or canonical.get("title", ""),
+        "description": description or canonical.get("description", ""),
+        "short_description": short or canonical.get("short_description", ""),
         "tagline": tagline,
         "localization": {
             "locale": locale,
@@ -246,58 +280,56 @@ def localized_movie_fields(
             },
         },
     }
+
+
+def localized_movie_fields(
+    db: Session,
+    movie: Any,
+    locale: Locale,
+    *,
+    preloaded_rows: list[ContentTranslation] | None = None,
+) -> dict[str, Any]:
+    rows = preloaded_rows
+    if rows is None:
+        rows = _rows_for(db, entity_type="movie", entity_id=movie.id)
+    return _localized_fields_from_rows(
+        db=db,
+        entity_type="movie",
+        entity_id=movie.id,
+        locale=locale,
+        canonical={
+            "title": str(movie.title or ""),
+            "description": str(movie.description or ""),
+            "short_description": str(movie.short_description or ""),
+            "tagline": "",
+        },
+        preloaded_rows=rows,
+    )
 
 
 def localized_series_fields(
-    db: Session, series: Any, locale: Locale
+    db: Session,
+    series: Any,
+    locale: Locale,
+    *,
+    preloaded_rows: list[ContentTranslation] | None = None,
 ) -> dict[str, Any]:
-    title, title_src = resolve_text(
-        db,
+    rows = preloaded_rows
+    if rows is None:
+        rows = _rows_for(db, entity_type="series", entity_id=series.id)
+    return _localized_fields_from_rows(
+        db=db,
         entity_type="series",
         entity_id=series.id,
-        field_key="title",
         locale=locale,
-        canonical=str(series.title or ""),
-    )
-    description, desc_src = resolve_text(
-        db,
-        entity_type="series",
-        entity_id=series.id,
-        field_key="description",
-        locale=locale,
-        canonical=str(series.description or ""),
-    )
-    short, short_src = resolve_text(
-        db,
-        entity_type="series",
-        entity_id=series.id,
-        field_key="short_description",
-        locale=locale,
-        canonical=str(series.short_description or ""),
-    )
-    tagline, tag_src = resolve_text(
-        db,
-        entity_type="series",
-        entity_id=series.id,
-        field_key="tagline",
-        locale=locale,
-        canonical="",
-    )
-    return {
-        "title": title or series.title,
-        "description": description or series.description,
-        "short_description": short or series.short_description,
-        "tagline": tagline,
-        "localization": {
-            "locale": locale,
-            "sources": {
-                "title": title_src,
-                "description": desc_src,
-                "short_description": short_src,
-                "tagline": tag_src,
-            },
+        canonical={
+            "title": str(series.title or ""),
+            "description": str(series.description or ""),
+            "short_description": str(series.short_description or ""),
+            "tagline": "",
         },
-    }
+        preloaded_rows=rows,
+    )
 
 
 def localized_episode_fields(

@@ -3,12 +3,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "VITE_DATA_MODE=api vite build",
+    "build:mock": "VITE_DATA_MODE=mock vite build",
     "lint": "eslint --quiet ./src",
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run",
     "test:watch": "vitest",
     "preview": "vite preview",
+    "check:bundle-budget": "node ./scripts/check-customer-bundle-budget.mjs",
     "postinstall": "echo 'Dependencies installed successfully'"
   },
   "dependencies": {

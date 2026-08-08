@@ -14,13 +14,13 @@ const updateCollection = vi.fn();
 const publishCollection = vi.fn();
 const collectionPicker = vi.fn();
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
+vi.mock('@/lib/adminApi', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/adminApi')>('@/lib/adminApi');
   return {
     ...actual,
     adminApi: {
       ...actual.adminApi,
-      listCollections: (...args: unknown[]) => listCollections(...args),
+listCollections: (...args: unknown[]) => listCollections(...args),
       getCollection: (...args: unknown[]) => getCollection(...args),
       createCollection: (...args: unknown[]) => createCollection(...args),
       updateCollection: (...args: unknown[]) => updateCollection(...args),

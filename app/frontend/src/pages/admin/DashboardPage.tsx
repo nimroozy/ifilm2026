@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { Film, Tv, Layers, Clapperboard, Tags, FileText, CheckCircle, Plus, Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { adminApi, ApiError, type DashboardStatsDto } from '@/lib/api';
+import { ApiError, type DashboardStatsDto } from '@/lib/api';
+import { adminApi } from '@/lib/adminApi';
 import { ErrorState, LoadingBlock, PageHeader } from './adminShared';
 
 export default function DashboardPage() {

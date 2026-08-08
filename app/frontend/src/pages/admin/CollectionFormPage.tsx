@@ -22,16 +22,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import {
-  adminApi,
-  ApiError,
-  type CollectionDto,
-  type CollectionItemDto,
-  type CollectionPickerResultDto,
-  type CollectionPublicDto,
-  type MovieDto,
-  type SeriesDto,
-} from '@/lib/api';
+import { ApiError, type CollectionDto, type CollectionItemDto, type CollectionPickerResultDto, type CollectionPublicDto, type MovieDto, type SeriesDto,  } from '@/lib/api';
+import { adminApi } from '@/lib/adminApi';
 import { mapCollectionItems } from '@/lib/catalogData';
 import { CollectionItemsGrid } from '@/components/collections/CollectionItemsGrid';
 import { ErrorState, LoadingBlock, POSTER_FALLBACK, PosterThumb, StatusBadge } from './adminShared';

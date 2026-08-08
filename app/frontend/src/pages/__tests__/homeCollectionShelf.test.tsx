@@ -5,18 +5,18 @@ import { LangProvider } from '@/components/CustomerLayout';
 import HomePage from '../Index';
 
 const fetchHomeCatalog = vi.fn();
-const fetchFeaturedHomeCollections = vi.fn();
+const fetchMeHomeCatalog = vi.fn();
 
 vi.mock('@/lib/catalogData', async () => {
   const actual = await vi.importActual<typeof import('@/lib/catalogData')>('@/lib/catalogData');
   return {
     ...actual,
     fetchHomeCatalog: (...args: unknown[]) => fetchHomeCatalog(...args),
-    fetchFeaturedHomeCollections: (...args: unknown[]) => fetchFeaturedHomeCollections(...args),
+    fetchMeHomeCatalog: (...args: unknown[]) => fetchMeHomeCatalog(...args),
   };
 });
 
-function emptyHomeData() {
+function emptyHomeData(extra: Record<string, unknown> = {}) {
   return {
     featured: [],
     trending: [],
@@ -29,6 +29,9 @@ function emptyHomeData() {
     comedyMovies: [],
     familyMovies: [],
     popularSeries: [],
+    featuredCollections: [],
+    recommendations: null,
+    ...extra,
   };
 }
 
@@ -45,7 +48,8 @@ function renderHome() {
 describe('homepage featured collection shelves', () => {
   beforeEach(() => {
     fetchHomeCatalog.mockReset();
-    fetchFeaturedHomeCollections.mockReset();
+    fetchMeHomeCatalog.mockReset();
+    fetchMeHomeCatalog.mockRejectedValue(new Error('not authed'));
     fetchHomeCatalog.mockResolvedValue(emptyHomeData());
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
       matches: false,
@@ -60,31 +64,35 @@ describe('homepage featured collection shelves', () => {
   });
 
   it('renders a ContentShelf per featured collection while preserving existing shelves', async () => {
-    fetchFeaturedHomeCollections.mockResolvedValue([
-      {
-        id: 1,
-        title: 'Staff Picks',
-        slug: 'staff-picks',
-        collection_type: 'staff_pick',
-        item_count: 1,
-        items: [
+    fetchHomeCatalog.mockResolvedValue(
+      emptyHomeData({
+        featuredCollections: [
           {
             id: 1,
-            collection_id: 1,
-            movie_id: 99,
-            position: 0,
-            content_type: 'movie',
-            movie: {
-              id: 99,
-              title: 'Featured Film',
-              slug: 'featured-film',
-              status: 'published',
-              poster_url: 'https://example.com/p.jpg',
-            },
+            title: 'Staff Picks',
+            slug: 'staff-picks',
+            collection_type: 'staff_pick',
+            item_count: 1,
+            items: [
+              {
+                id: 1,
+                collection_id: 1,
+                movie_id: 99,
+                position: 0,
+                content_type: 'movie',
+                movie: {
+                  id: 99,
+                  title: 'Featured Film',
+                  slug: 'featured-film',
+                  status: 'published',
+                  poster_url: 'https://example.com/p.jpg',
+                },
+              },
+            ],
           },
         ],
-      },
-    ]);
+      })
+    );
 
     renderHome();
 
@@ -93,40 +101,43 @@ describe('homepage featured collection shelves', () => {
   });
 
   it('hides collection shelves that end up with zero mapped items', async () => {
-    fetchFeaturedHomeCollections.mockResolvedValue([
-      {
-        id: 2,
-        title: 'Broken Collection',
-        slug: 'broken-collection',
-        collection_type: 'editorial',
-        item_count: 1,
-        items: [
+    fetchHomeCatalog.mockResolvedValue(
+      emptyHomeData({
+        featuredCollections: [
           {
-            id: 5,
-            collection_id: 2,
-            movie_id: 100,
-            position: 0,
-            content_type: 'movie',
-            movie: undefined,
+            id: 2,
+            title: 'Broken Collection',
+            slug: 'broken-collection',
+            collection_type: 'editorial',
+            item_count: 1,
+            items: [
+              {
+                id: 5,
+                collection_id: 2,
+                movie_id: 100,
+                position: 0,
+                content_type: 'movie',
+                movie: undefined,
+              },
+            ],
           },
         ],
-      },
-    ]);
-
-    renderHome();
-
-    await waitFor(() => expect(fetchFeaturedHomeCollections).toHaveBeenCalled());
-    expect(screen.queryByText('Broken Collection')).not.toBeInTheDocument();
-  });
-
-  it('never breaks the homepage when the collections fetch fails', async () => {
-    fetchFeaturedHomeCollections.mockRejectedValue(new Error('boom'));
+      })
+    );
 
     renderHome();
 
     await waitFor(() => expect(fetchHomeCatalog).toHaveBeenCalled());
-    // Homepage should still render without throwing / crashing — no error state shown.
+    expect(screen.queryByText('Broken Collection')).not.toBeInTheDocument();
+  });
+
+  it('never breaks the homepage when the catalog home fetch fails', async () => {
+    fetchHomeCatalog.mockRejectedValue(new Error('boom'));
+
+    renderHome();
+
+    await waitFor(() => expect(fetchHomeCatalog).toHaveBeenCalled());
     await waitFor(() => expect(screen.queryByTestId('home-loading')).not.toBeInTheDocument());
-    expect(screen.queryByTestId('home-error')).not.toBeInTheDocument();
+    expect(screen.getByTestId('home-error')).toBeInTheDocument();
   });
 });

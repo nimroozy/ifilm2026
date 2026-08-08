@@ -37,6 +37,7 @@ import {
 } from '@/lib/catalogAvailability';
 import { canPlayFullMovie, hasDemoClip, isDemoCatalogItem } from '@/lib/catalogPresentation';
 import { trailerEmbedUrl } from '@/lib/trailers';
+import { heroBackdropSrcSet, sizedArtworkUrl } from '@/lib/imageUrls';
 import { MediaCard, mediaGridClass } from '@/design-system';
 import { MovieDetailView } from '@/components/MovieDetailView';
 import { WatchlistButton } from '@/components/WatchlistButton';
@@ -76,6 +77,40 @@ function DemoClipBadge({ item }: { item: unknown }) {
     <Badge className="bg-emerald-500 text-white text-[10px]" data-testid="demo-clip-badge">
       Demo Clip
     </Badge>
+  );
+}
+
+/** YouTube iframe stays off the initial series-detail network until the user opts in. */
+function SeriesTrailerSection({ title, embedUrl }: { title: string; embedUrl: string }) {
+  const [active, setActive] = useState(false);
+  return (
+    <section className="mt-10 space-y-3" aria-labelledby="series-trailer-heading">
+      <h2 id="series-trailer-heading" className="text-xl font-serif font-bold text-foreground">
+        Watch Trailer
+      </h2>
+      <div className="aspect-video overflow-hidden rounded-lg border border-border bg-black">
+        {active ? (
+          <iframe
+            src={embedUrl}
+            title={`${title} trailer`}
+            className="h-full w-full"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            data-testid="youtube-trailer-embed"
+          />
+        ) : (
+          <button
+            type="button"
+            className="flex h-full w-full items-center justify-center gap-2 text-sm text-white/90 transition hover:bg-white/5"
+            onClick={() => setActive(true)}
+            data-testid="youtube-trailer-load"
+          >
+            <Play className="h-5 w-5 fill-current" />
+            Load trailer
+          </button>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -509,6 +544,8 @@ export function SeriesDetailsPage() {
   const show = detail.series;
   const showTrailerEmbed = trailerEmbedUrl(show);
   const showIsDemo = isDemoCatalogItem(show);
+  const seriesBackdrop = heroBackdropSrcSet(show.backdrop || show.poster);
+  const seriesPoster = sizedArtworkUrl(show.poster, 'poster', 'card');
   const availabilityLabels = {
     dubbed: t.movie.dubbed,
     subtitled: t.nav.subtitled,
@@ -525,14 +562,29 @@ export function SeriesDetailsPage() {
   return (
     <div className="min-h-screen" data-testid="series-detail">
       <div className="relative h-[40vh] md:h-[50vh]">
-        <img src={show.backdrop} alt={show.title} className="w-full h-full object-cover" />
+        <img
+          src={seriesBackdrop.src}
+          srcSet={seriesBackdrop.srcSet || undefined}
+          sizes={seriesBackdrop.srcSet ? seriesBackdrop.sizes : undefined}
+          alt={show.title}
+          className="w-full h-full object-cover"
+          loading="eager"
+          decoding="async"
+          {...({ fetchpriority: 'high' } as object)}
+        />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
       </div>
 
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 -mt-24 relative z-10 pb-12">
         <div className="flex flex-col md:flex-row gap-6">
           <div className="flex-shrink-0 w-[160px] md:w-[200px] mx-auto md:mx-0">
-            <img src={show.poster} alt={show.title} className="w-full rounded-lg shadow-xl" />
+            <img
+              src={seriesPoster}
+              alt={show.title}
+              className="w-full rounded-lg shadow-xl"
+              loading="eager"
+              decoding="async"
+            />
           </div>
           <div className="flex-1 space-y-3">
             <h1 className="text-2xl md:text-3xl font-serif font-bold text-foreground">{show.title}</h1>
@@ -657,24 +709,9 @@ export function SeriesDetailsPage() {
           </section>
         ) : null}
 
-        {showTrailerEmbed && (
-          <section className="mt-10 space-y-3" aria-labelledby="series-trailer-heading">
-            <h2 id="series-trailer-heading" className="text-xl font-serif font-bold text-foreground">
-              Watch Trailer
-            </h2>
-            <div className="aspect-video overflow-hidden rounded-lg border border-border bg-black">
-              <iframe
-                src={showTrailerEmbed}
-                title={`${show.title} trailer`}
-                className="h-full w-full"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowFullScreen
-                loading="lazy"
-                data-testid="youtube-trailer-embed"
-              />
-            </div>
-          </section>
-        )}
+        {showTrailerEmbed ? (
+          <SeriesTrailerSection title={show.title} embedUrl={showTrailerEmbed} />
+        ) : null}
 
         <div className="mt-8">
           <div className="flex items-center gap-4 mb-4">
@@ -726,9 +763,10 @@ export function SeriesDetailsPage() {
                   >
                     <div className="relative w-[120px] md:w-[160px] flex-shrink-0">
                       <img
-                        src={ep.thumbnail || show.poster}
+                        src={sizedArtworkUrl(ep.thumbnail || show.poster, 'backdrop', 'card')}
                         alt=""
                         loading="lazy"
+                        decoding="async"
                         className="w-full aspect-video rounded object-cover"
                       />
                       {hasDemoClip(ep) ? (

@@ -2,6 +2,7 @@ import { Play } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DemoBadge, QualityBadge, RatingBadge } from '@/design-system/Badges';
 import { mediaSizes, surfaces } from '@/design-system/tokens';
+import { sizedArtworkUrl } from '@/lib/imageUrls';
 
 export type MediaCardVariant = 'poster' | 'landscape';
 
@@ -26,6 +27,8 @@ export interface MediaCardProps {
   size?: 'sm' | 'md' | 'lg';
   onActivate?: () => void;
   className?: string;
+  /** Eager-load above-the-fold artwork for LCP; default lazy. */
+  priority?: boolean;
   'data-testid'?: string;
 }
 
@@ -60,9 +63,23 @@ export function MediaCard({
   size = 'md',
   onActivate,
   className,
+  priority = false,
   'data-testid': testId = 'media-card',
 }: MediaCardProps) {
   const aspect = variant === 'landscape' ? 'aspect-video' : 'aspect-[2/3]';
+  const intrinsic =
+    variant === 'landscape'
+      ? { width: 320, height: 180 }
+      : size === 'sm'
+        ? { width: 120, height: 180 }
+        : size === 'lg'
+          ? { width: 200, height: 300 }
+          : { width: 160, height: 240 };
+  const sizedSrc = sizedArtworkUrl(
+    imageUrl,
+    variant === 'landscape' ? 'backdrop' : 'poster',
+    'card'
+  );
 
   return (
     <div
@@ -96,12 +113,16 @@ export function MediaCard({
           'active:-translate-y-0.5'
         )}
       >
-        {imageUrl ? (
+        {sizedSrc ? (
           <img
-            src={imageUrl}
+            src={sizedSrc}
             alt=""
-            loading="lazy"
+            width={intrinsic.width}
+            height={intrinsic.height}
+            loading={priority ? 'eager' : 'lazy'}
             decoding="async"
+            // React 18 DOM typings expect lowercase fetchpriority
+            {...({ fetchpriority: priority ? 'high' : 'auto' } as object)}
             className="h-full w-full object-cover transition-transform duration-slow ease-out group-hover/card:scale-110"
           />
         ) : (

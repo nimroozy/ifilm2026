@@ -28,5 +28,6 @@ SORT_OPTIONS = (
     "title_asc",
     "title_desc",
     "rating_desc",
+    "views_desc",
     "recently_updated",
 )

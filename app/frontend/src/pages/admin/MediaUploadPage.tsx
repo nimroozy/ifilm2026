@@ -12,7 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ApiError, adminApi, type MediaCategory, type MediaDuplicateDetail } from '@/lib/api';
+import { ApiError, type MediaCategory, type MediaDuplicateDetail } from '@/lib/api';
+import { adminApi } from '@/lib/adminApi';
 import { EmptyState, ErrorState, LoadingBlock, StatusBadge } from './adminShared';
 
 function asDuplicateDetail(err: unknown): MediaDuplicateDetail | null {

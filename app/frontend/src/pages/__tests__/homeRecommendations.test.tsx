@@ -26,7 +26,35 @@ vi.mock('@/lib/catalogData', () => ({
     afghanMovies: [],
     persianDubbed: [],
     pashtoDubbed: [],
+    featuredCollections: [],
+    recommendations: {
+      mode: 'anonymous',
+      personalized: false,
+      shelves: [
+        {
+          shelf_type: 'popular',
+          title: 'Popular Now',
+          personalized: false,
+          items: [
+            {
+              content_type: 'movie',
+              id: 1,
+              slug: 'hit',
+              title: 'Hit Movie',
+              poster_url: 'https://example.test/p.jpg',
+              score: 0.5,
+              reasons: ['Popular in the catalog'],
+              explanation: 'Popular in the catalog',
+              detail_path: '/movie/hit',
+            },
+          ],
+        },
+      ],
+    },
   })),
+  fetchMeHomeCatalog: vi.fn(async () => {
+    throw new Error('not authenticated in test');
+  }),
   fetchFeaturedHomeCollections: vi.fn(async () => []),
   mapCollectionItems: () => [],
 }));
@@ -91,31 +119,6 @@ describe('Home recommendation shelves', () => {
   });
 
   it('shows anonymous Popular Now shelf and What-to-Watch CTA', async () => {
-    getHomeRecommendations.mockResolvedValue({
-      mode: 'anonymous',
-      personalized: false,
-      shelves: [
-        {
-          shelf_type: 'popular',
-          title: 'Popular Now',
-          personalized: false,
-          items: [
-            {
-              content_type: 'movie',
-              id: 1,
-              slug: 'hit',
-              title: 'Hit Movie',
-              poster_url: 'https://example.test/p.jpg',
-              score: 0.5,
-              reasons: ['Popular in the catalog'],
-              explanation: 'Popular in the catalog',
-              detail_path: '/movie/hit',
-            },
-          ],
-        },
-      ],
-    });
-
     render(
       <MemoryRouter>
         <HomePage />
@@ -129,5 +132,7 @@ describe('Home recommendation shelves', () => {
     expect(screen.getByText('Hit Movie')).toBeInTheDocument();
     expect(screen.queryByText('Recommended for You')).not.toBeInTheDocument();
     expect(screen.getByTestId('home-what-to-watch-cta')).toBeInTheDocument();
+    // Recommendations come from catalog/home aggregate — no separate recs call.
+    expect(getHomeRecommendations).not.toHaveBeenCalled();
   });
 });

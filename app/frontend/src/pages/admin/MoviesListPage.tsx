@@ -22,7 +22,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { adminApi, ApiError, type GenreDto, type MovieDto } from '@/lib/api';
+import { ApiError, type GenreDto, type MovieDto } from '@/lib/api';
+import { adminApi } from '@/lib/adminApi';
 import {
   AdminTableCard,
   EmptyState,

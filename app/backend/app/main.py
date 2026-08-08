@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 
 from app import models as _models  # noqa: F401
 from app.api.router import api_router
@@ -138,6 +139,9 @@ def create_app() -> FastAPI:
     app.add_middleware(RejectPathTraversalMiddleware)
     # Security headers outermost so HTML + API both receive CSP.
     app.add_middleware(SecurityHeadersMiddleware)
+    # Compress SPA assets + JSON when FRONTEND_DIST / large API payloads are served
+    # without an edge nginx gzip layer.
+    app.add_middleware(GZipMiddleware, minimum_size=500)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

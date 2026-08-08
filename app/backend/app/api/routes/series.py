@@ -39,6 +39,7 @@ from app.services.catalog_availability import (
     item_has_dub,
     item_has_subtitles,
 )
+from app.services.catalog_list import series_card_out
 from app.services.publishing import workflow as publishing_workflow
 
 router = APIRouter(tags=["series"])
@@ -59,10 +60,8 @@ def _list_query(
     published_only: bool,
     sort: str,
 ):
-    query = db.query(Series).options(
-        joinedload(Series.genre_links),
-        joinedload(Series.seasons).joinedload(Season.episodes),
-    )
+    # Card lists batch season/episode counts in series_card_out — no seasons graph here.
+    query = db.query(Series).options(joinedload(Series.genre_links))
     query = filter_catalog_query(
         query,
         Series,
@@ -93,10 +92,7 @@ def _paginate_series(
         total = query.count()
         items = query.offset((page - 1) * page_size).limit(page_size).all()
         return paginated(
-            [
-                series_out(s, public_counts=public_counts, db=db, locale=locale)
-                for s in items
-            ],
+            series_card_out(db, items, locale=locale),
             total=total,
             page=page,
             page_size=page_size,

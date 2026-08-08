@@ -3,11 +3,12 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 
 from app.core.deps import DbSession, require_permissions
 from app.models.admin import AdminUser
-from app.models.content import Genre
+from app.models.content import Genre, Movie, Series, movie_genres, series_genres
 from app.schemas.common import Envelope, Message, paginated
 from app.schemas.content import GenreCreate, GenreOut, GenreUpdate
 from app.services.catalog import ensure_unique_genre_slug, genre_out, utcnow
@@ -50,14 +51,53 @@ def list_genres(
     page: int = Query(1, ge=1),
     page_size: int = Query(100, ge=1, le=100),
 ) -> Envelope[GenreOut]:
-    query = db.query(Genre).options(joinedload(Genre.movies), joinedload(Genre.series))
+    # Avoid loading every movie/series into memory just to count them.
+    query = db.query(Genre)
     if q:
         like = f"%{q}%"
         query = query.filter(Genre.name.ilike(like) | Genre.slug.ilike(like))
     query = query.order_by(Genre.name.asc(), Genre.id.asc())
     total = query.count()
     items = query.offset((page - 1) * page_size).limit(page_size).all()
-    return paginated([genre_out(g) for g in items], total=total, page=page, page_size=page_size)
+    genre_ids = [g.id for g in items]
+    movie_counts: dict[int, int] = {}
+    series_counts: dict[int, int] = {}
+    if genre_ids:
+        movie_rows = (
+            db.query(movie_genres.c.genre_id, func.count(Movie.id))
+            .join(Movie, Movie.id == movie_genres.c.movie_id)
+            .filter(
+                movie_genres.c.genre_id.in_(genre_ids),
+                Movie.deleted_at.is_(None),
+            )
+            .group_by(movie_genres.c.genre_id)
+            .all()
+        )
+        series_rows = (
+            db.query(series_genres.c.genre_id, func.count(Series.id))
+            .join(Series, Series.id == series_genres.c.series_id)
+            .filter(
+                series_genres.c.genre_id.in_(genre_ids),
+                Series.deleted_at.is_(None),
+            )
+            .group_by(series_genres.c.genre_id)
+            .all()
+        )
+        movie_counts = {int(gid): int(cnt) for gid, cnt in movie_rows}
+        series_counts = {int(gid): int(cnt) for gid, cnt in series_rows}
+    return paginated(
+        [
+            genre_out(
+                g,
+                movie_count=movie_counts.get(g.id, 0),
+                series_count=series_counts.get(g.id, 0),
+            )
+            for g in items
+        ],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.get("/admin/genres", response_model=Envelope[GenreOut])

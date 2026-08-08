@@ -30,6 +30,7 @@ from app.services.catalog_availability import (
     item_has_dub,
     item_has_subtitles,
 )
+from app.services.catalog_list import movies_card_out
 from app.services.publishing import workflow as publishing_workflow
 
 router = APIRouter(tags=["movies"])
@@ -80,7 +81,7 @@ def _paginate_movies(
         total = query.count()
         items = query.offset((page - 1) * page_size).limit(page_size).all()
         return paginated(
-            [movie_out(m, db, locale=locale) for m in items],
+            movies_card_out(db, items, locale=locale),
             total=total,
             page=page,
             page_size=page_size,

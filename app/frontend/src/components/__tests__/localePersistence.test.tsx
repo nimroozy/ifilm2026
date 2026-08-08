@@ -9,13 +9,13 @@ import AdminLayout from '@/pages/admin/AdminLayout';
 import { tokenStore } from '@/lib/api';
 import { vi } from 'vitest';
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
+vi.mock('@/lib/adminApi', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/adminApi')>('@/lib/adminApi');
   return {
     ...actual,
     adminApi: {
       ...actual.adminApi,
-      me: vi.fn().mockResolvedValue({
+me: vi.fn().mockResolvedValue({
         id: 1,
         username: 'admin',
         full_name: 'Admin User',

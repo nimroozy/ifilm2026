@@ -25,13 +25,13 @@ const getSeason = vi.fn();
 const listEpisodes = vi.fn();
 const dashboardStats = vi.fn();
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
+vi.mock('@/lib/adminApi', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/adminApi')>('@/lib/adminApi');
   return {
     ...actual,
     adminApi: {
       ...actual.adminApi,
-      me: (...args: unknown[]) => me(...args),
+me: (...args: unknown[]) => me(...args),
       login: (...args: unknown[]) => login(...args),
       listMovies: (...args: unknown[]) => listMovies(...args),
       createMovie: (...args: unknown[]) => createMovie(...args),

@@ -33,6 +33,7 @@ import {
   shouldAutoplayTrailerHero,
 } from '@/lib/catalogPresentation';
 import { trailerAutoplayEmbedUrl, trailerEmbedUrl } from '@/lib/trailers';
+import { heroBackdropSrcSet } from '@/lib/imageUrls';
 import { cn } from '@/lib/utils';
 
 type HeroMode = 'backdrop' | 'trailer';
@@ -143,9 +144,12 @@ export function MovieDetailView({
   const languageBadges = movieDetailLanguageBadges(movie);
   const audioAv = resolveAudioAvailability(movie);
   const subAv = resolveSubtitleAvailability(movie);
+  const heroBackdrop = heroBackdropSrcSet(movie.backdrop);
+  /** Defer iframe mount until shortly before transition (keeps detail initial JS/network light). */
+  const [trailerReady, setTrailerReady] = useState(false);
 
   const trailerSrc = useMemo(() => {
-    if (!hasTrailer || heroMode !== 'trailer' || trailerPaused) return '';
+    if (!hasTrailer || !trailerReady || heroMode !== 'trailer' || trailerPaused) return '';
     if (trailerMuted) return trailerAutoplayEmbedUrl(movie);
     const base = trailerEmbedUrl(movie);
     if (!base) return '';
@@ -160,7 +164,7 @@ export function MovieDetailView({
     } catch {
       return base;
     }
-  }, [hasTrailer, heroMode, movie, trailerMuted, trailerPaused]);
+  }, [hasTrailer, trailerReady, heroMode, movie, trailerMuted, trailerPaused]);
 
   useEffect(() => {
     const update = () => setReduceMotion(prefersReducedMotion());
@@ -176,6 +180,7 @@ export function MovieDetailView({
     setUserDismissedTrailer(false);
     setTrailerMuted(true);
     setTrailerPaused(false);
+    setTrailerReady(false);
   }, [movie.id]);
 
   useEffect(() => {
@@ -188,11 +193,18 @@ export function MovieDetailView({
     ) {
       return;
     }
+    // Warm trailer URL ~1s before switch so iframe work stays off the first paint.
+    const warmMs = Math.max(0, MOVIE_HERO_TRAILER_DELAY_MS - 1000);
+    const warmId = window.setTimeout(() => setTrailerReady(true), warmMs);
     const id = window.setTimeout(() => {
+      setTrailerReady(true);
       setHeroMode('trailer');
       setTrailerPaused(false);
     }, MOVIE_HERO_TRAILER_DELAY_MS);
-    return () => window.clearTimeout(id);
+    return () => {
+      window.clearTimeout(warmId);
+      window.clearTimeout(id);
+    };
   }, [hasTrailer, reduceMotion, userDismissedTrailer, movie.id]);
 
   const onShare = async () => {
@@ -206,6 +218,7 @@ export function MovieDetailView({
   const startTrailer = () => {
     if (!hasTrailer) return;
     setUserDismissedTrailer(false);
+    setTrailerReady(true);
     setHeroMode('trailer');
     setTrailerPaused(false);
   };
@@ -226,9 +239,11 @@ export function MovieDetailView({
         data-hero-mode={heroMode}
       >
         <div className="absolute inset-0 bg-[hsl(222,28%,5%)]">
-          {movie.backdrop ? (
+          {heroBackdrop.src ? (
             <img
-              src={movie.backdrop}
+              src={heroBackdrop.src}
+              srcSet={heroBackdrop.srcSet || undefined}
+              sizes={heroBackdrop.srcSet ? heroBackdrop.sizes : undefined}
               alt=""
               className={cn(
                 'h-full w-full object-cover object-top transition-opacity duration-700',
@@ -237,6 +252,7 @@ export function MovieDetailView({
               loading="eager"
               decoding="async"
               data-testid="movie-hero-backdrop"
+              {...({ fetchpriority: 'high' } as object)}
             />
           ) : null}
           {heroMode === 'trailer' && trailerSrc ? (

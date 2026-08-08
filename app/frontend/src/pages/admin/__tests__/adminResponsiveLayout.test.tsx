@@ -11,13 +11,13 @@ const dashboardStats = vi.fn();
 const listMovies = vi.fn();
 const listGenres = vi.fn();
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
+vi.mock('@/lib/adminApi', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/adminApi')>('@/lib/adminApi');
   return {
     ...actual,
     adminApi: {
       ...actual.adminApi,
-      dashboardStats: (...args: unknown[]) => dashboardStats(...args),
+dashboardStats: (...args: unknown[]) => dashboardStats(...args),
       listMovies: (...args: unknown[]) => listMovies(...args),
       listGenres: (...args: unknown[]) => listGenres(...args),
       deleteMovie: vi.fn(),
