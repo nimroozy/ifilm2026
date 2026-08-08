@@ -149,6 +149,21 @@ export async function fetchMovie(idOrSlug: number | string): Promise<CatalogMovi
   return mapMovieDto(await api.getMovie(idOrSlug));
 }
 
+export async function fetchSimilarMovies(
+  idOrSlug: number | string,
+  limit = 12
+): Promise<CatalogMovie[]> {
+  if (isMockMode()) {
+    const item = await fetchMovie(idOrSlug);
+    const page = await fetchMovies({ page_size: 40, sort: 'popular' });
+    return page.items
+      .filter((m) => m.id !== item.id && m.genres.some((g) => item.genres.includes(g)))
+      .slice(0, limit);
+  }
+  const rows = await api.getSimilarMovies(idOrSlug, limit);
+  return rows.map(mapMovieDto);
+}
+
 export async function fetchSeries(params?: CatalogListParams): Promise<CatalogListResult<CatalogSeries>> {
   if (isMockMode()) {
     return paginateMock(filterMockSeries(params), params?.page ?? 1, params?.page_size ?? 100);

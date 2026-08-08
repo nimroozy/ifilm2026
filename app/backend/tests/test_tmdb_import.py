@@ -141,6 +141,28 @@ class FakeTMDB:
     def tv_videos(self, tmdb_id, *, language=None):
         return {"results": []}
 
+    def movie_credits(self, tmdb_id, *, language=None):
+        return {
+            "cast": [
+                {
+                    "id": 1001,
+                    "name": "Demo Actor",
+                    "character": "Lead",
+                    "order": 0,
+                    "profile_path": None,
+                }
+            ]
+        }
+
+    def tv_credits(self, tmdb_id, *, language=None):
+        return {"cast": [{"id": 2001, "name": "Series Actor", "character": "Host", "order": 0}]}
+
+    def movie_similar(self, tmdb_id, *, page=1, language=None):
+        return {"results": []}
+
+    def tv_similar(self, tmdb_id, *, page=1, language=None):
+        return {"results": []}
+
 
 def test_tmdb_client_search_and_token_redaction():
     def handler(request: httpx.Request) -> httpx.Response:

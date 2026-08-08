@@ -103,6 +103,15 @@ export interface GenreDto {
   updated_at?: string | null;
 }
 
+export interface CastCreditDto {
+  person_id: number;
+  name: string;
+  character?: string;
+  profile_path?: string;
+  profile_url?: string;
+  order?: number;
+}
+
 export interface MovieDto {
   id: number;
   title: string;
@@ -143,6 +152,8 @@ export interface MovieDto {
   genres?: GenreDto[] | string[];
   director?: string;
   cast?: string[];
+  credits?: CastCreditDto[];
+  credits_synced_at?: string | null;
   audio?: string[];
   subtitles?: string[];
   qualities?: string[];
@@ -906,6 +917,22 @@ export interface TmdbRefreshResponseDto {
   results: TmdbImportResultDto[];
 }
 
+export interface TmdbTitleRefreshResultDto {
+  media_type?: string;
+  entity_id?: number;
+  tmdb_id?: number | null;
+  trailer_updated?: boolean;
+  credits_count?: number;
+  similar_preview_count?: number;
+  fields_updated?: string[];
+  skipped_manual_fields?: string[];
+}
+
+export interface TmdbTitleRefreshResponseDto {
+  result: TmdbTitleRefreshResultDto;
+  item: MovieDto | SeriesDto | null;
+}
+
 export interface TmdbArtworkReplaceResponseDto {
   changed: Record<string, string>;
 }
@@ -1346,6 +1373,13 @@ export const api = {
     return data;
   },
 
+  async getSimilarMovies(idOrSlug: number | string, limit = 12) {
+    const { data } = await http.get<MovieDto[]>(`/movies/${idOrSlug}/similar`, {
+      params: { limit },
+    });
+    return data;
+  },
+
   async listSeries(params?: CatalogListParams) {
     const { data } = await http.get<Envelope<SeriesDto>>('/series', { params });
     return unwrapList(data);
@@ -1756,6 +1790,14 @@ export const adminApi = {
     return data;
   },
 
+  async refreshTmdbTitle(payload: { media_type: TmdbMediaType; entity_id: number }) {
+    const { data } = await adminHttp.post<TmdbTitleRefreshResponseDto>(
+      '/admin/tools/tmdb/refresh-title',
+      payload
+    );
+    return data;
+  },
+
   async replaceTmdbArtwork(payload: {
     media_type: TmdbMediaType;
     entity_id: number;
@@ -2161,6 +2203,15 @@ export function mapMovieDto(dto: MovieDto) {
     language: dto.language || '',
     director: dto.director || '',
     cast: dto.cast ?? [],
+    credits: (dto.credits ?? []).map((credit) => ({
+      personId: credit.person_id,
+      name: credit.name,
+      character: credit.character || '',
+      profilePath: credit.profile_path || '',
+      profileUrl: credit.profile_url || '',
+      order: credit.order ?? 0,
+    })),
+    creditsSyncedAt: dto.credits_synced_at ?? null,
     description: dto.description || '',
     poster,
     backdrop,

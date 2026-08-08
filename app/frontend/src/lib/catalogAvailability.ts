@@ -225,6 +225,49 @@ export function catalogAvailabilityBadge(
   return undefined;
 }
 
+/** Detail-page language badges: e.g. FA Dub, EN Audio, FA Subtitle. */
+export function movieDetailLanguageBadges(item: CatalogAvailabilityFields): AvailabilityBadge[] {
+  const audio = resolveAudioAvailability(item);
+  const subs = resolveSubtitleAvailability(item);
+  const badges: AvailabilityBadge[] = [];
+  const seen = new Set<string>();
+
+  for (const code of audio.dubbed_languages || []) {
+    const short = compactLanguageBadge(code);
+    const key = `dub-${code}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    badges.push({
+      key,
+      label: `${short} Dub`,
+      fullLabel: `${languageDisplayName(code)} Dub`,
+    });
+  }
+  for (const code of audio.languages || []) {
+    const short = compactLanguageBadge(code);
+    const key = `audio-${code}`;
+    if (seen.has(key) || seen.has(`dub-${code}`)) continue;
+    seen.add(key);
+    badges.push({
+      key,
+      label: `${short} Audio`,
+      fullLabel: `${languageDisplayName(code)} Audio`,
+    });
+  }
+  for (const code of subs.languages || []) {
+    const short = compactLanguageBadge(code);
+    const key = `sub-${code}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    badges.push({
+      key,
+      label: `${short} Subtitle`,
+      fullLabel: `${languageDisplayName(code)} Subtitle`,
+    });
+  }
+  return badges;
+}
+
 export function catalogAvailabilityChips(
   item: CatalogAvailabilityFields,
   labels: { dubbed: string; subtitled: string; audio: string; original?: string }

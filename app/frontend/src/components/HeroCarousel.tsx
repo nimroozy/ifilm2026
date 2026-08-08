@@ -30,6 +30,7 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
   useEffect(() => {
     const update = () => setReduceMotion(prefersReducedMotion());
     update();
+    if (typeof window.matchMedia !== 'function') return;
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
     mq.addEventListener('change', update);
     return () => mq.removeEventListener('change', update);

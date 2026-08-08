@@ -136,3 +136,23 @@ class TMDBClient:
 
     def tv_videos(self, tmdb_id: int, *, language: str | None = None) -> dict[str, Any]:
         return self._get(f"/tv/{int(tmdb_id)}/videos", language=language or self.settings.tmdb_language)
+
+    def movie_credits(self, tmdb_id: int, *, language: str | None = None) -> dict[str, Any]:
+        return self._get(f"/movie/{int(tmdb_id)}/credits", language=language or self.settings.tmdb_language)
+
+    def tv_credits(self, tmdb_id: int, *, language: str | None = None) -> dict[str, Any]:
+        return self._get(f"/tv/{int(tmdb_id)}/credits", language=language or self.settings.tmdb_language)
+
+    def movie_similar(self, tmdb_id: int, *, page: int = 1, language: str | None = None) -> dict[str, Any]:
+        return self._get(
+            f"/movie/{int(tmdb_id)}/similar",
+            page=page,
+            language=language or self.settings.tmdb_language,
+        )
+
+    def tv_similar(self, tmdb_id: int, *, page: int = 1, language: str | None = None) -> dict[str, Any]:
+        return self._get(
+            f"/tv/{int(tmdb_id)}/similar",
+            page=page,
+            language=language or self.settings.tmdb_language,
+        )

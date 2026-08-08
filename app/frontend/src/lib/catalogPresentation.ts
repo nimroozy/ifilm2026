@@ -5,6 +5,7 @@ export interface CatalogPresentationFields {
   playable?: boolean;
   hasPlayablePackage?: boolean;
   hasExternalMedia?: boolean;
+  status?: string | null;
 }
 
 function field<T>(item: unknown, key: string): T | undefined {
@@ -17,6 +18,13 @@ export function isDemoCatalogItem(item: unknown): boolean {
 
 export function hasDemoClip(item: unknown): boolean {
   return field<boolean>(item, 'hasDemoClip') === true;
+}
+
+/** Customer-facing publish gate. Missing status is treated as published (public API). */
+export function isPublishedCatalogItem(item: unknown): boolean {
+  const status = field<string>(item, 'status');
+  if (status == null || status === '') return true;
+  return status === 'published';
 }
 
 /**
@@ -33,19 +41,44 @@ export function canPlayFullMovie(item: unknown): boolean {
   return false;
 }
 
-export function fullMovieUnavailableLabel(): string {
-  return 'Full Movie Unavailable';
+/** Play CTA: published + playable only. Never show Play incorrectly. */
+export function canShowPlayButton(item: unknown): boolean {
+  return isPublishedCatalogItem(item) && canPlayFullMovie(item);
 }
 
-/** Primary CTA order for movie detail: Play → Demo → Trailer → More Info. */
-export type MovieDetailAction = 'play' | 'demo' | 'trailer' | 'unavailable' | 'more';
+/** Prefer Coming Soon / Unavailable — not the old "Full Movie Unavailable" copy. */
+export function movieUnavailableLabel(opts?: { hasTrailer?: boolean; published?: boolean }): string {
+  if (opts?.hasTrailer) return 'Unavailable';
+  if (opts?.published === false) return 'Coming Soon';
+  return 'Coming Soon';
+}
+
+/** @deprecated Use movieUnavailableLabel — kept for transitional callers. */
+export function fullMovieUnavailableLabel(): string {
+  return movieUnavailableLabel();
+}
+
+/** Primary CTA order for movie detail: Play → Demo → Trailer → Coming Soon. */
+export type MovieDetailAction = 'play' | 'demo' | 'trailer' | 'coming_soon' | 'unavailable' | 'more';
 
 export function movieDetailPrimaryActions(item: unknown, hasTrailer: boolean): MovieDetailAction[] {
   const actions: MovieDetailAction[] = [];
-  if (canPlayFullMovie(item)) actions.push('play');
+  if (canShowPlayButton(item)) actions.push('play');
   if (hasDemoClip(item)) actions.push('demo');
   if (hasTrailer) actions.push('trailer');
-  if (!canPlayFullMovie(item) && !hasDemoClip(item)) actions.push('unavailable');
+  if (!canShowPlayButton(item) && !hasDemoClip(item) && !hasTrailer) {
+    actions.push('coming_soon');
+  }
   actions.push('more');
   return actions;
+}
+
+export const MOVIE_HERO_TRAILER_DELAY_MS = 6000;
+
+export function shouldAutoplayTrailerHero(opts: {
+  hasTrailer: boolean;
+  reduceMotion: boolean;
+  userDismissed: boolean;
+}): boolean {
+  return opts.hasTrailer && !opts.reduceMotion && !opts.userDismissed;
 }

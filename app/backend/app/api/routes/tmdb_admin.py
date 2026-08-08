@@ -165,6 +165,50 @@ def refresh_tmdb_demo(payload: RefreshRequest, db: DbSession, _: TMDBAdmin):
     return {"refreshed": len(results), "results": _jsonable(results)}
 
 
+class TitleRefreshRequest(BaseModel):
+    media_type: Literal["movie", "series"] = "movie"
+    entity_id: int = Field(ge=1)
+
+
+@router.post("/admin/tools/tmdb/refresh-title")
+def refresh_tmdb_title(payload: TitleRefreshRequest, db: DbSession, _: TMDBAdmin):
+    """Refresh TMDB-owned trailer/credits for one title without overwriting manual edits."""
+    from app.services.tmdb.refresh_title import refresh_movie_tmdb_details, refresh_series_tmdb_details
+
+    settings = get_settings()
+    client = _client()
+    try:
+        if payload.media_type == "movie":
+            movie = db.get(Movie, payload.entity_id)
+            if movie is None or movie.deleted_at is not None:
+                raise HTTPException(status_code=404, detail="Movie not found")
+            result = refresh_movie_tmdb_details(db, settings, movie, client=client)
+            db.commit()
+            refreshed = db.get(Movie, movie.id)
+            item = movie_out(refreshed, db) if refreshed else None
+        else:
+            series = db.get(Series, payload.entity_id)
+            if series is None or series.deleted_at is not None:
+                raise HTTPException(status_code=404, detail="Series not found")
+            result = refresh_series_tmdb_details(db, settings, series, client=client)
+            db.commit()
+            refreshed_s = db.get(Series, series.id)
+            item = series_out(refreshed_s) if refreshed_s else None
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except TMDBClientError as exc:
+        db.rollback()
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise
+    return {"result": _jsonable(result), "item": item}
+
+
 @router.post("/admin/tools/tmdb/artwork/replace")
 def replace_tmdb_artwork(payload: ReplaceArtworkRequest, db: DbSession, _: TMDBAdmin):
     settings = get_settings()

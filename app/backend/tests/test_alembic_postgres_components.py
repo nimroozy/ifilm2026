@@ -74,7 +74,7 @@ def test_alembic_history_and_heads_without_database_url(postgres_components):
 
     heads = _run_alembic_without_database_url(postgres_components, "heads")
     assert heads.returncode == 0, heads.stdout + heads.stderr
-    assert "017_watchlist_v1" in (heads.stdout + heads.stderr)
+    assert "018_movie_detail_experience_v1" in (heads.stdout + heads.stderr)
 
 
 def test_alembic_upgrade_head_without_database_url(postgres_components):
@@ -98,4 +98,4 @@ def test_alembic_upgrade_head_without_database_url(postgres_components):
     with engine.connect() as conn:
         version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
     engine.dispose()
-    assert version == "017_watchlist_v1"
+    assert version == "018_movie_detail_experience_v1"
