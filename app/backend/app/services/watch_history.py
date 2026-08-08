@@ -340,6 +340,11 @@ def upsert_progress(
         row.last_watched_at = now
         row.last_event_at = event_at
         row.updated_at = now
+        # Resume / new progress brings the title back onto Continue Watching.
+        if not completed and not payload.start_over:
+            row.hidden_from_continue = False
+        if payload.start_over:
+            row.hidden_from_continue = False
         db.add(row)
 
     db.flush()
@@ -362,6 +367,7 @@ def list_continue_watching(
         .filter(
             UserWatchProgress.subscriber_id == subscriber.id,
             UserWatchProgress.completed.is_(False),
+            UserWatchProgress.hidden_from_continue.is_(False),
             UserWatchProgress.position_seconds >= min_seconds,
         )
         .order_by(UserWatchProgress.last_watched_at.desc(), UserWatchProgress.id.desc())
@@ -416,3 +422,22 @@ def delete_all(db: Session, subscriber: Subscriber) -> int:
         .delete(synchronize_session=False)
     )
     return int(deleted)
+
+
+def dismiss_continue_watching(db: Session, subscriber: Subscriber, asset_id: str) -> int:
+    """Hide from Continue Watching without deleting watch history."""
+    row = (
+        db.query(UserWatchProgress)
+        .filter(
+            UserWatchProgress.subscriber_id == subscriber.id,
+            UserWatchProgress.media_asset_id == asset_id,
+        )
+        .first()
+    )
+    if row is None:
+        return 0
+    row.hidden_from_continue = True
+    row.updated_at = utcnow()
+    db.add(row)
+    db.flush()
+    return 1

@@ -1,6 +1,15 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -53,11 +62,39 @@ class Device(Base):
 
 
 class WatchlistItem(Base):
+    """Subscriber watchlist membership — exactly one of movie_id / series_id."""
+
     __tablename__ = "watchlist_items"
-    __table_args__ = (UniqueConstraint("subscriber_id", "content_type", "content_id", name="uq_watchlist"),)
+    __table_args__ = (
+        CheckConstraint(
+            "(movie_id IS NOT NULL AND series_id IS NULL) OR (movie_id IS NULL AND series_id IS NOT NULL)",
+            name="ck_watchlist_items_one_owner",
+        ),
+        Index(
+            "uq_watchlist_items_movie",
+            "subscriber_id",
+            "movie_id",
+            unique=True,
+            sqlite_where=text("movie_id IS NOT NULL"),
+            postgresql_where=text("movie_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_watchlist_items_series",
+            "subscriber_id",
+            "series_id",
+            unique=True,
+            sqlite_where=text("series_id IS NOT NULL"),
+            postgresql_where=text("series_id IS NOT NULL"),
+        ),
+        Index("ix_watchlist_items_subscriber_created", "subscriber_id", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     subscriber_id: Mapped[int] = mapped_column(ForeignKey("subscribers.id", ondelete="CASCADE"), index=True)
-    content_type: Mapped[str] = mapped_column(String(32), nullable=False)
-    content_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    movie_id: Mapped[int | None] = mapped_column(
+        ForeignKey("movies.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    series_id: Mapped[int | None] = mapped_column(
+        ForeignKey("series.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

@@ -947,6 +947,36 @@ export interface WatchProgressActionDto {
   deleted: number;
 }
 
+export interface WatchlistItemDto {
+  id: number;
+  content_type: 'movie' | 'series';
+  movie_id?: number | null;
+  series_id?: number | null;
+  title: string;
+  poster_url?: string;
+  backdrop_url?: string;
+  release_year?: number | null;
+  available: boolean;
+  detail_path: string;
+  player_path?: string;
+  created_at?: string | null;
+}
+
+export interface WatchlistActionDto {
+  detail: string;
+  deleted: number;
+}
+
+export interface WatchlistMembershipDto {
+  in_watchlist: boolean;
+  item_id: number | null;
+}
+
+export interface WatchlistAddBody {
+  movie_id?: number;
+  series_id?: number;
+}
+
 export interface StreamingStatusDto {
   enabled: boolean;
   supported_principals: string[];
@@ -1375,6 +1405,11 @@ export const api = {
     return data;
   },
 
+  async dismissContinueWatching(assetId: string) {
+    const { data } = await http.delete<WatchProgressActionDto>(`/me/continue-watching/${assetId}`);
+    return data;
+  },
+
   async listWatchHistory(params?: { page?: number; page_size?: number }) {
     const { data } = await http.get<Envelope<WatchProgressDto>>('/me/watch-history', { params });
     return unwrapList(data);
@@ -1392,6 +1427,36 @@ export const api = {
 
   async completeWatchProgress(assetId: string, body: WatchProgressUpdate) {
     const { data } = await http.post<WatchProgressDto>(`/me/watch-progress/${assetId}/complete`, body);
+    return data;
+  },
+
+  async listWatchlist(params?: { page?: number; page_size?: number }) {
+    const { data } = await http.get<Envelope<WatchlistItemDto>>('/me/watchlist', { params });
+    return unwrapList(data);
+  },
+
+  async getWatchlistMembership(params: { movie_id?: number; series_id?: number }) {
+    const { data } = await http.get<WatchlistMembershipDto>('/me/watchlist/membership', { params });
+    return data;
+  },
+
+  async addWatchlistItem(body: WatchlistAddBody) {
+    const { data } = await http.post<WatchlistItemDto>('/me/watchlist', body);
+    return data;
+  },
+
+  async deleteWatchlistItem(itemId: number) {
+    const { data } = await http.delete<WatchlistActionDto>(`/me/watchlist/${itemId}`);
+    return data;
+  },
+
+  async removeWatchlistByContent(params: { movie_id?: number; series_id?: number }) {
+    const { data } = await http.delete<WatchlistActionDto>('/me/watchlist', { params });
+    return data;
+  },
+
+  async clearWatchlist() {
+    const { data } = await http.delete<WatchlistActionDto>('/me/watchlist');
     return data;
   },
 

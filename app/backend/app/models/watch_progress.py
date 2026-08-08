@@ -60,6 +60,9 @@ class UserWatchProgress(Base):
     duration_seconds: Mapped[float] = mapped_column(Float, nullable=False)
     progress_percent: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    hidden_from_continue: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, index=True
+    )
     first_watched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
     last_watched_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow, index=True

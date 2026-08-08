@@ -17,6 +17,8 @@ import {
 import { api, ApiError, tokenStore, type WatchProgressDto } from '@/lib/api';
 import { isMockMode } from '@/lib/dataMode';
 import { hasDemoClip, canPlayFullMovie } from '@/lib/catalogPresentation';
+import { X } from 'lucide-react';
+import { toast } from '@/hooks/use-toast';
 
 type HomeData = Awaited<ReturnType<typeof fetchHomeCatalog>>;
 
@@ -170,32 +172,62 @@ function ContinueWatchingRow() {
   const items = mockMode ? watchHistory.filter((item) => item.progress < 100) : apiItems ?? [];
   if (!items.length) return null;
 
+  const dismiss = async (assetId: string, title: string) => {
+    try {
+      await api.dismissContinueWatching(assetId);
+      setApiItems((prev) => (prev ?? []).filter((row) => row.media_asset_id !== assetId));
+      toast({ title: t.sections.continueWatching, description: `Removed “${title}”` });
+    } catch (err) {
+      toast({
+        title: t.sections.continueWatching,
+        description: err instanceof ApiError ? err.message : 'Unable to dismiss item',
+        variant: 'destructive',
+      });
+    }
+  };
+
   return (
     <ContentShelf title={t.sections.continueWatching}>
       {items.map((item) => (
-        <MediaCard
-          key={item.id}
-          variant="landscape"
-          size="sm"
-          title={item.title}
-          imageUrl={'poster_url' in item ? item.poster_url : item.poster}
-          progress={
-            Math.min(100, Math.max(0, 'progress_percent' in item ? item.progress_percent : item.progress))
-          }
-          runtime={'subtitle' in item ? item.subtitle || undefined : item.episode || undefined}
-          playable={
-            'media_asset_id' in item
-              ? Boolean(item.available && item.player_path)
-              : true
-          }
-          onActivate={() => {
-            if ('media_asset_id' in item) {
-              if (item.available && item.player_path) navigate(item.player_path);
-            } else {
-              navigate(item.type === 'series' ? `/series/${item.contentId}` : `/player/movie/${item.contentId}`);
+        <div key={item.id} className="relative">
+          <MediaCard
+            variant="landscape"
+            size="sm"
+            title={item.title}
+            imageUrl={'poster_url' in item ? item.poster_url : item.poster}
+            progress={
+              Math.min(100, Math.max(0, 'progress_percent' in item ? item.progress_percent : item.progress))
             }
-          }}
-        />
+            runtime={'subtitle' in item ? item.subtitle || undefined : item.episode || undefined}
+            playable={
+              'media_asset_id' in item
+                ? Boolean(item.available && item.player_path)
+                : true
+            }
+            onActivate={() => {
+              if ('media_asset_id' in item) {
+                if (item.available && item.player_path) navigate(item.player_path);
+              } else {
+                navigate(item.type === 'series' ? `/series/${item.contentId}` : `/player/movie/${item.contentId}`);
+              }
+            }}
+          />
+          {'media_asset_id' in item ? (
+            <Button
+              size="icon"
+              variant="secondary"
+              className="absolute end-2 top-2 z-10 h-8 w-8 rounded-full opacity-90"
+              aria-label={`Remove ${item.title} from Continue Watching`}
+              data-testid={`cw-dismiss-${item.media_asset_id}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                void dismiss(item.media_asset_id, item.title);
+              }}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          ) : null}
+        </div>
       ))}
     </ContentShelf>
   );

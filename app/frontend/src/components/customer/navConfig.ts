@@ -32,7 +32,7 @@ export const DESKTOP_NAV_ITEMS: CustomerNavItem[] = [
   { id: 'dubbed', path: '/dubbed' },
   { id: 'subtitled', path: '/subtitled' },
   { id: 'newReleases', path: '/new-releases' },
-  // My List / Watchlist intentionally omitted from Phase 3 chrome — APIs deferred.
+  { id: 'myList', path: '/watchlist' },
 ];
 
 /** Always visible on md+ before overflow measurement; remainder go into More. */
