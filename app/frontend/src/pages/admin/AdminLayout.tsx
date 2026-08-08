@@ -13,6 +13,7 @@ import {
   Menu,
   LogOut,
   ArrowUpCircle,
+  HardDrive,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -49,6 +50,7 @@ const navGroups: NavGroup[] = [
     label: 'Media',
     items: [
       { to: '/admin/tools/upload', label: 'Upload', icon: Upload },
+      { to: '/admin/media/storage-health', label: 'Storage Health', icon: HardDrive },
       { to: '/admin/media/processing', label: 'Processing', icon: Cpu },
       { to: '/admin/media/playback-sessions', label: 'Playback Sessions', icon: PlayCircle },
     ],

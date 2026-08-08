@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import {
   ApiError,
   adminApi,
   type MediaAssetDto,
+  type MediaAssetUsageDto,
   type MediaPackageDto,
   type ProcessingJobDto,
   type ProcessingStatusDto,
@@ -30,14 +31,17 @@ function formatDuration(seconds: number | null | undefined): string {
 
 export default function MediaAssetDetailPage() {
   const { assetId = '' } = useParams();
+  const navigate = useNavigate();
   const [asset, setAsset] = useState<MediaAssetDto | null>(null);
   const [jobs, setJobs] = useState<ProcessingJobDto[]>([]);
   const [packages, setPackages] = useState<MediaPackageDto[]>([]);
   const [status, setStatus] = useState<ProcessingStatusDto | null>(null);
+  const [usages, setUsages] = useState<MediaAssetUsageDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const pollRef = useRef<number | null>(null);
 
   const activeJob = jobs.find((j) => !TERMINAL.has(j.status)) ?? jobs[0] ?? null;
@@ -51,16 +55,18 @@ export default function MediaAssetDetailPage() {
     if (!assetId) return;
     setError(null);
     try {
-      const [data, processing, feature, pkgs] = await Promise.all([
+      const [data, processing, feature, pkgs, usage] = await Promise.all([
         adminApi.getMediaAsset(assetId),
         adminApi.listAssetProcessingJobs(assetId).catch(() => ({ items: [] as ProcessingJobDto[] })),
         adminApi.getProcessingStatus().catch(() => null),
         adminApi.listAssetPackages(assetId).catch(() => ({ items: [] as MediaPackageDto[] })),
+        adminApi.getMediaAssetUsages(assetId).catch(() => ({ asset_id: assetId, usages: [] as MediaAssetUsageDto[] })),
       ]);
       setAsset(data);
       setJobs(processing.items ?? []);
       setStatus(feature);
       setPackages(pkgs.items ?? []);
+      setUsages(usage.usages ?? []);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Failed to load media asset');
     } finally {
@@ -138,6 +144,27 @@ export default function MediaAssetDetailPage() {
       await load();
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : 'Failed to cancel job');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteAsset() {
+    if (!assetId || !confirmDelete) return;
+    setBusy(true);
+    setActionError(null);
+    try {
+      await adminApi.deleteMediaAsset(assetId, true);
+      navigate('/admin/tools/upload', { replace: true });
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409 && err.details && typeof err.details === 'object') {
+        const detail = err.details as { message?: string; usages?: MediaAssetUsageDto[] };
+        setUsages(detail.usages ?? usages);
+        setActionError(detail.message || err.message);
+      } else {
+        setActionError(err instanceof ApiError ? err.message : 'Failed to delete media');
+      }
+      setConfirmDelete(false);
     } finally {
       setBusy(false);
     }
@@ -221,6 +248,49 @@ export default function MediaAssetDetailPage() {
           <dd className="font-mono text-xs break-all">{asset.checksum_sha256 || '—'}</dd>
         </div>
       </dl>
+
+      <section className="border border-border rounded-lg p-4 bg-card space-y-3" data-testid="media-delete-panel">
+        <h2 className="font-serif font-semibold">Delete media</h2>
+        <p className="text-sm text-muted-foreground">
+          Linked or in-use assets cannot be deleted. Unlink/archive first. Path traversal outside MEDIA_ROOT is rejected.
+        </p>
+        {usages.length > 0 ? (
+          <div className="text-sm" data-testid="media-usages">
+            <p className="font-medium mb-1">Used by:</p>
+            <ul className="list-disc ps-5 space-y-1">
+              {usages.map((u) => (
+                <li key={`${u.kind}-${u.id}`}>
+                  {u.kind}: {u.label || u.id}
+                  {u.status ? ` (${u.status})` : ''}
+                  {u.is_active ? ' · active' : ''}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">No catalog links or active packages.</p>
+        )}
+        {!confirmDelete ? (
+          <Button
+            size="sm"
+            variant="destructive"
+            disabled={busy || asset.upload_status === 'deleted'}
+            onClick={() => setConfirmDelete(true)}
+            data-testid="delete-media"
+          >
+            Delete
+          </Button>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="destructive" disabled={busy} onClick={() => void deleteAsset()} data-testid="confirm-delete-media">
+              Confirm delete
+            </Button>
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => setConfirmDelete(false)}>
+              Cancel
+            </Button>
+          </div>
+        )}
+      </section>
 
       <section className="border border-border rounded-lg p-4 bg-card space-y-3" data-testid="processing-panel">
         <div className="flex flex-wrap items-center justify-between gap-3">

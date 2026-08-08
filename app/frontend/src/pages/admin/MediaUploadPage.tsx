@@ -12,8 +12,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ApiError, adminApi, type MediaCategory } from '@/lib/api';
+import { ApiError, adminApi, type MediaCategory, type MediaDuplicateDetail } from '@/lib/api';
 import { EmptyState, ErrorState, LoadingBlock, StatusBadge } from './adminShared';
+
+function asDuplicateDetail(err: unknown): MediaDuplicateDetail | null {
+  if (!(err instanceof ApiError) || err.status !== 409) return null;
+  const detail = err.details;
+  if (!detail || typeof detail !== 'object') return null;
+  const obj = detail as Partial<MediaDuplicateDetail>;
+  if (obj.code !== 'duplicate_checksum' || typeof obj.existing_asset_id !== 'string') return null;
+  return obj as MediaDuplicateDetail;
+}
 
 const CATEGORIES: MediaCategory[] = ['originals', 'posters', 'backdrops', 'trailers', 'subtitles'];
 
@@ -42,6 +51,7 @@ export default function MediaUploadPage() {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [duplicate, setDuplicate] = useState<MediaDuplicateDetail | null>(null);
   const [assets, setAssets] = useState<Awaited<ReturnType<typeof adminApi.listMediaAssets>>['items']>([]);
   const [loadingList, setLoadingList] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
@@ -71,6 +81,7 @@ export default function MediaUploadPage() {
     }
     setBusy(true);
     setError(null);
+    setDuplicate(null);
     setProgress(0);
     try {
       const created = await adminApi.createMediaUploadSession({
@@ -93,7 +104,13 @@ export default function MediaUploadPage() {
       }
       navigate(`/admin/media/${completed.media_asset_id}`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Upload failed');
+      const dup = asDuplicateDetail(err);
+      if (dup) {
+        setDuplicate(dup);
+        setError(dup.message);
+      } else {
+        setError(err instanceof ApiError ? err.message : 'Upload failed');
+      }
     } finally {
       setBusy(false);
     }
@@ -108,6 +125,9 @@ export default function MediaUploadPage() {
             Stream files into local MEDIA_ROOT storage. Encoding runs through the processing pipeline.
           </p>
         </div>
+        <Button variant="outline" asChild>
+          <Link to="/admin/media/storage-health">Storage Health</Link>
+        </Button>
       </div>
 
       {ownerPreselect ? (
@@ -151,9 +171,54 @@ export default function MediaUploadPage() {
           </Select>
         </div>
         {error && (
-          <Alert variant="destructive">
-            <AlertTitle>Upload error</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
+          <Alert variant="destructive" data-testid="upload-error">
+            <AlertTitle>{duplicate ? 'This file already exists.' : 'Upload error'}</AlertTitle>
+            <AlertDescription>
+              <p>{error}</p>
+              {duplicate ? (
+                <div className="mt-3 flex flex-wrap gap-2" data-testid="duplicate-actions">
+                  <Button size="sm" asChild>
+                    <Link to={`/admin/media/${duplicate.existing_asset_id}`}>View Existing</Link>
+                  </Button>
+                  {ownerPreselect ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        void (async () => {
+                          try {
+                            await adminApi.linkMediaAsset(duplicate.existing_asset_id, {
+                              owner_type: ownerPreselect.ownerType,
+                              owner_id: ownerPreselect.ownerId,
+                            });
+                            navigate(
+                              ownerPreselect.ownerType === 'movie'
+                                ? `/admin/movies/${ownerPreselect.ownerId}/edit`
+                                : `/admin/episodes/${ownerPreselect.ownerId}/edit`,
+                              { replace: true }
+                            );
+                          } catch (linkErr) {
+                            setError(linkErr instanceof ApiError ? linkErr.message : 'Link failed');
+                          }
+                        })();
+                      }}
+                    >
+                      Link Existing Media
+                    </Button>
+                  ) : null}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setDuplicate(null);
+                      setError(null);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              ) : null}
+            </AlertDescription>
           </Alert>
         )}
         {busy && (

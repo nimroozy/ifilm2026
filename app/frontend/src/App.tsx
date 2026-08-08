@@ -36,6 +36,7 @@ import CollectionsListPage from '@/pages/admin/CollectionsListPage';
 import CollectionFormPage from '@/pages/admin/CollectionFormPage';
 import MediaUploadPage from '@/pages/admin/MediaUploadPage';
 import MediaAssetDetailPage from '@/pages/admin/MediaAssetDetailPage';
+import MediaStorageHealthPage from '@/pages/admin/MediaStorageHealthPage';
 import MediaProcessingJobsPage from '@/pages/admin/MediaProcessingJobsPage';
 import PlaybackSessionsPage from '@/pages/admin/PlaybackSessionsPage';
 import SystemUpdatesPage from '@/pages/admin/SystemUpdatesPage';
@@ -200,6 +201,7 @@ const router = createBrowserRouter([
           { path: 'collections/:id/edit', element: <CollectionFormPage /> },
           { path: 'tools/upload', element: <MediaUploadPage /> },
           { path: 'tools/tmdb', element: <TmdbToolsPage /> },
+          { path: 'media/storage-health', element: <MediaStorageHealthPage /> },
           { path: 'media/processing', element: <MediaProcessingJobsPage /> },
           { path: 'media/playback-sessions', element: <PlaybackSessionsPage /> },
           { path: 'media/:assetId', element: <MediaAssetDetailPage /> },

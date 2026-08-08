@@ -148,7 +148,7 @@ def queue_probe_job(
     admin_id: int | None,
 ) -> tuple[MediaProcessingJob, bool]:
     """Create a queued probe job. Returns (job, created)."""
-    if asset.upload_status != "completed":
+    if asset.upload_status not in {"completed", "stored"}:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Probe requires a completed upload",
@@ -157,6 +157,35 @@ def queue_probe_job(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unsupported storage backend for processing",
+        )
+
+    # Never enqueue while the file is still temporary / missing.
+    from app.services.media_processing.paths import resolve_completed_asset_path
+
+    try:
+        path = resolve_completed_asset_path(asset, allow_transient_missing=False)
+    except Exception as exc:  # noqa: BLE001 — surface precise admin-facing reason
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": getattr(exc, "code", "file_missing"),
+                "message": str(exc) or "Uploaded media file is missing",
+                "asset_id": asset.id,
+                "category": asset.category,
+                "storage_key": asset.storage_path,
+                "expected_size": asset.size_bytes,
+            },
+        ) from exc
+    if asset.size_bytes and path.stat().st_size != asset.size_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "size_mismatch",
+                "message": "Stored file size does not match asset metadata",
+                "asset_id": asset.id,
+                "expected_size": asset.size_bytes,
+                "actual_size": path.stat().st_size,
+            },
         )
 
     existing = find_active_probe_job(db, asset.id)
@@ -208,6 +237,30 @@ def retry_job(db: Session, *, settings: Settings, job: MediaProcessingJob) -> Me
             detail="Maximum attempts exhausted",
         )
     if job.job_type == JOB_TYPE_PROBE:
+        asset = job.media_asset or db.get(MediaAsset, job.media_asset_id)
+        if asset is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Media asset missing for probe retry",
+            )
+        # Verify file exists before creating/reactivating a probe job.
+        from app.services.media_processing.paths import resolve_completed_asset_path
+
+        try:
+            resolve_completed_asset_path(asset, allow_transient_missing=False)
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": getattr(exc, "code", "file_missing"),
+                    "message": str(exc) or "Cannot retry probe: media file is missing",
+                    "asset_id": asset.id,
+                    "category": asset.category,
+                    "storage_key": asset.storage_path,
+                    "previous_error_code": job.error_code,
+                    "previous_error_message": job.error_message,
+                },
+            ) from exc
         active = find_active_probe_job(db, job.media_asset_id)
         conflict_detail = "An active probe job already exists for this asset"
     elif job.job_type == JOB_TYPE_ENCODE_HLS:
