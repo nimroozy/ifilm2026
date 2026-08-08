@@ -109,6 +109,19 @@ PY
   "${COMPOSE[@]}" exec -T media-processing-worker sh -c 'test ! -w /data/media/originals' \
     && ok "worker originals read-only" || bad "worker originals read-only"
 
+  echo "==> Shared upload category visibility (API write ↔ worker read)"
+  # Regression: trailers uploaded via API must be visible to the probe worker.
+  marker="ops-check-$(date +%s)-$$"
+  for category in originals trailers subtitles posters backdrops; do
+    "${COMPOSE[@]}" exec -T backend-api sh -c \
+      "mkdir -p /data/media/${category}/.ops && printf '%s' '${marker}' > /data/media/${category}/.ops/shared.txt" \
+      && ok "api wrote ${category}/.ops/shared.txt" || bad "api wrote ${category}/.ops/shared.txt"
+    "${COMPOSE[@]}" exec -T media-processing-worker sh -c \
+      "test -f /data/media/${category}/.ops/shared.txt && grep -qx '${marker}' /data/media/${category}/.ops/shared.txt" \
+      && ok "worker reads ${category} shared volume" || bad "worker cannot read ${category} (missing mount?)"
+    "${COMPOSE[@]}" exec -T backend-api sh -c "rm -f /data/media/${category}/.ops/shared.txt" || true
+  done
+
   echo "==> Disk space (host view)"
   df -h | head -20 || true
 

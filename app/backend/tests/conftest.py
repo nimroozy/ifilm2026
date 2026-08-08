@@ -62,6 +62,9 @@ from app.db.base import Base
 
 Path(os.environ["MEDIA_ROOT"]).mkdir(parents=True, exist_ok=True)
 Path(os.environ["ARTWORK_ROOT"]).mkdir(parents=True, exist_ok=True)
+# Required upload categories for media-processing readiness / worker mount checks.
+for _media_category in ("originals", "trailers", "subtitles", "posters", "backdrops", "temp", "packages"):
+    (Path(os.environ["MEDIA_ROOT"]) / _media_category).mkdir(parents=True, exist_ok=True)
 
 engine = create_engine(
     "sqlite://",

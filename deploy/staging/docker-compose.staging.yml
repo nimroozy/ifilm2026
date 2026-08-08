@@ -148,7 +148,12 @@ services:
       <<: *api_env
       MEDIA_PROCESSING_WORKER_ID: ${MEDIA_PROCESSING_WORKER_ID:-staging-media-1}
     volumes:
+      # Share all API upload categories (not just originals) so probe can read files.
       - staging_media_originals:/data/media/originals:ro
+      - staging_media_trailers:/data/media/trailers:ro
+      - staging_media_subtitles:/data/media/subtitles:ro
+      - staging_media_posters:/data/media/posters:ro
+      - staging_media_backdrops:/data/media/backdrops:ro
       - staging_media_packages:/data/media/packages
       - staging_media_temp:/data/media/temp
     depends_on:
@@ -157,10 +162,11 @@ services:
       backend-api:
         condition: service_healthy
     healthcheck:
+      # Binaries + required MEDIA_ROOT category mounts (trailers/etc. shared with API).
       test:
         [
           "CMD-SHELL",
-          "set -a; . /run/ifilm/runtime.env; set +a; python -c \"from app.services.media_processing.ffmpeg import binary_available; from app.core.config import get_settings; get_settings.cache_clear(); s=get_settings(); ok=binary_available(s.ffprobe_binary) and (binary_available(s.ffmpeg_binary) if s.enable_hls_encoding else True); raise SystemExit(0 if ok else 1)\"",
+          "set -a; . /run/ifilm/runtime.env; set +a; python -m app.workers.media_processing --healthcheck",
         ]
       interval: 30s
       timeout: 10s

@@ -9,10 +9,23 @@ IFILM_VAR="${IFILM_VAR:-/var/lib/ifilm}"
 IFILM_LOG="${IFILM_LOG:-/var/log/ifilm}"
 ENV_FILE="${IFILM_ETC}/ifilm.env"
 COMPOSE_FILE="${IFILM_HOME}/current/packaging/compose/docker-compose.production.yml"
+# Interim VPS hot-fix only — never part of a signed release. Official deploy uses
+# docker-compose.production.yml alone; remove leftovers so they cannot be re-applied.
+MEDIA_CATEGORIES_HOTFIX_OVERRIDE="docker-compose.media-categories.override.yml"
 NONINTERACTIVE="${IFILM_NONINTERACTIVE:-0}"
 
 log() { printf '[ifilm] %s\n' "$*"; }
 die() { printf '[ifilm] ERROR: %s\n' "$*" >&2; exit 1; }
+
+remove_media_categories_hotfix_override() {
+  local compose_dir override
+  compose_dir="$(dirname "$COMPOSE_FILE")"
+  override="${compose_dir}/${MEDIA_CATEGORIES_HOTFIX_OVERRIDE}"
+  if [[ -f "$override" ]]; then
+    log "removing interim ${MEDIA_CATEGORIES_HOTFIX_OVERRIDE} (bundled production compose is authoritative)"
+    rm -f "$override"
+  fi
+}
 
 rand_hex() { openssl rand -hex 32; }
 rand_password() { openssl rand -base64 32 | tr -d '/+=' | head -c 40; }
@@ -406,8 +419,10 @@ verify_pulled_digest() {
 
 start_stack() {
   [[ -f "$COMPOSE_FILE" ]] || die "missing compose file ${COMPOSE_FILE}"
+  remove_media_categories_hotfix_override
   apply_image_digests_from_manifest
   # Production installs pull immutable digest refs only — never --build.
+  # Single compose file only — never -f …media-categories.override.yml.
   docker compose -p ifilm --env-file "$ENV_FILE" -f "$COMPOSE_FILE" pull
   # shellcheck disable=SC1090,SC1091
   set -a

@@ -71,6 +71,9 @@ jobs:
       - name: Image digest policy tests
         run: python3 packaging/tests/test_image_digests.py -v
 
+      - name: Compose media mount contract (API ↔ probe worker)
+        run: python3 packaging/tests/test_compose_media_mounts.py -v
+
       - name: Signing trust anchor / revocation
         run: python3 packaging/tests/test_signing_trust_anchor.py -v
 

@@ -109,8 +109,17 @@ def _package_out(package, *, include_renditions: bool = True) -> MediaPackageOut
 def processing_feature_status(
     _: Annotated[AdminUser, Depends(require_permissions("processing.read"))],
 ):
+    from app.services.media_processing.mount_health import media_processing_readiness
+
     settings = get_settings()
     bins = processing_binaries_ok(settings)
+    media = media_processing_readiness(settings)
+    ready = bool(
+        settings.enable_media_processing
+        and bins["ffprobe"]
+        and (bins["ffmpeg"] if settings.enable_hls_encoding else True)
+        and media.get("media_processing_ready")
+    )
     return ProcessingStatusOut(
         enabled=bool(settings.enable_media_processing),
         hls_encoding_enabled=bool(
@@ -118,6 +127,8 @@ def processing_feature_status(
         ),
         ffmpeg_available=bins["ffmpeg"],
         ffprobe_available=bins["ffprobe"],
+        media_processing_ready=ready,
+        mounts=dict(media.get("mounts") or {}),
     )
 
 

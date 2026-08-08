@@ -139,20 +139,21 @@ services:
       HLS_MAX_HEIGHT: ${HLS_MAX_HEIGHT:-1080}
       HLS_X264_PRESET: ${HLS_X264_PRESET:-veryfast}
     volumes:
-      # Source uploads: read-only for encode/probe.
+      # Source uploads: read-only for encode/probe — all API write categories.
       - ifilm_media_originals:/data/media/originals:ro
+      - ifilm_media_trailers:/data/media/trailers:ro
+      - ifilm_media_subtitles:/data/media/subtitles:ro
+      - ifilm_media_posters:/data/media/posters:ro
+      - ifilm_media_backdrops:/data/media/backdrops:ro
       # Packages + temporary encode workspaces under packages/work: read-write.
       - ifilm_media_packages:/data/media/packages
+      - ifilm_media_temp:/data/media/temp
       - ./app/backend:/app
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "python -c \"from app.services.media_processing.ffmpeg import binary_available; from app.core.config import get_settings; s=get_settings(); ok=binary_available(s.ffprobe_binary) and (binary_available(s.ffmpeg_binary) if s.enable_hls_encoding else True); raise SystemExit(0 if ok else 1)\"",
-        ]
+      test: ["CMD", "python", "-m", "app.workers.media_processing", "--healthcheck"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -21,6 +21,12 @@ from app.services.media_processing.jobs import (
     heartbeat_job,
     recover_stale_jobs,
 )
+from app.services.media_processing.mount_health import (
+    MediaMountHealthError,
+    assert_required_media_mounts,
+    log_media_mount_health,
+    worker_media_mounts_healthy,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +55,22 @@ def processing_binaries_ok(settings: Settings) -> dict[str, bool]:
         "ffmpeg": binary_available(settings.ffmpeg_binary),
         "ffprobe": binary_available(settings.ffprobe_binary),
     }
+
+
+def worker_startup_health_ok(settings: Settings) -> bool:
+    """Binaries + required MEDIA_ROOT category mounts (Docker HEALTHCHECK)."""
+    bins = processing_binaries_ok(settings)
+    if not bins["ffprobe"]:
+        return False
+    if settings.enable_hls_encoding and not bins["ffmpeg"]:
+        return False
+    return worker_media_mounts_healthy(settings)
+
+
+def validate_media_mounts(settings: Settings) -> None:
+    """Fail startup when required upload category mounts are missing."""
+    health = assert_required_media_mounts(settings)
+    log_media_mount_health(health)
 
 
 def run_once(db: Session, *, settings: Settings, worker_id: str) -> bool:
@@ -121,6 +143,13 @@ def run_forever(*, settings: Settings | None = None) -> None:
     except Exception as exc:  # noqa: BLE001
         logger.error("Binary validation failed: %s", exc)
         raise SystemExit(2) from exc
+
+    try:
+        validate_media_mounts(settings)
+    except MediaMountHealthError as exc:
+        logger.error("%s", exc)
+        # Non-zero exit → container unhealthy / restart; do not claim jobs.
+        raise SystemExit(3) from exc
 
     worker_id = default_worker_id(settings)
     logger.info(

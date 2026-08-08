@@ -83,6 +83,8 @@ class ProcessingStatusOut(BaseModel):
     hls_encoding_enabled: bool
     ffmpeg_available: bool
     ffprobe_available: bool
+    media_processing_ready: bool = False
+    mounts: dict[str, str] = {}
 
 
 class EncodingProfileOut(ORMModel):

@@ -130,12 +130,26 @@ services:
     environment:
       <<: *api_env
     volumes:
+      # Must share every category the API can finalize uploads into.
+      # Missing mounts create empty container-local dirs (ensure_media_layout)
+      # and probe fails with "Uploaded media file is missing" (prod trailers bug).
       - /var/lib/ifilm/media/originals:/data/media/originals:ro
+      - /var/lib/ifilm/media/trailers:/data/media/trailers:ro
+      - /var/lib/ifilm/media/subtitles:/data/media/subtitles:ro
+      - /var/lib/ifilm/media/posters:/data/media/posters:ro
+      - /var/lib/ifilm/media/backdrops:/data/media/backdrops:ro
       - /var/lib/ifilm/media/packages:/data/media/packages
       - /var/lib/ifilm/media/temp:/data/media/temp
     depends_on:
       backend-api:
         condition: service_healthy
+    healthcheck:
+      # Fail unhealthy when ffmpeg/ffprobe or a required upload category mount is missing.
+      test: ["CMD", "python", "-m", "app.workers.media_processing", "--healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     networks: [ifilm_net]
 
   publishing-worker:

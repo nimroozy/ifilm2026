@@ -32,6 +32,9 @@ IFILM_HOME = Path(os.environ.get("IFILM_HOME", "/opt/ifilm"))
 IFILM_ETC = Path(os.environ.get("IFILM_ETC", "/etc/ifilm"))
 IFILM_VAR = Path(os.environ.get("IFILM_VAR", "/var/lib/ifilm"))
 COMPOSE_FILE = IFILM_HOME / "current" / "packaging" / "compose" / "docker-compose.production.yml"
+# Interim VPS hot-fix filename (PR #51). Not shipped in releases; delete on activate
+# so official `docker-compose.production.yml` alone drives mounts + worker healthcheck.
+MEDIA_CATEGORIES_HOTFIX_OVERRIDE = "docker-compose.media-categories.override.yml"
 ENV_FILE = IFILM_ETC / "ifilm.env"
 REPO = os.environ.get("IFILM_REPO", "nimroozy/ifilm2026")
 PUBLIC_KEY = IFILM_HOME / "current" / "packaging" / "keys" / "release-signing.pub"
@@ -813,11 +816,25 @@ def _compose_stop_app(compose_file: Path) -> None:
                 _run(["docker", "rm", "-f", name], timeout=120)
 
 
+def _remove_media_categories_hotfix_override(compose_file: Path) -> None:
+    """Drop interim media-categories override so release compose is authoritative."""
+    override = compose_file.parent / MEDIA_CATEGORIES_HOTFIX_OVERRIDE
+    if override.is_file():
+        override.unlink()
+        print(
+            f"[update-agent] removed interim compose override {override.name} "
+            "(bundled docker-compose.production.yml is authoritative)",
+            flush=True,
+        )
+
+
 def _compose_pull_and_up(compose_file: Path | None = None) -> None:
     """Pull exact digests and recreate iFilm-managed app services under project `ifilm`."""
     compose_file = compose_file or _compose_file_for()
     if not compose_file.is_file():
         raise AgentError("compose_missing", f"compose file missing: {compose_file}")
+    # Official path uses a single -f production.yml; never re-apply VPS hot-fix overrides.
+    _remove_media_categories_hotfix_override(compose_file)
     refs = _image_refs_from_env()
     compose_env = _compose_env()
     _docker_pull_ref(refs["backend-api"])
