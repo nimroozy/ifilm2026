@@ -148,6 +148,21 @@ class ComposeMediaMountTests(unittest.TestCase):
                     f"{compose.relative_to(ROOT)}: healthcheck must run "
                     "python -m app.workers.media_processing --healthcheck",
                 )
+                # Must override backend-api image HEALTHCHECK (curl :8000).
+                self.assertNotIn(
+                    "curl",
+                    body.lower(),
+                    f"{compose.relative_to(ROOT)}: worker healthcheck must not curl API :8000",
+                )
+                self.assertIn("app.workers.media_processing", body)
+
+    def test_release_compose_tree_has_no_media_categories_hotfix_override(self) -> None:
+        override = ROOT / "packaging/compose/docker-compose.media-categories.override.yml"
+        self.assertFalse(
+            override.exists(),
+            "signed releases must not ship docker-compose.media-categories.override.yml; "
+            "installer/update-agent use production.yml only and delete leftovers on activate",
+        )
 
     def test_backend_api_still_mounts_upload_categories_for_writes(self) -> None:
         for compose in COMPOSE_FILES:

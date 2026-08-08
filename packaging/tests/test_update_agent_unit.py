@@ -210,6 +210,16 @@ class UpdateAgentTests(unittest.TestCase):
         self.assertIn("JWT_SECRET=keep-me", original)
         self.assertIn(BACKEND_A, original)
 
+    def test_removes_media_categories_hotfix_override_on_activate(self) -> None:
+        compose_dir = agent.IFILM_HOME / "current" / "packaging" / "compose"
+        compose_dir.mkdir(parents=True, exist_ok=True)
+        compose = compose_dir / "docker-compose.production.yml"
+        compose.write_text("services: {}\n", encoding="utf-8")
+        override = compose_dir / agent.MEDIA_CATEGORIES_HOTFIX_OVERRIDE
+        override.write_text("services: {}\n", encoding="utf-8")
+        agent._remove_media_categories_hotfix_override(compose)
+        self.assertFalse(override.exists())
+
     def test_compose_pull_and_up_uses_stable_project(self) -> None:
         def fake_run(argv, *, timeout=600, env=None):  # noqa: ARG001
             if argv[:2] == ["docker", "pull"]:
