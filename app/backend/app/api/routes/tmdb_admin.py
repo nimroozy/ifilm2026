@@ -188,15 +188,16 @@ def refresh_tmdb_title(payload: TitleRefreshRequest, db: DbSession, _: TMDBAdmin
             result = refresh_movie_tmdb_details(db, settings, movie, client=client)
             db.commit()
             refreshed = db.get(Movie, movie.id)
-            item = movie_out(refreshed, db) if refreshed else None
-        else:
-            series = db.get(Series, payload.entity_id)
-            if series is None or series.deleted_at is not None:
-                raise HTTPException(status_code=404, detail="Series not found")
-            result = refresh_series_tmdb_details(db, settings, series, client=client)
-            db.commit()
-            refreshed_s = db.get(Series, series.id)
-            item = series_out(refreshed_s) if refreshed_s else None
+            movie_item = movie_out(refreshed, db) if refreshed else None
+            return {"result": _jsonable(result), "item": movie_item}
+        series = db.get(Series, payload.entity_id)
+        if series is None or series.deleted_at is not None:
+            raise HTTPException(status_code=404, detail="Series not found")
+        result = refresh_series_tmdb_details(db, settings, series, client=client)
+        db.commit()
+        refreshed_s = db.get(Series, series.id)
+        series_item = series_out(refreshed_s) if refreshed_s else None
+        return {"result": _jsonable(result), "item": series_item}
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -209,7 +210,6 @@ def refresh_tmdb_title(payload: TitleRefreshRequest, db: DbSession, _: TMDBAdmin
     except Exception:
         db.rollback()
         raise
-    return {"result": _jsonable(result), "item": item}
 
 
 @router.post("/admin/tools/tmdb/artwork/replace")

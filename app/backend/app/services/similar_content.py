@@ -94,8 +94,11 @@ def _from_tmdb_similar(
     for item in results:
         if not isinstance(item, dict):
             continue
+        raw_id = item.get("id")
+        if raw_id is None:
+            continue
         try:
-            tid = int(item.get("id"))
+            tid = int(raw_id)
         except (TypeError, ValueError):
             continue
         tmdb_ids.append(tid)

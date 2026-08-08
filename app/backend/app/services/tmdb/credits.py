@@ -30,8 +30,11 @@ def parse_cast_entries(credits_payload: dict[str, Any], *, limit: int = MAX_CAST
     for item in cast:
         if not isinstance(item, dict):
             continue
+        raw_id = item.get("id")
+        if raw_id is None:
+            continue
         try:
-            person_id = int(item.get("id"))
+            person_id = int(raw_id)
         except (TypeError, ValueError):
             continue
         if person_id in seen:
@@ -40,8 +43,9 @@ def parse_cast_entries(credits_payload: dict[str, Any], *, limit: int = MAX_CAST
         if not name:
             continue
         seen.add(person_id)
+        raw_order = item.get("order")
         try:
-            order = int(item.get("order") if item.get("order") is not None else len(rows))
+            order = int(raw_order) if raw_order is not None else len(rows)
         except (TypeError, ValueError):
             order = len(rows)
         profile_path = str(item.get("profile_path") or "").strip()
