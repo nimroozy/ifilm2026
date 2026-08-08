@@ -477,3 +477,178 @@ def test_no_admin_note_leakage_on_list(client, db_session):
     assert listed["public_response"] == "Not planned"
     assert "admin_note" not in listed
     assert "SECRET_ADMIN_NOTE" not in str(listed)
+
+
+def test_exact_catalog_imdb_and_title_year(client, db_session):
+    movie = _movie(db_session, title="Interstellar", year=2014, tmdb_id=157336, imdb_id="tt0816692")
+    _user, token = _subscriber(db_session, username="cr-exact-imdb")
+
+    by_imdb = client.post(
+        "/api/me/content-requests",
+        headers=_headers(token),
+        json={
+            "request_type": "movie",
+            "title": "Different Title",
+            "imdb_url": "https://www.imdb.com/title/tt0816692/",
+        },
+    ).json()
+    assert by_imdb["outcome"] == "already_available"
+    assert by_imdb["catalog_item"]["id"] == movie.id
+
+    by_title = client.post(
+        "/api/me/content-requests",
+        headers=_headers(token),
+        json={"request_type": "movie", "title": "Interstellar", "year": 2014},
+    ).json()
+    assert by_title["outcome"] == "already_available"
+
+    # Different year must not false-exact-match
+    different_year = client.post(
+        "/api/me/content-requests",
+        headers=_headers(token),
+        json={"request_type": "movie", "title": "Interstellar", "year": 2015, "force": True},
+    ).json()
+    assert different_year["outcome"] == "created"
+
+
+def test_open_request_limit(client, db_session, monkeypatch):
+    from app.core.config import get_settings
+    from app.services import content_requests as cr_service
+
+    monkeypatch.setenv("CONTENT_REQUEST_MAX_OPEN", "2")
+    monkeypatch.setenv("CONTENT_REQUEST_MAX_PER_DAY", "50")
+    get_settings.cache_clear()
+    try:
+        _user, token = _subscriber(db_session, username="cr-open-cap")
+        for i in range(2):
+            assert (
+                client.post(
+                    "/api/me/content-requests",
+                    headers=_headers(token),
+                    json={"request_type": "movie", "title": f"Open Cap {i}", "force": True},
+                ).status_code
+                == 200
+            )
+        limited = client.post(
+            "/api/me/content-requests",
+            headers=_headers(token),
+            json={"request_type": "movie", "title": "Open Cap Overflow", "force": True},
+        )
+        assert limited.status_code == 429
+        assert limited.json()["detail"]["code"] == "too_many_open_requests"
+        # No partial create
+        listed = client.get("/api/me/content-requests", headers=_headers(token)).json()["data"]
+        assert len(listed) == 2
+    finally:
+        monkeypatch.delenv("CONTENT_REQUEST_MAX_OPEN", raising=False)
+        monkeypatch.delenv("CONTENT_REQUEST_MAX_PER_DAY", raising=False)
+        get_settings.cache_clear()
+        cr_service.content_request_rate_limiter.clear()
+
+
+def test_reopen_and_wrong_type_link(client, db_session):
+    _user, token = _subscriber(db_session, username="cr-reopen")
+    movie = _movie(db_session, title="Link Target Movie", year=2024)
+    series = _series(db_session, title="Link Target Series", year=2024)
+    rid = client.post(
+        "/api/me/content-requests",
+        headers=_headers(token),
+        json={"request_type": "movie", "title": "Reopen Candidate", "force": True},
+    ).json()["request"]["id"]
+    admin, admin_token = _admin(
+        db_session, permissions=["content_requests.read", "content_requests.manage"]
+    )
+    _ = admin
+
+    assert (
+        client.post(
+            f"/api/admin/content-requests/{rid}/actions",
+            headers=_headers(admin_token),
+            json={"action": "reject", "public_response": "Later"},
+        ).json()["status"]
+        == "rejected"
+    )
+    reopened = client.post(
+        f"/api/admin/content-requests/{rid}/actions",
+        headers=_headers(admin_token),
+        json={"action": "reopen"},
+    )
+    assert reopened.status_code == 200
+    assert reopened.json()["status"] == "reviewing"
+
+    detail = client.get(f"/api/admin/content-requests/{rid}", headers=_headers(admin_token)).json()
+    assert any(e["event_type"] for e in detail["events"])
+    assert detail["request"]["reviewed_by_admin_id"] == admin.id
+    assert detail["request"]["reviewed_at"]
+
+    assert (
+        client.post(
+            f"/api/admin/content-requests/{rid}/actions",
+            headers=_headers(admin_token),
+            json={"action": "approve"},
+        ).json()["status"]
+        == "approved"
+    )
+
+    # Movie request cannot link a series (type mismatch → 422)
+    wrong = client.post(
+        f"/api/admin/content-requests/{rid}/actions",
+        headers=_headers(admin_token),
+        json={"action": "mark_added", "linked_series_id": series.id},
+    )
+    assert wrong.status_code == 422
+
+    ok = client.post(
+        f"/api/admin/content-requests/{rid}/actions",
+        headers=_headers(admin_token),
+        json={"action": "mark_added", "linked_movie_id": movie.id},
+    )
+    assert ok.status_code == 200
+    assert ok.json()["status"] == "added"
+
+    # Cannot withdraw added
+    assert client.delete(f"/api/me/content-requests/{rid}", headers=_headers(token)).status_code == 409
+
+
+def test_withdraw_reviewing_and_optional_fields(client, db_session):
+    _user, token = _subscriber(db_session, username="cr-optional")
+    created = client.post(
+        "/api/me/content-requests",
+        headers=_headers(token),
+        json={
+            "request_type": "movie",
+            "title": "Optional Fields Film",
+            "year": 2025,
+            "preferred_language": "Dari",
+            "notes": "Please add Dari subtitles",
+            "tmdb_url": "https://www.themoviedb.org/movie/999001",
+            "force": True,
+        },
+    )
+    assert created.status_code == 200
+    body = created.json()["request"]
+    assert body["preferred_language"] == "Dari"
+    assert body["notes"] == "Please add Dari subtitles"
+    assert body["tmdb_id"] == 999001
+    rid = body["id"]
+
+    admin, admin_token = _admin(
+        db_session, permissions=["content_requests.read", "content_requests.manage"]
+    )
+    _ = admin
+    client.post(
+        f"/api/admin/content-requests/{rid}/actions",
+        headers=_headers(admin_token),
+        json={"action": "review"},
+    )
+    withdrawn = client.delete(f"/api/me/content-requests/{rid}", headers=_headers(token))
+    assert withdrawn.status_code == 200
+    assert withdrawn.json()["status"] == "withdrawn"
+
+    # Title required
+    missing = client.post(
+        "/api/me/content-requests",
+        headers=_headers(token),
+        json={"request_type": "movie", "title": "   "},
+    )
+    assert missing.status_code == 422
