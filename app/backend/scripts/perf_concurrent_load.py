@@ -9,6 +9,7 @@ import statistics
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from typing import Any
 
 import httpx
 
@@ -70,17 +71,18 @@ def main() -> None:
         token = login.json()["access_token"]
     auth = {"Authorization": f"Bearer {token}"}
 
-    report = {
-        "base": BASE,
-        "note": "Local concurrent httpx against SQLite/WAL stack — not production.",
-        "scenarios": {},
-    }
-    report["scenarios"].update(
+    scenarios: dict[str, Any] = {}
+    scenarios.update(
         run_scenario("anonymous_homepage", "/api/catalog/home?locale=en", None, [10, 25, 50])
     )
-    report["scenarios"].update(
+    scenarios.update(
         run_scenario("authenticated_homepage", "/api/me/home?locale=en", auth, [10, 25])
     )
+    report: dict[str, Any] = {
+        "base": BASE,
+        "note": "Local concurrent httpx against SQLite/WAL stack — not production.",
+        "scenarios": scenarios,
+    }
     (OUT / "concurrent-load.json").write_text(json.dumps(report, indent=2))
     print(json.dumps(report, indent=2))
 
