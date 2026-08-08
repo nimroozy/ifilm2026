@@ -82,15 +82,13 @@ def score_candidate(
         history_score = max(history_score, 0.85)
         history_reasons.append(f"Similar to {similar_to_title}")
     # Overlap with genres of completed titles already baked into genre_score;
-    # boost if watchlisted same type or soft history proximity via shared genres.
+    # boost if this exact title is watchlisted (rare once excluded from Recommended).
     if feature.kind == "movie" and feature.id in profile.watchlisted_movie_ids:
         history_score = max(history_score, 0.4)
     if feature.kind == "series" and feature.id in profile.watchlisted_series_ids:
         history_score = max(history_score, 0.4)
-    if profile.preferred_content_types:
-        type_pref = profile.preferred_content_types.get(feature.kind, 0.0)
-        type_total = sum(profile.preferred_content_types.values()) or 1.0
-        history_score = max(history_score, min(1.0, type_pref / type_total))
+    # NOTE: preferred_content_types (movie vs series) must NOT inflate history_score.
+    # That previously made every movie look like a "taste" match for movie-heavy users.
 
     cast_score = 0.0
     cast_hits: list[str] = []
@@ -172,6 +170,11 @@ def score_candidate(
         # (approximated by negative genre weights already reducing genre_score).
         pass
 
+    # Taste signal for personalized filtering: genre/cast/collection + meaningful history.
+    # Excludes language / popularity / recency so Popular padding cannot masquerade.
+    taste = genre_score + cast_score + collection_score
+    if history_score > 0 and (similar_to_title or history_reasons):
+        taste += history_score
     components = {
         "genre": round(genre_score, 4),
         "history": round(history_score, 4),
@@ -180,6 +183,7 @@ def score_candidate(
         "language": round(language_score, 4),
         "recency": round(recency_score, 4),
         "popularity": round(popularity_score, 4),
+        "taste": round(taste, 4),
     }
     raw = (
         weights.genre * genre_score

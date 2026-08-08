@@ -75,8 +75,10 @@ def _movie_feature(
     collection_ids: set[int] | None = None,
     playable: bool | None = None,
 ) -> CatalogFeature:
+    # Default playable=False during candidate generation to avoid N+1 playability
+    # queries; attach_playable() batches the flag onto the final ranked slice.
     if playable is None:
-        playable, _, _ = content_playability(db, movie_id=movie.id)
+        playable = False
     genres = [g.name for g in (movie.genre_links or [])]
     return CatalogFeature(
         kind="movie",
@@ -101,6 +103,20 @@ def _movie_feature(
         collection_ids=collection_ids or set(),
         playable=bool(playable),
     )
+
+
+def attach_playable(db: Session, items: list[ScoredCandidate]) -> list[ScoredCandidate]:
+    """Batch-resolve playable flags for the final recommendation slice only."""
+    movie_ids = [i.id for i in items if i.kind == "movie"]
+    playable_map: dict[int, bool] = {}
+    for mid in movie_ids:
+        # Still one call per final item (≤40), not per candidate pool member.
+        ok, _, _ = content_playability(db, movie_id=mid)
+        playable_map[mid] = bool(ok)
+    for item in items:
+        if item.kind == "movie":
+            item.playable = playable_map.get(item.id, False)
+    return items
 
 
 def _series_feature(
@@ -413,6 +429,8 @@ def _rank(
     similar_to_title: str | None = None,
     exclude: set[tuple[str, int]] | None = None,
     min_score: float = 0.0,
+    require_taste: bool = False,
+    min_taste: float = 0.2,
 ) -> list[ScoredCandidate]:
     weights = score_weights_from_settings(settings)
     now_ts = datetime.now(UTC).timestamp()
@@ -427,6 +445,9 @@ def _rank(
             now_ts=now_ts,
         )
         if item is None or item.score < min_score:
+            continue
+        if require_taste and float(item.components.get("taste") or 0.0) < min_taste:
+            # Drop language/popularity-only padding from personalized shelves.
             continue
         scored.append(item)
     scored.sort(key=stable_sort_key)
@@ -540,14 +561,17 @@ def recommend_for_user(
         if cached is not None:
             items, profile, mode = cached
             # Multi-worker safe: publication filter always at response time.
-            return filter_still_public(db, list(items)), profile, mode
+            return attach_playable(db, filter_still_public(db, list(items))), profile, mode
 
     profile = build_preference_profile(db, subscriber, settings=settings)
     if subscriber is None or not profile.has_personal_signals:
-        items = filter_still_public(
+        items = attach_playable(
             db,
-            anonymous_fallback(
-                db, limit=limit, content_type=content_type, genre=genre, language=language
+            filter_still_public(
+                db,
+                anonymous_fallback(
+                    db, limit=limit, content_type=content_type, genre=genre, language=language
+                ),
             ),
         )
         result = (items, profile, "popular")
@@ -564,7 +588,16 @@ def recommend_for_user(
         language=language,
         exclude=exclude,
     )
-    items = _rank(features, profile, limit=limit, settings=settings, exclude=exclude, min_score=0.12)
+    items = _rank(
+        features,
+        profile,
+        limit=limit,
+        settings=settings,
+        exclude=exclude,
+        min_score=0.35,
+        require_taste=True,
+        min_taste=0.25,
+    )
     if len(items) < min(3, limit):
         # Soft-fill from anonymous pool without pretending personalization for fillers.
         fill = anonymous_fallback(db, limit=limit, content_type=content_type, genre=genre, language=language)
@@ -572,11 +605,12 @@ def recommend_for_user(
         for row in fill:
             if row.key in seen or (row.kind, row.id) in exclude:
                 continue
+            row.reasons = ["Popular in the catalog"]
             items.append(row)
             seen.add(row.key)
             if len(items) >= limit:
                 break
-    items = filter_still_public(db, items)
+    items = attach_playable(db, filter_still_public(db, items))
     result = (items, profile, "personalized")
     if cache_key:
         cache_set(cache_key, result)
@@ -615,16 +649,19 @@ def recommend_for_item(
             profile.preferred_actor_ids[mc.tmdb_person_id] = 1.0
         exclude = {("movie", source.id)}
         features = _candidate_pool(db, profile, content_type="movie", genre=None, language=None, exclude=exclude)
-        return filter_still_public(
+        return attach_playable(
             db,
-            _rank(
-                features,
-                profile,
-                limit=limit,
-                settings=settings,
-                similar_to_title=source.title,
-                exclude=exclude,
-                min_score=0.1,
+            filter_still_public(
+                db,
+                _rank(
+                    features,
+                    profile,
+                    limit=limit,
+                    settings=settings,
+                    similar_to_title=source.title,
+                    exclude=exclude,
+                    min_score=0.1,
+                ),
             ),
         )
 
@@ -649,16 +686,19 @@ def recommend_for_item(
         profile.preferred_actor_ids[series_credit.tmdb_person_id] = 1.0
     exclude = {("series", source.id)}
     features = _candidate_pool(db, profile, content_type="series", genre=None, language=None, exclude=exclude)
-    return filter_still_public(
+    return attach_playable(
         db,
-        _rank(
-            features,
-            profile,
-            limit=limit,
-            settings=settings,
-            similar_to_title=source.title,
-            exclude=exclude,
-            min_score=0.1,
+        filter_still_public(
+            db,
+            _rank(
+                features,
+                profile,
+                limit=limit,
+                settings=settings,
+                similar_to_title=source.title,
+                exclude=exclude,
+                min_score=0.1,
+            ),
         ),
     )
 
@@ -743,6 +783,8 @@ def because_you_watched_shelves(
                 similar_to_title=title,
                 exclude=exclude,
                 min_score=BECAUSE_MIN_TOP_SCORE,
+                require_taste=True,
+                min_taste=0.35,
             ),
         )
         items = [r for r in ranked if r.key not in used and r.key != f"{kind}:{cid}"]
@@ -751,7 +793,14 @@ def because_you_watched_shelves(
             continue
         if items[0].score < BECAUSE_MIN_TOP_SCORE:
             continue
-        shelf_items = items[:per_shelf]
+        # Guard: top item must share a taste reason (genre/cast/collection/similar), not popularity alone.
+        top_reasons = " ".join(items[0].reasons).lower()
+        if not any(
+            x in top_reasons
+            for x in ("genre", "similar to", "actor", "collection", "features")
+        ):
+            continue
+        shelf_items = attach_playable(db, items[:per_shelf])
         for it in shelf_items:
             used.add(it.key)
         shelves.append(
@@ -1104,7 +1153,7 @@ def what_to_watch(
         },
         "relaxed": relaxed_notes,
         "count": len(ranked),
-        "items": [scored_to_public_dict(i) for i in ranked],
+        "items": [scored_to_public_dict(i) for i in attach_playable(db, ranked)],
     }
 
 

@@ -52,6 +52,10 @@ Explicit replay / editorial shelves may still show completed titles when product
 
 ## Diversity & cross-shelf dedup
 
+**Taste gate (personalized):** candidates need a genre / cast / collection /
+similar-to signal. Language, popularity, and recency alone cannot fill
+Recommended for You (content-type preference does not inflate history score).
+
 **Within one shelf:** unique `content_type:id`; near-tie genre diversification after
 two consecutive same-primary-genre picks when score gap ≤ 0.06.
 

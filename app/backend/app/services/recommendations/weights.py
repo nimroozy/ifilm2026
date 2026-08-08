@@ -81,7 +81,7 @@ def signal_weights_from_settings(settings: Settings | None = None) -> SignalWeig
 
 # Minimum quality threshold for a "Because You Watched" shelf.
 BECAUSE_MIN_CANDIDATES = 3
-BECAUSE_MIN_TOP_SCORE = 0.28
+BECAUSE_MIN_TOP_SCORE = 0.42
 
 # Bounded candidate pool sizes (performance).
 CANDIDATE_GENRE_LIMIT = 80
