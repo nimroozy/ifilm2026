@@ -460,3 +460,118 @@ def test_concurrent_queue_requests(client, admin_headers, db_session):
         .all()
     )
     assert len(active) == 1
+
+
+def test_worker_mount_health_ok_when_categories_exist(monkeypatch, tmp_path):
+    from app.services.media_processing.mount_health import (
+        REQUIRED_MEDIA_MOUNT_CATEGORIES,
+        assert_required_media_mounts,
+        inspect_media_mount_health,
+    )
+
+    media = tmp_path / "media"
+    for category in REQUIRED_MEDIA_MOUNT_CATEGORIES:
+        (media / category).mkdir(parents=True)
+    monkeypatch.setenv("MEDIA_ROOT", str(media))
+    monkeypatch.setenv("MEDIA_REQUIRE_CATEGORY_MOUNTS", "false")
+    monkeypatch.setenv("APP_ENV", "test")
+    get_settings.cache_clear()
+    settings = get_settings()
+    health = assert_required_media_mounts(settings)
+    assert health.ok
+    assert inspect_media_mount_health(settings).missing == ()
+
+
+def test_worker_mount_health_reports_missing_directory(monkeypatch, tmp_path):
+    from app.services.media_processing.mount_health import (
+        MediaMountHealthError,
+        assert_required_media_mounts,
+        format_media_mount_health_error,
+        inspect_media_mount_health,
+    )
+
+    media = tmp_path / "media"
+    media.mkdir()
+    (media / "originals").mkdir()
+    # trailers / subtitles / posters / backdrops intentionally absent
+    monkeypatch.setenv("MEDIA_ROOT", str(media))
+    monkeypatch.setenv("MEDIA_REQUIRE_CATEGORY_MOUNTS", "false")
+    monkeypatch.setenv("APP_ENV", "test")
+    get_settings.cache_clear()
+    settings = get_settings()
+    health = inspect_media_mount_health(settings)
+    assert not health.ok
+    assert "trailers" in health.missing
+    assert "subtitles" in health.missing
+    message = format_media_mount_health_error(health)
+    assert "Missing mounts: " in message
+    assert "trailers" in message
+    with pytest.raises(MediaMountHealthError) as excinfo:
+        assert_required_media_mounts(settings)
+    assert "trailers" in excinfo.value.missing
+
+
+def test_worker_mount_health_detects_non_mount_directory(monkeypatch, tmp_path):
+    """Regression: empty container-local dir must not pass as a shared mount."""
+    from app.services.media_processing.mount_health import (
+        REQUIRED_MEDIA_MOUNT_CATEGORIES,
+        MediaMountHealthError,
+        assert_required_media_mounts,
+        inspect_media_mount_health,
+    )
+
+    media = tmp_path / "media"
+    for category in REQUIRED_MEDIA_MOUNT_CATEGORIES:
+        (media / category).mkdir(parents=True)
+    monkeypatch.setenv("MEDIA_ROOT", str(media))
+    monkeypatch.setenv("MEDIA_REQUIRE_CATEGORY_MOUNTS", "true")
+    monkeypatch.setenv("APP_ENV", "production")
+    get_settings.cache_clear()
+
+    def fake_is_mount(self: Path) -> bool:
+        # Simulate Docker: only originals is a real volume; trailers is local mkdir.
+        return self.name == "originals"
+
+    monkeypatch.setattr(Path, "is_mount", fake_is_mount)
+    settings = get_settings()
+    health = inspect_media_mount_health(settings)
+    assert not health.ok
+    assert "trailers" in health.missing
+    trailers = next(c for c in health.categories if c.category == "trailers")
+    assert trailers.exists and trailers.is_directory and not trailers.is_mount
+    assert "not a mount" in trailers.detail
+    with pytest.raises(MediaMountHealthError) as excinfo:
+        assert_required_media_mounts(settings)
+    assert "trailers" in str(excinfo.value)
+
+
+def test_worker_startup_exits_when_media_mount_missing(monkeypatch, tmp_path):
+    from app.services.media_processing.worker import run_forever
+
+    media = tmp_path / "media"
+    media.mkdir()
+    (media / "originals").mkdir()
+    monkeypatch.setenv("MEDIA_ROOT", str(media))
+    monkeypatch.setenv("MEDIA_REQUIRE_CATEGORY_MOUNTS", "false")
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("ENABLE_MEDIA_PROCESSING", "true")
+    monkeypatch.setenv("ENABLE_HLS_ENCODING", "false")
+    monkeypatch.setenv("FFPROBE_BINARY", "ffprobe")
+    get_settings.cache_clear()
+    with pytest.raises(SystemExit) as excinfo:
+        run_forever(settings=get_settings())
+    assert int(excinfo.value.code or 0) == 3
+
+
+def test_healthcheck_cli_fails_when_mount_missing(monkeypatch, tmp_path):
+    from app.workers.media_processing import run_healthcheck
+
+    media = tmp_path / "media"
+    media.mkdir()
+    monkeypatch.setenv("MEDIA_ROOT", str(media))
+    monkeypatch.setenv("MEDIA_REQUIRE_CATEGORY_MOUNTS", "false")
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("ENABLE_MEDIA_PROCESSING", "true")
+    monkeypatch.setenv("ENABLE_HLS_ENCODING", "false")
+    get_settings.cache_clear()
+    assert run_healthcheck() == 1

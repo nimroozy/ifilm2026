@@ -153,11 +153,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "python -c \"from app.services.media_processing.ffmpeg import binary_available; from app.core.config import get_settings; s=get_settings(); ok=binary_available(s.ffprobe_binary) and (binary_available(s.ffmpeg_binary) if s.enable_hls_encoding else True); raise SystemExit(0 if ok else 1)\"",
-        ]
+      test: ["CMD", "python", "-m", "app.workers.media_processing", "--healthcheck"]
       interval: 30s
       timeout: 10s
       retries: 3

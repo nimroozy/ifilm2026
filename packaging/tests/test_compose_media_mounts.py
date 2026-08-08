@@ -72,6 +72,23 @@ class ComposeMediaMountTests(unittest.TestCase):
                         f"mount {expected}. Have: {sorted(worker_targets)}",
                     )
 
+    def test_media_processing_worker_healthcheck_covers_mounts(self) -> None:
+        for compose in COMPOSE_FILES:
+            with self.subTest(compose=str(compose.relative_to(ROOT))):
+                text = compose.read_text()
+                body = _service_block(text, "media-processing-worker")
+                self.assertIn(
+                    "healthcheck:",
+                    body,
+                    f"{compose.relative_to(ROOT)}: media-processing-worker missing healthcheck",
+                )
+                self.assertIn(
+                    "--healthcheck",
+                    body,
+                    f"{compose.relative_to(ROOT)}: healthcheck must run "
+                    "python -m app.workers.media_processing --healthcheck",
+                )
+
     def test_backend_api_still_mounts_upload_categories_for_writes(self) -> None:
         prod = ROOT / "packaging/compose/docker-compose.production.yml"
         staging = ROOT / "deploy/staging/docker-compose.staging.yml"
