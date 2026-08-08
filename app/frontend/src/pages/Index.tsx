@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -7,7 +7,6 @@ import { ContentShelf, MediaCard } from '@/design-system';
 import { HeroCarousel } from '@/components/HeroCarousel';
 import { watchHistory } from '@/data/mockData';
 import {
-  fetchFeaturedHomeCollections,
   fetchHomeCatalog,
   fetchMeHomeCatalog,
   mapCollectionItems,
@@ -418,12 +417,21 @@ export default function HomePage() {
   const [recommendations, setRecommendations] = useState<HomeRecommendationsDto | null | undefined>(
     undefined
   );
+  const lastLoadKey = useRef<string>('');
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { force?: boolean }) => {
+    // Prefer token over React auth flag so the first paint after login does not
+    // fan out catalog/home + me/home.
+    const hasToken = Boolean(tokenStore.get());
+    const mode = !isMockMode() && (isLoggedIn || hasToken) ? 'me' : 'anon';
+    const key = `${lang}:${mode}`;
+    if (!opts?.force && lastLoadKey.current === key) return;
+    lastLoadKey.current = key;
+
     setLoading(true);
     setError(null);
     try {
-      if (!isMockMode() && isLoggedIn && tokenStore.get()) {
+      if (mode === 'me') {
         try {
           const me = await fetchMeHomeCatalog(lang);
           setData(me);
@@ -438,16 +446,13 @@ export default function HomePage() {
       }
       const result = await fetchHomeCatalog(lang);
       setData(result);
-      if (result.featuredCollections?.length) {
-        setCollections(result.featuredCollections);
-      } else {
-        fetchFeaturedHomeCollections({ page_size: 6 })
-          .then(setCollections)
-          .catch(() => setCollections([]));
-      }
-      setContinueWatching(undefined);
-      setWatchlist(undefined);
-      setRecommendations(undefined);
+      // Aggregate already includes featured_collections (possibly empty) — do not
+      // issue a second collections request when the home endpoint succeeded.
+      setCollections(result.featuredCollections || []);
+      setContinueWatching([]);
+      setWatchlist([]);
+      // Prefer recommendations embedded in catalog/home (single request).
+      setRecommendations(result.recommendations ?? null);
     } catch (err) {
       setData(null);
       setError(
@@ -467,8 +472,8 @@ export default function HomePage() {
   }, [load]);
 
   if (loading) return <HomeLoading />;
-  if (error) return <HomeError message={error} onRetry={load} />;
-  if (!data) return <HomeError message="No catalog data" onRetry={load} />;
+  if (error) return <HomeError message={error} onRetry={() => void load({ force: true })} />;
+  if (!data) return <HomeError message="No catalog data" onRetry={() => void load({ force: true })} />;
 
   const dramaMovies = data.popular.filter((m) => m.genres.includes('Drama')).slice(0, 12);
   const topRated = [...data.popular].sort((a, b) => b.rating - a.rating).slice(0, 12);

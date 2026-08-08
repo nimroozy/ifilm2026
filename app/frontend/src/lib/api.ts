@@ -1111,6 +1111,7 @@ export interface CatalogHomeDto {
   family: MovieDto[];
   popular_series: SeriesDto[];
   featured_collections: CollectionPublicDto[];
+  recommendations?: HomeRecommendationsDto | null;
 }
 
 /** Authenticated homepage: catalog shelves + personalized rails. */

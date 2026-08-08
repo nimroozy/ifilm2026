@@ -314,8 +314,8 @@ def collection_public_out_cards(
                     )
                 )
             else:
-                payload = series_cards.get(item.series_id) if item.series_id else None
-                if payload is None:
+                series_payload = series_cards.get(item.series_id) if item.series_id else None
+                if series_payload is None:
                     continue
                 items_out.append(
                     CollectionItemOut(
@@ -328,7 +328,7 @@ def collection_public_out_cards(
                         custom_description=item.custom_description,
                         content_type="series",
                         movie=None,
-                        series=payload,
+                        series=series_payload,
                         created_at=item.created_at,
                         publicly_visible=True,
                     )

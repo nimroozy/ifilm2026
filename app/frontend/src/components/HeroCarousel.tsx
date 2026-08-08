@@ -55,7 +55,12 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
 
   const movie = featured[current] || featured[0];
   const heroSrc = movie
-    ? sizedArtworkUrl(movie.backdrop || movie.poster, movie.backdrop ? 'backdrop' : 'poster', 'hero')
+    ? sizedArtworkUrl(
+        // Prefer backdrop for hero plane; fall back to poster sized as backdrop width.
+        movie.backdrop || movie.poster,
+        'backdrop',
+        'hero'
+      )
     : '';
 
   useEffect(() => {

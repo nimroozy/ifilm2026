@@ -327,6 +327,7 @@ export async function fetchHomeCatalog(locale?: AppLocale) {
         .slice(0, 12),
       popularSeries: [...series].sort((a, b) => b.views - a.views).slice(0, 12),
       featuredCollections: [] as CatalogCollection[],
+      recommendations: null as import('./api').HomeRecommendationsDto | null,
     };
   }
 
@@ -348,6 +349,7 @@ export async function fetchHomeCatalog(locale?: AppLocale) {
       familyMovies: home.family.map(mapMovieDto),
       popularSeries: home.popular_series.map(mapSeriesDto),
       featuredCollections: home.featured_collections || [],
+      recommendations: home.recommendations ?? null,
     };
   } catch {
     /* fall through to legacy multi-call path */
@@ -398,6 +400,7 @@ export async function fetchHomeCatalog(locale?: AppLocale) {
       .slice(0, 12),
     popularSeries: mapSeries(seriesPage.items),
     featuredCollections: [] as CatalogCollection[],
+    recommendations: null as import('./api').HomeRecommendationsDto | null,
   };
 }
 

@@ -2,6 +2,7 @@ import { Play } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DemoBadge, QualityBadge, RatingBadge } from '@/design-system/Badges';
 import { mediaSizes, surfaces } from '@/design-system/tokens';
+import { sizedArtworkUrl } from '@/lib/imageUrls';
 
 export type MediaCardVariant = 'poster' | 'landscape';
 
@@ -74,6 +75,11 @@ export function MediaCard({
         : size === 'lg'
           ? { width: 200, height: 300 }
           : { width: 160, height: 240 };
+  const sizedSrc = sizedArtworkUrl(
+    imageUrl,
+    variant === 'landscape' ? 'backdrop' : 'poster',
+    'card'
+  );
 
   return (
     <div
@@ -107,9 +113,9 @@ export function MediaCard({
           'active:-translate-y-0.5'
         )}
       >
-        {imageUrl ? (
+        {sizedSrc ? (
           <img
-            src={imageUrl}
+            src={sizedSrc}
             alt=""
             width={intrinsic.width}
             height={intrinsic.height}

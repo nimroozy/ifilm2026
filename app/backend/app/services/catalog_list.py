@@ -146,29 +146,35 @@ def batch_series_public_counts(db: Session, series_ids: list[int]) -> dict[int, 
     if not series_ids:
         return {}
     ids = list(dict.fromkeys(series_ids))
-    season_counts = dict(
-        db.query(Season.series_id, func.count(Season.id))
-        .filter(
-            Season.series_id.in_(ids),
-            Season.deleted_at.is_(None),
-            Season.status == "published",
+    season_counts: dict[int, int] = {
+        int(series_id): int(count)
+        for series_id, count in (
+            db.query(Season.series_id, func.count(Season.id))
+            .filter(
+                Season.series_id.in_(ids),
+                Season.deleted_at.is_(None),
+                Season.status == "published",
+            )
+            .group_by(Season.series_id)
+            .all()
         )
-        .group_by(Season.series_id)
-        .all()
-    )
-    episode_counts = dict(
-        db.query(Season.series_id, func.count(Episode.id))
-        .join(Episode, Episode.season_id == Season.id)
-        .filter(
-            Season.series_id.in_(ids),
-            Season.deleted_at.is_(None),
-            Season.status == "published",
-            Episode.deleted_at.is_(None),
-            Episode.status == "published",
+    }
+    episode_counts: dict[int, int] = {
+        int(series_id): int(count)
+        for series_id, count in (
+            db.query(Season.series_id, func.count(Episode.id))
+            .join(Episode, Episode.season_id == Season.id)
+            .filter(
+                Season.series_id.in_(ids),
+                Season.deleted_at.is_(None),
+                Season.status == "published",
+                Episode.deleted_at.is_(None),
+                Episode.status == "published",
+            )
+            .group_by(Season.series_id)
+            .all()
         )
-        .group_by(Season.series_id)
-        .all()
-    )
+    }
     return {sid: (int(season_counts.get(sid, 0)), int(episode_counts.get(sid, 0))) for sid in ids}
 
 
@@ -238,15 +244,17 @@ def movies_card_out(db: Session, movies: list[Movie], *, locale: str | None = No
         localized = localized_movie_fields(
             db, movie, loc, preloaded_rows=tr_map.get(movie.id, [])
         )
+        # Card payload: keep short synopsis only — no full overview, cast credits, or media packages.
+        short = localized["short_description"] or localized["description"][:180]
         results.append(
             MovieOut(
                 id=movie.id,
                 title=localized["title"],
                 original_title=movie.original_title or "",
                 slug=movie.slug,
-                description=localized["description"],
-                short_description=localized["short_description"],
-                tagline=localized.get("tagline") or "",
+                description=short,
+                short_description=short,
+                tagline="",
                 localization=LocalizationSourcesOut.model_validate(localized["localization"]),
                 release_year=movie.release_year,
                 release_date=movie.release_date,
@@ -262,14 +270,14 @@ def movies_card_out(db: Session, movies: list[Movie], *, locale: str | None = No
                 poster_url=movie.poster_url or "",
                 backdrop_url=movie.backdrop_url or "",
                 logo_url=getattr(movie, "logo_url", "") or "",
-                trailer_url=movie.trailer_url or "",
+                trailer_url="",
                 spoken_languages=getattr(movie, "spoken_languages", None) or [],
-                trailer_provider=getattr(movie, "trailer_provider", "") or "",
-                trailer_key=getattr(movie, "trailer_key", "") or "",
-                trailer_title=getattr(movie, "trailer_title", "") or "",
-                trailer_official=bool(getattr(movie, "trailer_official", False)),
-                trailer_language=getattr(movie, "trailer_language", "") or "",
-                trailer_published_at=getattr(movie, "trailer_published_at", None),
+                trailer_provider="",
+                trailer_key="",
+                trailer_title="",
+                trailer_official=False,
+                trailer_language="",
+                trailer_published_at=None,
                 has_demo_clip=bool(getattr(movie, "has_demo_clip", False)),
                 status=movie.status,
                 is_featured=bool(movie.is_featured),
@@ -280,12 +288,12 @@ def movies_card_out(db: Session, movies: list[Movie], *, locale: str | None = No
                 updated_at=movie.updated_at,
                 genres=genres,
                 director=movie.director or "",
-                producer=getattr(movie, "producer", "") or "",
-                writer=getattr(movie, "writer", "") or "",
-                studio=getattr(movie, "studio", "") or "",
-                cast=movie.cast or [],
+                producer="",
+                writer="",
+                studio="",
+                cast=[],
                 credits=[],
-                credits_synced_at=getattr(movie, "credits_synced_at", None),
+                credits_synced_at=None,
                 audio=movie.audio or [],
                 subtitles=movie.subtitles or [],
                 qualities=movie.qualities or [],
@@ -294,7 +302,7 @@ def movies_card_out(db: Session, movies: list[Movie], *, locale: str | None = No
                 subtitle_availability=SubtitleAvailabilityOut.model_validate(subs.model_dump()),
                 views=movie.views or 0,
                 type="movie",
-                hls_path=movie.hls_path,
+                hls_path=None,
                 playable=playable,
                 has_playable_package=has_package,
                 has_external_media=has_external,
@@ -340,15 +348,16 @@ def series_card_out(db: Session, series_items: list[Series], *, locale: str | No
         localized = localized_series_fields(
             db, series, loc, preloaded_rows=tr_map.get(series.id, [])
         )
+        short = localized["short_description"] or localized["description"][:180]
         results.append(
             SeriesOut(
                 id=series.id,
                 title=localized["title"],
                 original_title=series.original_title or "",
                 slug=series.slug,
-                description=localized["description"],
-                short_description=localized["short_description"],
-                tagline=localized.get("tagline") or "",
+                description=short,
+                short_description=short,
+                tagline="",
                 localization=LocalizationSourcesOut.model_validate(localized["localization"]),
                 release_year=series.release_year,
                 end_year=getattr(series, "end_year", None),
@@ -363,14 +372,14 @@ def series_card_out(db: Session, series_items: list[Series], *, locale: str | No
                 poster_url=series.poster_url or "",
                 backdrop_url=series.backdrop_url or "",
                 logo_url=getattr(series, "logo_url", "") or "",
-                trailer_url=series.trailer_url or "",
+                trailer_url="",
                 spoken_languages=getattr(series, "spoken_languages", None) or [],
-                trailer_provider=getattr(series, "trailer_provider", "") or "",
-                trailer_key=getattr(series, "trailer_key", "") or "",
-                trailer_title=getattr(series, "trailer_title", "") or "",
-                trailer_official=bool(getattr(series, "trailer_official", False)),
-                trailer_language=getattr(series, "trailer_language", "") or "",
-                trailer_published_at=getattr(series, "trailer_published_at", None),
+                trailer_provider="",
+                trailer_key="",
+                trailer_title="",
+                trailer_official=False,
+                trailer_language="",
+                trailer_published_at=None,
                 has_demo_clip=bool(getattr(series, "has_demo_clip", False)),
                 status=series.status,
                 airing_status=series.airing_status or "Ongoing",

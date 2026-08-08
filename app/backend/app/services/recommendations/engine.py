@@ -944,7 +944,9 @@ def home_recommendation_payload(
                 }
             )
     else:
-        popular = anonymous_fallback(db, limit=12)
+        # recommend_for_user already ran anonymous_fallback when there are no
+        # personal signals — reuse that slice instead of scanning the catalog twice.
+        popular = items[:12] if items else anonymous_fallback(db, limit=12)
         shelves.append(
             {
                 "shelf_type": "popular",

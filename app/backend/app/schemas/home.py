@@ -26,6 +26,8 @@ class CatalogHomeOut(BaseModel):
     family: list[MovieOut] = Field(default_factory=list)
     popular_series: list[SeriesOut] = Field(default_factory=list)
     featured_collections: list[CollectionPublicOut] = Field(default_factory=list)
+    # Anonymous recommendation shelves (popular / editorial) — keeps home to one HTTP call.
+    recommendations: HomeRecommendationsOut | dict[str, Any] | None = None
 
 
 class MeHomeOut(CatalogHomeOut):
