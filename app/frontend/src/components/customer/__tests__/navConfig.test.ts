@@ -29,12 +29,17 @@ describe('customer nav active matching', () => {
     expect(isNavActive('/genres', genres)).toBe(true);
   });
 
-  it('includes Phase 3 destinations plus Collections and excludes deferred Watchlist', () => {
+  it('includes Phase 3 destinations plus Collections and Watchlist', () => {
     const ids = DESKTOP_NAV_ITEMS.map((i) => i.id);
     expect(ids).toEqual(
-      expect.arrayContaining(['genres', 'collections', 'dubbed', 'subtitled', 'newReleases'])
+      expect.arrayContaining(['genres', 'collections', 'dubbed', 'subtitled', 'newReleases', 'myList'])
     );
-    expect(ids).not.toContain('myList');
+  });
+
+  it('marks watchlist route active under My List', () => {
+    const myList = DESKTOP_NAV_ITEMS.find((i) => i.id === 'myList')!;
+    expect(isNavActive('/watchlist', myList)).toBe(true);
+    expect(isNavActive('/movies', myList)).toBe(false);
   });
 
   it('marks collection detail routes as active under Collections', () => {

@@ -16,7 +16,14 @@ from app.schemas.watch_history import (
     WatchProgressOut,
     WatchProgressUpdate,
 )
+from app.schemas.watchlist import (
+    WatchlistActionOut,
+    WatchlistAddIn,
+    WatchlistItemOut,
+    WatchlistMembershipOut,
+)
 from app.services import watch_history as wh
+from app.services import watchlist as wl
 from app.services.devices import get_owned_device, list_active_devices, revoke_device
 from app.services.entitlements import check_entitlement
 
@@ -193,3 +200,70 @@ def clear_watch_history(db: DbSession, user: CurrentSubscriber) -> WatchProgress
     deleted = wh.delete_all(db, user)
     db.commit()
     return WatchProgressActionOut(detail="ok", deleted=deleted)
+
+
+@router.delete("/continue-watching/{asset_id}", response_model=WatchProgressActionOut)
+def dismiss_continue_watching(asset_id: str, db: DbSession, user: CurrentSubscriber) -> WatchProgressActionOut:
+    """Remove from Continue Watching shelf; history row is retained."""
+    _require_watch_history()
+    deleted = wh.dismiss_continue_watching(db, user, asset_id)
+    db.commit()
+    if deleted < 1:
+        raise HTTPException(status_code=404, detail="Continue Watching item not found")
+    return WatchProgressActionOut(detail="ok", deleted=deleted)
+
+
+@router.get("/watchlist", response_model=Envelope[WatchlistItemOut])
+def get_watchlist(
+    db: DbSession,
+    user: CurrentSubscriber,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(40, ge=1, le=100),
+) -> Envelope[WatchlistItemOut]:
+    items, total = wl.list_watchlist(db, user, page=page, page_size=page_size)
+    return paginated(items, total=total, page=page, page_size=page_size)
+
+
+@router.get("/watchlist/membership", response_model=WatchlistMembershipOut)
+def get_watchlist_membership(
+    db: DbSession,
+    user: CurrentSubscriber,
+    movie_id: int | None = Query(default=None, ge=1),
+    series_id: int | None = Query(default=None, ge=1),
+) -> WatchlistMembershipOut:
+    in_list, item_id = wl.membership(db, user, movie_id=movie_id, series_id=series_id)
+    return WatchlistMembershipOut(in_watchlist=in_list, item_id=item_id)
+
+
+@router.post("/watchlist", response_model=WatchlistItemOut, status_code=status.HTTP_201_CREATED)
+def add_watchlist_item(payload: WatchlistAddIn, db: DbSession, user: CurrentSubscriber) -> WatchlistItemOut:
+    out = wl.add_item(db, user, payload)
+    db.commit()
+    return out
+
+
+@router.delete("/watchlist/{item_id}", response_model=WatchlistActionOut)
+def delete_watchlist_item(item_id: int, db: DbSession, user: CurrentSubscriber) -> WatchlistActionOut:
+    deleted = wl.remove_item(db, user, item_id)
+    db.commit()
+    if deleted < 1:
+        raise HTTPException(status_code=404, detail="Watchlist item not found")
+    return WatchlistActionOut(detail="ok", deleted=deleted)
+
+
+@router.delete("/watchlist", response_model=WatchlistActionOut)
+def clear_watchlist(
+    db: DbSession,
+    user: CurrentSubscriber,
+    movie_id: int | None = Query(default=None, ge=1),
+    series_id: int | None = Query(default=None, ge=1),
+) -> WatchlistActionOut:
+    if movie_id is not None or series_id is not None:
+        deleted = wl.remove_by_content(db, user, movie_id=movie_id, series_id=series_id)
+        db.commit()
+        if deleted < 1:
+            raise HTTPException(status_code=404, detail="Watchlist item not found")
+        return WatchlistActionOut(detail="ok", deleted=deleted)
+    deleted = wl.clear_all(db, user)
+    db.commit()
+    return WatchlistActionOut(detail="ok", deleted=deleted)

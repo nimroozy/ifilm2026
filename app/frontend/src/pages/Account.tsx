@@ -10,8 +10,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useLang, useAuth } from '@/components/CustomerLayout';
 import { devices, episodes, watchHistory } from '@/data/mockData';
-import { api, ApiError, tokenStore, type DeviceDto, type WatchProgressDto } from '@/lib/api';
+import { api, ApiError, tokenStore, type DeviceDto, type WatchlistItemDto, type WatchProgressDto } from '@/lib/api';
 import { isMockMode } from '@/lib/dataMode';
+import { MediaCard } from '@/design-system';
+import { toast } from '@/hooks/use-toast';
 
 function loginErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
@@ -177,7 +179,7 @@ export function ProfilePage() {
           <div className="md:col-span-2 space-y-4">
             {[
               { label: t.profile.devices, path: '/devices', count: deviceCount },
-              { label: t.profile.watchlist, path: '/watchlist', count: 'Coming soon' },
+              { label: t.profile.watchlist, path: '/watchlist', count: 'Open' },
               { label: t.profile.history, path: '/history', count: 'Open' },
             ].map(item => (
               <Card key={item.path} className="bg-card border-border hover:bg-card/80 cursor-pointer transition-colors" onClick={() => navigate(item.path)}>
@@ -353,23 +355,174 @@ export function DevicesPage() {
 export function WatchlistPage() {
   const { t } = useLang();
   const navigate = useNavigate();
+  const { isLoggedIn } = useAuth();
+  const mockMode = isMockMode();
+  const [items, setItems] = useState<WatchlistItemDto[]>([]);
+  const [loading, setLoading] = useState(!mockMode);
+  const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
+
+  const load = useCallback(async () => {
+    if (mockMode || !isLoggedIn || !tokenStore.get()) {
+      setItems([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await api.listWatchlist({ page: 1, page_size: 100 });
+      setItems(result.items);
+    } catch (err) {
+      setItems([]);
+      setError(err instanceof ApiError ? err.message : 'Unable to load watchlist.');
+    } finally {
+      setLoading(false);
+    }
+  }, [isLoggedIn, mockMode]);
+
+  useEffect(() => {
+    void load();
+  }, [load, reload]);
+
+  const removeItem = async (item: WatchlistItemDto) => {
+    try {
+      await api.deleteWatchlistItem(item.id);
+      setItems((prev) => prev.filter((row) => row.id !== item.id));
+      toast({ title: t.profile.watchlist, description: 'Removed from watchlist' });
+    } catch (err) {
+      toast({
+        title: t.profile.watchlist,
+        description: err instanceof ApiError ? err.message : 'Remove failed',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const clearAll = async () => {
+    try {
+      await api.clearWatchlist();
+      setItems([]);
+      toast({ title: t.profile.watchlist, description: 'Watchlist cleared' });
+    } catch (err) {
+      toast({
+        title: t.profile.watchlist,
+        description: err instanceof ApiError ? err.message : 'Clear failed',
+        variant: 'destructive',
+      });
+    }
+  };
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen" data-testid="watchlist-page">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
-        <h1 className="mb-6 font-display text-2xl font-bold text-foreground md:text-3xl">
-          {t.profile.watchlist}
-        </h1>
-        <Card className="border-border bg-card" data-testid="watchlist-deferred-page">
-          <CardContent className="space-y-4 py-10 text-center">
-            <p className="text-lg text-foreground">Watchlist sync is coming soon</p>
-            <p className="mx-auto max-w-md text-sm text-muted-foreground">
-              A watchlist table exists in the database, but customer APIs are not exposed yet. Mock watchlists have been
-              removed so production does not show fake titles.
-            </p>
-            <Button onClick={() => navigate('/movies')}>Browse movies</Button>
-          </CardContent>
-        </Card>
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <h1 className="font-display text-2xl font-bold text-foreground md:text-3xl">
+            {t.profile.watchlist}
+          </h1>
+          {!mockMode && items.length > 0 ? (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm">
+                  Clear All
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Clear Watchlist</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will remove all titles from your watchlist. This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => void clearAll()}
+                    className="bg-destructive text-destructive-foreground"
+                  >
+                    {t.common.delete}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          ) : null}
+        </div>
+
+        {mockMode ? (
+          <Card className="border-border bg-card">
+            <CardContent className="space-y-4 py-10 text-center">
+              <p className="text-lg text-foreground">Watchlist requires API mode</p>
+              <p className="mx-auto max-w-md text-sm text-muted-foreground">
+                Sign in against the live API to sync your personal watchlist. Mock mode never shows fake titles.
+              </p>
+              <Button onClick={() => navigate('/movies')}>Browse movies</Button>
+            </CardContent>
+          </Card>
+        ) : !isLoggedIn || !tokenStore.get() ? (
+          <Card className="border-border bg-card">
+            <CardContent className="space-y-4 py-10 text-center">
+              <p className="text-lg text-foreground">Sign in to view your watchlist</p>
+              <Button onClick={() => navigate('/login')}>{t.login.signIn}</Button>
+            </CardContent>
+          </Card>
+        ) : loading ? (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="aspect-[2/3] animate-pulse rounded-xl bg-muted" />
+            ))}
+          </div>
+        ) : error ? (
+          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+            <span role="alert">{error}</span>
+            <Button variant="outline" size="sm" onClick={() => setReload((v) => v + 1)}>
+              Retry
+            </Button>
+          </div>
+        ) : items.length === 0 ? (
+          <Card className="border-border bg-card" data-testid="watchlist-empty">
+            <CardContent className="space-y-4 py-10 text-center">
+              <p className="text-lg text-foreground">Your watchlist is empty</p>
+              <p className="mx-auto max-w-md text-sm text-muted-foreground">
+                Add movies and series from their detail pages to keep them here.
+              </p>
+              <Button onClick={() => navigate('/movies')}>Browse movies</Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <div
+            className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6"
+            data-testid="watchlist-grid"
+          >
+            {items.map((item) => (
+              <div key={item.id} className="relative">
+                <MediaCard
+                  title={item.title}
+                  imageUrl={item.poster_url}
+                  year={item.release_year ?? undefined}
+                  playable={item.available && Boolean(item.detail_path)}
+                  badge={item.content_type === 'series' ? 'Series' : undefined}
+                  onActivate={() => {
+                    if (item.available && item.detail_path) navigate(item.detail_path);
+                  }}
+                  data-testid={`watchlist-item-${item.id}`}
+                />
+                <Button
+                  size="icon"
+                  variant="secondary"
+                  className="absolute end-2 top-2 h-8 w-8 rounded-full opacity-90"
+                  aria-label={`Remove ${item.title} from watchlist`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void removeItem(item);
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

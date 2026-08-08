@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Play,
-  Plus,
   Share2,
   Check,
   Clapperboard,
@@ -11,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ContentShelf, MediaCard, MetaChip, MetaRow, SectionHeader, typography } from '@/design-system';
 import { useLang } from '@/components/CustomerLayout';
+import { WatchlistButton } from '@/components/WatchlistButton';
 import type { CatalogMovie } from '@/lib/catalogData';
 import {
   catalogAvailabilityChips,
@@ -245,17 +245,7 @@ export function MovieDetailView({
                       {fullMovieUnavailableLabel()}
                     </Badge>
                   ) : null}
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    disabled
-                    title="Watchlist sync is not available yet"
-                    className="gap-2 opacity-70"
-                    data-testid="watchlist-deferred"
-                  >
-                    <Plus className="h-5 w-5" />
-                    Add Watchlist
-                  </Button>
+                  <WatchlistButton movieId={movie.id} />
                   <Button size="lg" variant="ghost" className="gap-2" onClick={() => void onShare()}>
                     {shared ? <Check className="h-5 w-5 text-success" /> : <Share2 className="h-5 w-5" />}
                     {shared ? 'Copied' : 'Share'}

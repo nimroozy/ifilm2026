@@ -37,6 +37,7 @@ import { canPlayFullMovie, fullMovieUnavailableLabel, hasDemoClip, isDemoCatalog
 import { trailerEmbedUrl } from '@/lib/trailers';
 import { MediaCard } from '@/design-system';
 import { MovieDetailView } from '@/components/MovieDetailView';
+import { WatchlistButton } from '@/components/WatchlistButton';
 
 function PageLoading() {
   return (
@@ -608,6 +609,7 @@ export function SeriesDetailsPage() {
                   </Badge>
                 );
               })()}
+              <WatchlistButton seriesId={show.id} />
               {showIsDemo ? (
                 <Badge variant="outline" className="px-3 py-2 text-sm">
                   Demo catalog
