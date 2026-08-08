@@ -1,6 +1,5 @@
-@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap");
+/* Fonts load via non-blocking <link> in index.html (display=swap).
+   Avoid CSS @import — it blocks first paint on slow networks. */
 
 @tailwind base;
 @tailwind components;
@@ -42,7 +41,7 @@
     --font-sans: 'Outfit', 'Segoe UI', sans-serif;
     --font-serif: 'Fraunces', 'Times New Roman', serif;
     --font-display: 'Fraunces', 'Times New Roman', serif;
-    --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+    --font-mono: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', monospace;
     --shadow-2xs: 0 1px 2px 0 hsl(222 28% 12% / 0.04);
     --shadow-xs: 0 1px 3px 0 hsl(222 28% 12% / 0.06);
     --shadow-sm: 0 2px 8px 0 hsl(222 28% 12% / 0.08);

@@ -15,16 +15,14 @@ import {
   type SeriesDto,
 } from './api';
 import { resolveAudioAvailability } from './catalogAvailability';
-import { isApiMode, isMockMode } from './dataMode';
+import { isMockMode } from './dataMode';
 import type { AppLocale } from './locale';
-import {
-  movies as mockMovies,
-  series as mockSeries,
-  episodes as mockEpisodes,
-  genres as mockGenreNames,
-  type Movie,
-  type Series,
-} from '@/data/mockData';
+import type { Movie, Series } from '@/data/mockData';
+
+/** Lazy mock fixtures — excluded from customer production builds (VITE_DATA_MODE=api). */
+async function loadMockData() {
+  return import('@/data/mockData');
+}
 
 function hasDubCode(item: { dubbed?: string[]; audioAvailability?: unknown }, code: string): boolean {
   const audio = resolveAudioAvailability(item as never);
@@ -62,7 +60,8 @@ function publishedMockItems<T extends { catalogStatus?: string }>(items: T[]): T
   return items.filter((item) => (item.catalogStatus ?? 'published') === 'published');
 }
 
-function filterMockMovies(params?: CatalogListParams): Movie[] {
+async function filterMockMovies(params?: CatalogListParams): Promise<Movie[]> {
+  const { movies: mockMovies } = await loadMockData();
   let result = publishedMockItems(mockMovies);
   if (params?.q) {
     const q = params.q.toLowerCase();
@@ -93,7 +92,8 @@ function filterMockMovies(params?: CatalogListParams): Movie[] {
   return result;
 }
 
-function filterMockSeries(params?: CatalogListParams): Series[] {
+async function filterMockSeries(params?: CatalogListParams): Promise<Series[]> {
+  const { series: mockSeries } = await loadMockData();
   let result = publishedMockItems(mockSeries);
   if (params?.q) {
     const q = params.q.toLowerCase();
@@ -126,8 +126,8 @@ function paginateMock<T>(items: T[], page = 1, pageSize = 20): CatalogListResult
 }
 
 export async function fetchMovies(params?: CatalogListParams): Promise<CatalogListResult<CatalogMovie>> {
-  if (isMockMode()) {
-    return paginateMock(filterMockMovies(params), params?.page ?? 1, params?.page_size ?? 100);
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
+    return paginateMock(await filterMockMovies(params), params?.page ?? 1, params?.page_size ?? 100);
   }
   const page = await api.listMovies(params);
   return {
@@ -142,7 +142,8 @@ export async function fetchMovie(
   idOrSlug: number | string,
   locale?: AppLocale,
 ): Promise<CatalogMovie> {
-  if (isMockMode()) {
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
+    const { movies: mockMovies } = await loadMockData();
     const id = typeof idOrSlug === 'number' ? idOrSlug : Number(idOrSlug);
     const movie = publishedMockItems(mockMovies).find(
       (m) => m.id === id || String(m.id) === String(idOrSlug)
@@ -158,7 +159,7 @@ export async function fetchSimilarMovies(
   limit = 12,
   locale?: AppLocale,
 ): Promise<CatalogMovie[]> {
-  if (isMockMode()) {
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
     const item = await fetchMovie(idOrSlug, locale);
     const page = await fetchMovies({ page_size: 40, sort: 'popular', locale });
     return page.items
@@ -170,8 +171,8 @@ export async function fetchSimilarMovies(
 }
 
 export async function fetchSeries(params?: CatalogListParams): Promise<CatalogListResult<CatalogSeries>> {
-  if (isMockMode()) {
-    return paginateMock(filterMockSeries(params), params?.page ?? 1, params?.page_size ?? 100);
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
+    return paginateMock(await filterMockSeries(params), params?.page ?? 1, params?.page_size ?? 100);
   }
   const page = await api.listSeries(params);
   return {
@@ -186,7 +187,8 @@ export async function fetchSeriesDetail(
   idOrSlug: number | string,
   locale?: AppLocale,
 ): Promise<SeriesDetailResult> {
-  if (isMockMode()) {
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
+    const { series: mockSeries, episodes: mockEpisodes } = await loadMockData();
     const id = typeof idOrSlug === 'number' ? idOrSlug : Number(idOrSlug);
     const show = publishedMockItems(mockSeries).find(
       (s) => s.id === id || String(s.id) === String(idOrSlug)
@@ -260,7 +262,8 @@ export async function fetchSeriesDetail(
 }
 
 export async function fetchSearch(q: string, locale?: AppLocale): Promise<CatalogSearchResult> {
-  if (isMockMode()) {
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
+    const { movies: mockMovies, series: mockSeries } = await loadMockData();
     const query = q.toLowerCase().trim();
     if (!query) return { movies: [], series: [] };
     const movies = publishedMockItems(mockMovies).filter(
@@ -283,7 +286,8 @@ export async function fetchSearch(q: string, locale?: AppLocale): Promise<Catalo
 }
 
 export async function fetchGenres(): Promise<{ id?: number; name: string; slug?: string }[]> {
-  if (isMockMode()) {
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
+    const { genres: mockGenreNames } = await loadMockData();
     return mockGenreNames.map((name) => ({ name, slug: name.toLowerCase() }));
   }
   const page = await api.listGenres({ page_size: 100 });
@@ -291,7 +295,8 @@ export async function fetchGenres(): Promise<{ id?: number; name: string; slug?:
 }
 
 export async function fetchFeaturedMovies(limit = 8): Promise<CatalogMovie[]> {
-  if (isMockMode()) {
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
+    const { movies: mockMovies } = await loadMockData();
     return publishedMockItems(mockMovies).filter((m) => m.featured).slice(0, limit);
   }
   const page = await api.listMovies({ featured: true, page_size: limit, sort: 'newest' });
@@ -299,7 +304,8 @@ export async function fetchFeaturedMovies(limit = 8): Promise<CatalogMovie[]> {
 }
 
 export async function fetchTrendingMovies(limit = 12): Promise<CatalogMovie[]> {
-  if (isMockMode()) {
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
+    const { movies: mockMovies } = await loadMockData();
     return publishedMockItems(mockMovies).sort((a, b) => b.views - a.views).slice(0, limit);
   }
   const page = await api.listMovies({ trending: true, page_size: limit, sort: 'views_desc' });
@@ -309,7 +315,8 @@ export async function fetchTrendingMovies(limit = 12): Promise<CatalogMovie[]> {
 }
 
 export async function fetchHomeCatalog(locale?: AppLocale) {
-  if (isMockMode()) {
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
+    const { movies: mockMovies, series: mockSeries } = await loadMockData();
     const movies = publishedMockItems(mockMovies);
     const series = publishedMockItems(mockSeries);
     return {
@@ -406,7 +413,7 @@ export async function fetchHomeCatalog(locale?: AppLocale) {
 
 /** Authenticated homepage aggregate (catalog + CW + watchlist + recommendations). */
 export async function fetchMeHomeCatalog(locale?: AppLocale) {
-  if (isMockMode()) {
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
     const catalog = await fetchHomeCatalog(locale);
     return {
       ...catalog,
@@ -442,7 +449,7 @@ export async function fetchMeHomeCatalog(locale?: AppLocale) {
 export async function fetchCollections(
   params?: CollectionListParams
 ): Promise<CatalogListResult<CatalogCollection>> {
-  if (isMockMode()) {
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
     return { items: [], total: 0, page: params?.page ?? 1, page_size: params?.page_size ?? 20 };
   }
   const page = await api.listCollections(params);
@@ -455,7 +462,7 @@ export async function fetchCollections(
 }
 
 export async function fetchCollection(slug: string): Promise<CatalogCollection> {
-  if (isMockMode()) {
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
     throw new Error('Collection not found');
   }
   return api.getCollection(slug);
@@ -465,7 +472,7 @@ export async function fetchFeaturedHomeCollections(params?: {
   page_size?: number;
   min_items?: number;
 }): Promise<CatalogCollection[]> {
-  if (isMockMode()) return [];
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) return [];
   const page = await api.listFeaturedHomeCollections(params);
   return page.items;
 }

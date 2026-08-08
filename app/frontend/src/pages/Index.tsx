@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth, useLang } from '@/components/CustomerLayout';
 import { ContentShelf, MediaCard } from '@/design-system';
 import { HeroCarousel } from '@/components/HeroCarousel';
-import { watchHistory } from '@/data/mockData';
 import {
   fetchHomeCatalog,
   fetchMeHomeCatalog,
@@ -134,6 +133,18 @@ function ContinueWatchingRow({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
+  const [mockItems, setMockItems] = useState<
+    Array<{
+      id: number;
+      contentId: number;
+      title: string;
+      type: string;
+      progress: number;
+      duration: number;
+      poster: string;
+      episode?: string;
+    }>
+  >([]);
 
   useEffect(() => {
     if (preloaded !== undefined) {
@@ -170,6 +181,22 @@ function ContinueWatchingRow({
     };
   }, [isLoggedIn, mockMode, reload, preloaded]);
 
+  useEffect(() => {
+    if (!mockMode) {
+      setMockItems([]);
+      return;
+    }
+    let cancelled = false;
+    void import('@/data/mockData').then((mod) => {
+      if (!cancelled) {
+        setMockItems(mod.watchHistory.filter((item) => item.progress < 100));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [mockMode]);
+
   if (!mockMode && (!isLoggedIn || !tokenStore.get())) return null;
   if (!mockMode && loading) {
     return (
@@ -196,7 +223,7 @@ function ContinueWatchingRow({
     );
   }
 
-  const items = mockMode ? watchHistory.filter((item) => item.progress < 100) : apiItems ?? [];
+  const items = mockMode ? mockItems : apiItems ?? [];
   if (!items.length) return null;
 
   const dismiss = async (assetId: string, title: string) => {
@@ -268,17 +295,19 @@ function RecommendationShelfRow({
   title,
   items,
   testId,
+  eagerCount = 0,
 }: {
   title: string;
   items: RecommendationItemDto[];
   testId?: string;
+  eagerCount?: number;
 }) {
   const navigate = useNavigate();
   const { lang } = useLang();
   if (!items.length) return null;
   return (
     <ContentShelf title={title} testId={testId}>
-      {items.map((item) => (
+      {items.map((item, index) => (
         <MediaCard
           key={`${item.content_type}-${item.id}`}
           title={item.title}
@@ -288,6 +317,7 @@ function RecommendationShelfRow({
           playable={Boolean(item.playable)}
           status={localizeRecommendationExplanation(item.explanation, lang)}
           badge={item.content_type === 'series' ? 'Series' : undefined}
+          priority={index < eagerCount}
           onActivate={() => navigate(item.detail_path)}
           data-testid={`rec-card-${item.id}`}
         />
@@ -347,9 +377,14 @@ function MyListHomeRow({ preloaded }: { preloaded?: WatchlistItemDto[] | null })
 function HomeRecommendationShelves({
   usedIds,
   preloaded,
+  firstShelfOnly = false,
+  eagerCount = 0,
 }: {
   usedIds: Set<string>;
   preloaded?: HomeRecommendationsDto | null;
+  /** When true, render only the first non-empty recommendation shelf (above-fold). */
+  firstShelfOnly?: boolean;
+  eagerCount?: number;
 }) {
   const { isLoggedIn } = useAuth();
   const { t } = useLang();
@@ -381,28 +416,28 @@ function HomeRecommendationShelves({
 
   if (!payload?.shelves?.length) return null;
 
-  return (
-    <>
-      {payload.shelves.map((shelf) => {
-        if (shelf.shelf_type === 'editorial_collections') return null;
-        const items = (shelf.items || []).filter((item) => {
-          const key = `${item.content_type}:${item.id}`;
-          if (usedIds.has(key)) return false;
-          usedIds.add(key);
-          return true;
-        });
-        if (!items.length) return null;
-        return (
-          <RecommendationShelfRow
-            key={`${shelf.shelf_type}-${shelf.title}`}
-            title={localizeRecommendationShelfTitle(shelf, t.sections as Record<string, string>)}
-            items={items}
-            testId={`home-shelf-${shelf.shelf_type}`}
-          />
-        );
-      })}
-    </>
-  );
+  const rows: ReactNode[] = [];
+  for (const shelf of payload.shelves) {
+    if (shelf.shelf_type === 'editorial_collections') continue;
+    const items = (shelf.items || []).filter((item) => {
+      const key = `${item.content_type}:${item.id}`;
+      if (usedIds.has(key)) return false;
+      usedIds.add(key);
+      return true;
+    });
+    if (!items.length) continue;
+    rows.push(
+      <RecommendationShelfRow
+        key={`${shelf.shelf_type}-${shelf.title}`}
+        title={localizeRecommendationShelfTitle(shelf, t.sections as Record<string, string>)}
+        items={items}
+        testId={`home-shelf-${shelf.shelf_type}`}
+        eagerCount={rows.length === 0 ? eagerCount : 0}
+      />
+    );
+    if (firstShelfOnly) break;
+  }
+  return <>{rows}</>;
 }
 
 export default function HomePage() {
@@ -417,6 +452,8 @@ export default function HomePage() {
   const [recommendations, setRecommendations] = useState<HomeRecommendationsDto | null | undefined>(
     undefined
   );
+  /** Progressive shelves: hero + first rail first; rest after idle/paint. */
+  const [showBelowFold, setShowBelowFold] = useState(false);
   const lastLoadKey = useRef<string>('');
 
   const load = useCallback(async (opts?: { force?: boolean }) => {
@@ -430,6 +467,7 @@ export default function HomePage() {
 
     setLoading(true);
     setError(null);
+    setShowBelowFold(false);
     try {
       if (mode === 'me') {
         try {
@@ -471,6 +509,21 @@ export default function HomePage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (loading || !data || showBelowFold) return;
+    const reveal = () => setShowBelowFold(true);
+    const w = globalThis as typeof globalThis & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (typeof w.requestIdleCallback === 'function') {
+      const id = w.requestIdleCallback(reveal, { timeout: 900 });
+      return () => w.cancelIdleCallback?.(id);
+    }
+    const id = globalThis.setTimeout(reveal, 0);
+    return () => globalThis.clearTimeout(id);
+  }, [loading, data, showBelowFold]);
+
   if (loading) return <HomeLoading />;
   if (error) return <HomeError message={error} onRetry={() => void load({ force: true })} />;
   if (!data) return <HomeError message="No catalog data" onRetry={() => void load({ force: true })} />;
@@ -484,6 +537,7 @@ export default function HomePage() {
     .filter(({ items }) => items.length > 0);
 
   const usedIds = new Set<string>();
+  const hasRecShelves = Boolean(recommendations?.shelves?.some((s) => s.shelf_type !== 'editorial_collections' && (s.items?.length ?? 0) > 0));
 
   return (
     <div className="pb-8">
@@ -491,27 +545,54 @@ export default function HomePage() {
       <div className="relative z-10 -mt-10 space-y-1 md:-mt-14">
         <ContinueWatchingRow preloaded={continueWatching} />
         <MyListHomeRow preloaded={watchlist} />
-        <HomeRecommendationShelves usedIds={usedIds} preloaded={recommendations} />
+        {hasRecShelves ? (
+          <HomeRecommendationShelves
+            usedIds={usedIds}
+            preloaded={recommendations}
+            firstShelfOnly
+            eagerCount={4}
+          />
+        ) : (
+          <ContentRow title={t.sections.recentlyAdded} items={newReleases} eagerCount={4} />
+        )}
         <div className="px-4 sm:px-6 lg:px-8">
           <Button asChild variant="secondary" className="mt-2" data-testid="home-what-to-watch-cta">
             <Link to="/what-to-watch">{t.nav.whatToWatch}</Link>
           </Button>
         </div>
-        {collectionShelves.map(({ collection, items }) => (
-          <ContentRow key={`collection-${collection.id}`} title={collection.title} items={items} />
-        ))}
-        <ContentRow title={t.sections.recentlyAdded} items={newReleases} eagerCount={4} />
-        <ContentRow title={t.sections.popularMovies} items={data.popular} />
-        <ContentRow title={t.sections.popularSeries} items={data.popularSeries} type="series" />
-        <ContentRow title={t.sections.trending} items={data.trending} />
-        <ContentRow title={t.sections.topRated || 'Top Rated'} items={topRated} />
-        <ContentRow title={t.sections.action} items={data.actionMovies} />
-        <ContentRow title="Drama" items={dramaMovies} />
-        <ContentRow title={t.sections.comedy} items={data.comedyMovies} />
-        <ContentRow title="Animation & Family" items={animationFamily} />
-        <ContentRow title={t.sections.afghanMovies} items={data.afghanMovies} />
-        <ContentRow title={t.sections.persianDubbed} items={data.persianDubbed} />
-        <ContentRow title={t.sections.pashtoDubbed} items={data.pashtoDubbed} />
+        {showBelowFold ? (
+          <>
+            {hasRecShelves ? (
+              <HomeRecommendationShelves usedIds={usedIds} preloaded={recommendations} />
+            ) : null}
+            {collectionShelves.map(({ collection, items }) => (
+              <ContentRow key={`collection-${collection.id}`} title={collection.title} items={items} />
+            ))}
+            {hasRecShelves ? (
+              <ContentRow title={t.sections.recentlyAdded} items={newReleases} />
+            ) : null}
+            <ContentRow title={t.sections.popularMovies} items={data.popular} />
+            <ContentRow title={t.sections.popularSeries} items={data.popularSeries} type="series" />
+            <ContentRow title={t.sections.trending} items={data.trending} />
+            <ContentRow title={t.sections.topRated || 'Top Rated'} items={topRated} />
+            <ContentRow title={t.sections.action} items={data.actionMovies} />
+            <ContentRow title="Drama" items={dramaMovies} />
+            <ContentRow title={t.sections.comedy} items={data.comedyMovies} />
+            <ContentRow title="Animation & Family" items={animationFamily} />
+            <ContentRow title={t.sections.afghanMovies} items={data.afghanMovies} />
+            <ContentRow title={t.sections.persianDubbed} items={data.persianDubbed} />
+            <ContentRow title={t.sections.pashtoDubbed} items={data.pashtoDubbed} />
+          </>
+        ) : (
+          <div className="space-y-4 px-4 py-6 sm:px-6 lg:px-8" data-testid="home-below-fold-pending" aria-hidden>
+            <Skeleton className="h-6 w-40" />
+            <div className="flex gap-4 overflow-hidden">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-[200px] w-[140px] shrink-0 rounded-xl" />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

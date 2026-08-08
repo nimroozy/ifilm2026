@@ -18,6 +18,21 @@ function isTmdbImageUrl(url: URL): boolean {
   return TMDB_IMAGE_HOST.test(url.hostname) && url.pathname.includes('/t/p/');
 }
 
+function withTmdbWidth(raw: string, widthToken: string): string {
+  try {
+    const url = new URL(raw, typeof window !== 'undefined' ? window.location.origin : 'http://local');
+    if (!isTmdbImageUrl(url)) return raw;
+    const parts = url.pathname.split('/');
+    const pIndex = parts.indexOf('p');
+    if (pIndex < 0 || pIndex + 1 >= parts.length) return raw;
+    parts[pIndex + 1] = widthToken;
+    url.pathname = parts.join('/');
+    return url.toString();
+  } catch {
+    return raw;
+  }
+}
+
 /** Rewrite TMDB `/t/p/{size}/…` to the requested width token. */
 export function sizedArtworkUrl(
   raw: string | null | undefined,
@@ -26,17 +41,28 @@ export function sizedArtworkUrl(
 ): string {
   const value = (raw || '').trim();
   if (!value) return '';
-  try {
-    const url = new URL(value, typeof window !== 'undefined' ? window.location.origin : 'http://local');
-    if (!isTmdbImageUrl(url)) return value;
-    const parts = url.pathname.split('/');
-    // …/t/p/{size}/{file}
-    const pIndex = parts.indexOf('p');
-    if (pIndex < 0 || pIndex + 1 >= parts.length) return value;
-    parts[pIndex + 1] = WIDTH[kind][slot];
-    url.pathname = parts.join('/');
-    return url.toString();
-  } catch {
-    return value;
+  return withTmdbWidth(value, WIDTH[kind][slot]);
+}
+
+/**
+ * Responsive hero backdrop candidates: mobile prefers w780, desktop w1280.
+ * Never returns /original/.
+ */
+export function heroBackdropSrcSet(raw: string | null | undefined): {
+  src: string;
+  srcSet: string;
+  sizes: string;
+} {
+  const base = (raw || '').trim();
+  if (!base) return { src: '', srcSet: '', sizes: '100vw' };
+  const w780 = withTmdbWidth(base, 'w780');
+  const w1280 = withTmdbWidth(base, 'w1280');
+  if (w780 === base && w1280 === base) {
+    return { src: base, srcSet: '', sizes: '100vw' };
   }
+  return {
+    src: w780,
+    srcSet: `${w780} 780w, ${w1280} 1280w`,
+    sizes: '100vw',
+  };
 }

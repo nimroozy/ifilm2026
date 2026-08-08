@@ -109,49 +109,27 @@ export default defineConfig(({ command }) => {
     build: {
       rollupOptions: {
         output: {
-          manualChunks: {
-            // Vendor chunks
-            'react-vendor': ['react', 'react-dom'],
-            'router-vendor': ['react-router-dom'],
-            'ui-vendor': [
-              '@radix-ui/react-accordion',
-              '@radix-ui/react-alert-dialog',
-              '@radix-ui/react-aspect-ratio',
-              '@radix-ui/react-avatar',
-              '@radix-ui/react-checkbox',
-              '@radix-ui/react-collapsible',
-              '@radix-ui/react-context-menu',
-              '@radix-ui/react-dialog',
-              '@radix-ui/react-dropdown-menu',
-              '@radix-ui/react-hover-card',
-              '@radix-ui/react-label',
-              '@radix-ui/react-menubar',
-              '@radix-ui/react-navigation-menu',
-              '@radix-ui/react-popover',
-              '@radix-ui/react-progress',
-              '@radix-ui/react-radio-group',
-              '@radix-ui/react-scroll-area',
-              '@radix-ui/react-select',
-              '@radix-ui/react-separator',
-              '@radix-ui/react-slider',
-              '@radix-ui/react-slot',
-              '@radix-ui/react-switch',
-              '@radix-ui/react-tabs',
-              '@radix-ui/react-toast',
-              '@radix-ui/react-toggle',
-              '@radix-ui/react-toggle-group',
-              '@radix-ui/react-tooltip',
-            ],
-            'form-vendor': ['react-hook-form', '@hookform/resolvers', 'zod'],
-            'utils-vendor': [
-              'axios',
-              'clsx',
-              'tailwind-merge',
-              'class-variance-authority',
-              'date-fns',
-              'lucide-react',
-            ],
-            'query-vendor': ['@tanstack/react-query'],
+          /**
+           * Keep only framework vendors forced. Do NOT force Radix / lucide /
+           * react-hook-form into shared chunks — that made Vite modulepreload
+           * ~1.1MB of admin+form UI on the customer home entry.
+           */
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return undefined;
+            if (
+              id.includes('node_modules/react-dom') ||
+              id.includes('node_modules/react/') ||
+              id.includes('node_modules\\react-dom') ||
+              id.includes('node_modules\\react\\')
+            ) {
+              return 'react-vendor';
+            }
+            if (id.includes('react-router')) return 'router-vendor';
+            if (id.includes('@tanstack/react-query')) return 'query-vendor';
+            if (id.includes('node_modules/axios') || id.includes('node_modules\\axios')) {
+              return 'http-vendor';
+            }
+            return undefined;
           },
         },
       },
