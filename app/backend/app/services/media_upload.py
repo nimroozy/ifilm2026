@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import logging
 import os
+import shutil
 from datetime import UTC, timedelta
 from pathlib import Path
 
@@ -191,6 +193,28 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _durable_move(src: Path, dest: Path) -> None:
+    """Move ``src`` to ``dest`` durably.
+
+    Prefer atomic ``os.replace``. When temp and category dirs are on different
+    Docker bind mounts, rename raises EXDEV — fall back to copy + fsync + unlink.
+    """
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.replace(str(src), str(dest))
+        return
+    except OSError as exc:
+        if exc.errno != errno.EXDEV:
+            raise
+    # Cross-device: copy into place, fsync, then remove the temp source.
+    with src.open("rb") as in_f, dest.open("wb") as out_f:
+        shutil.copyfileobj(in_f, out_f, length=1024 * 1024)
+        out_f.flush()
+        os.fsync(out_f.fileno())
+    _fsync_path(dest)
+    src.unlink(missing_ok=True)
+
+
 def _fsync_path(path: Path) -> None:
     """Durably flush file bytes (and best-effort parent directory entry)."""
     with path.open("rb+") as handle:
@@ -334,8 +358,8 @@ async def _finalize_session(
         db.add(asset)
         db.flush()
 
-        # Atomic replace into final category path, then fsync.
-        os.replace(str(temp_path), str(final_path))
+        # Prefer atomic replace; EXDEV-safe durable move across bind mounts.
+        _durable_move(temp_path, final_path)
         _fsync_path(final_path)
         _verify_stored_file(path=final_path, expected_size=size, expected_checksum=checksum)
 
