@@ -833,5 +833,3 @@ export const adminApi = {
     return data;
   },
 };
-
-/** Map API movie DTO field names to the existing frontend Movie shape. */

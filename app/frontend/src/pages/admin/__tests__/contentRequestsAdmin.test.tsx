@@ -7,12 +7,15 @@ const listContentRequests = vi.fn();
 const getContentRequest = vi.fn();
 const contentRequestAction = vi.fn();
 
-vi.mock('@/lib/api', () => ({
+vi.mock('@/lib/adminApi', () => ({
   adminApi: {
     listContentRequests: (...args: unknown[]) => listContentRequests(...args),
     getContentRequest: (...args: unknown[]) => getContentRequest(...args),
     contentRequestAction: (...args: unknown[]) => contentRequestAction(...args),
   },
+}));
+
+vi.mock('@/lib/api', () => ({
   ApiError: class ApiError extends Error {
     status: number;
     constructor(message: string, status = 400) {
