@@ -150,7 +150,7 @@ def test_even_width_and_gop():
     assert gop_size(frame_rate=25.0, segment_seconds=6) == 150
 
 
-def test_ffmpeg_argv_is_list_no_shell():
+def test_ffmpeg_argv_is_list_no_shell(tmp_path):
     from app.models.media_encoding import MediaEncodingProfile
 
     profile = MediaEncodingProfile(
@@ -163,11 +163,12 @@ def test_ffmpeg_argv_is_list_no_shell():
         maxrate=880_000,
         bufsize=1_600_000,
     )
+    out = tmp_path / "out" / "360p"
     argv = build_hls_rendition_argv(
         ffmpeg_binary="ffmpeg",
-        source=Path("/tmp/in.mp4"),
-        playlist_path=Path("/tmp/out/360p/index.m3u8"),
-        segment_pattern=Path("/tmp/out/360p/segment_%03d.ts"),
+        source=tmp_path / "in.mp4",
+        playlist_path=out / "index.m3u8",
+        segment_pattern=out / "segment_%03d.ts",
         profile=profile,
         target_width=640,
         target_height=360,
