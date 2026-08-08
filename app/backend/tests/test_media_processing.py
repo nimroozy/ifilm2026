@@ -91,11 +91,13 @@ def _tiny_mp4(path: Path, *, unique_tag: str = "") -> None:
     assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")
 
 
-def _completed_asset(db_session, *, filename: str = "clip.mp4") -> MediaAsset:
+def _completed_asset(
+    db_session, *, filename: str = "clip.mp4", category: str = "originals"
+) -> MediaAsset:
     ensure_media_layout()
     asset_id = new_uuid()
     stored = f"{asset_id}.mp4"
-    dest = asset_storage_path(category="originals", asset_id=asset_id, stored_filename=stored)
+    dest = asset_storage_path(category=category, asset_id=asset_id, stored_filename=stored)
     _tiny_mp4(dest, unique_tag=asset_id)
     digest = hashlib.sha256(dest.read_bytes()).hexdigest()
     asset = MediaAsset(
@@ -108,7 +110,7 @@ def _completed_asset(db_session, *, filename: str = "clip.mp4") -> MediaAsset:
         checksum_sha256=digest,
         storage_backend="local",
         storage_path=relative_media_path(dest),
-        category="originals",
+        category=category,
         upload_status="completed",
         processing_status="none",
     )
@@ -212,6 +214,32 @@ def test_create_list_get_retry_cancel_flow(client, admin_headers, db_session):
         ).status_code
         == 409
     )
+
+
+@pytest.mark.parametrize("category", ["originals", "trailers", "subtitles"])
+def test_upload_enqueue_probe_worker_reads_file(db_session, category):
+    """Regression: worker must resolve storage_path under every upload category.
+
+    Production failure mode: API wrote trailers/... but worker had no trailers
+    volume mount → empty container-local dir → "Uploaded media file is missing".
+    """
+    from app.services.media_processing.paths import resolve_completed_asset_path
+
+    settings = get_settings()
+    asset = _completed_asset(db_session, filename=f"{category}-probe.mp4", category=category)
+    assert asset.storage_path.startswith(f"{category}/")
+    resolved = resolve_completed_asset_path(asset)
+    assert resolved.is_file()
+    assert resolved.read_bytes()  # worker can actually read bytes
+
+    job, _ = queue_probe_job(db_session, settings=settings, asset=asset, admin_id=None)
+    claimed = claim_next_job(db_session, settings=settings, worker_id=f"probe-{category}")
+    assert claimed is not None
+    result = execute_probe_job(db_session, settings=settings, job=claimed)
+    assert result.status == "completed", result.error_message
+    db_session.refresh(asset)
+    assert asset.processing_status == "completed"
+    assert asset.duration_seconds is not None or asset.width is not None or asset.video_codec
 
 
 def test_worker_probe_success_persists_metadata(client, admin_headers, db_session):
