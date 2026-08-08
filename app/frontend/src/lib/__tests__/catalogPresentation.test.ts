@@ -1,16 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
   canPlayFullMovie,
+  canShowPlayButton,
   fullMovieUnavailableLabel,
   hasDemoClip,
   isDemoCatalogItem,
+  isPublishedCatalogItem,
   movieDetailPrimaryActions,
+  movieUnavailableLabel,
+  shouldAutoplayTrailerHero,
 } from '@/lib/catalogPresentation';
 
 describe('catalogPresentation', () => {
   it('treats demo-owned items as non-full playback', () => {
     expect(isDemoCatalogItem({ demoOwned: true })).toBe(true);
     expect(canPlayFullMovie({ demoOwned: true, hlsPath: '/x', playable: true })).toBe(false);
+    expect(canShowPlayButton({ demoOwned: true, playable: true, status: 'published' })).toBe(false);
   });
 
   it('requires backend playable flags — never legacy hlsPath alone', () => {
@@ -22,36 +27,43 @@ describe('catalogPresentation', () => {
     expect(canPlayFullMovie({ demoOwned: false, hasExternalMedia: true })).toBe(true);
   });
 
+  it('Play button requires published + playable', () => {
+    expect(canShowPlayButton({ demoOwned: false, playable: true, status: 'draft' })).toBe(false);
+    expect(canShowPlayButton({ demoOwned: false, playable: true, status: 'published' })).toBe(true);
+    expect(isPublishedCatalogItem({ status: 'published' })).toBe(true);
+  });
+
   it('Killer Man regression: published + package flags show Play, not Unavailable', () => {
-    // Mirrors published movie with linked completed HLS package (no legacy hlsPath).
     const item = {
       demoOwned: false,
       playable: true,
       hasPlayablePackage: true,
       hasExternalMedia: false,
       hlsPath: null,
+      status: 'published',
     };
-    expect(canPlayFullMovie(item)).toBe(true);
+    expect(canShowPlayButton(item)).toBe(true);
     expect(movieDetailPrimaryActions(item, false)).toEqual(['play', 'more']);
-    expect(movieDetailPrimaryActions(item, false)).not.toContain('unavailable');
-    expect(fullMovieUnavailableLabel()).toBe('Full Movie Unavailable');
+    expect(movieDetailPrimaryActions(item, false)).not.toContain('coming_soon');
+    expect(movieUnavailableLabel()).toBe('Coming Soon');
   });
 
-  it('never shows unavailable when playable package flag is set', () => {
-    const item = { demoOwned: false, playable: true, hasPlayablePackage: true };
-    expect(canPlayFullMovie(item)).toBe(true);
+  it('never shows coming soon when playable package flag is set', () => {
+    const item = { demoOwned: false, playable: true, hasPlayablePackage: true, status: 'published' };
+    expect(canShowPlayButton(item)).toBe(true);
     expect(movieDetailPrimaryActions(item, false)).toEqual(['play', 'more']);
-    expect(movieDetailPrimaryActions(item, false)).not.toContain('unavailable');
+    expect(movieDetailPrimaryActions(item, false)).not.toContain('coming_soon');
   });
 
-  it('orders actions Play → Demo → Trailer before unavailable', () => {
-    expect(movieDetailPrimaryActions({ playable: true, hasDemoClip: true }, true)).toEqual([
+  it('orders actions Play → Demo → Trailer before Coming Soon', () => {
+    expect(movieDetailPrimaryActions({ playable: true, hasDemoClip: true, status: 'published' }, true)).toEqual([
       'play',
       'demo',
       'trailer',
       'more',
     ]);
-    expect(movieDetailPrimaryActions({ demoOwned: false }, false)).toEqual(['unavailable', 'more']);
+    expect(movieDetailPrimaryActions({ demoOwned: false }, false)).toEqual(['coming_soon', 'more']);
+    expect(movieDetailPrimaryActions({ demoOwned: false }, true)).toEqual(['trailer', 'more']);
   });
 
   it('detects demo clips', () => {
@@ -59,7 +71,15 @@ describe('catalogPresentation', () => {
     expect(hasDemoClip({ hasDemoClip: false })).toBe(false);
   });
 
-  it('exposes unavailable label', () => {
-    expect(fullMovieUnavailableLabel()).toBe('Full Movie Unavailable');
+  it('replaces Full Movie Unavailable copy with Coming Soon', () => {
+    expect(fullMovieUnavailableLabel()).toBe('Coming Soon');
+    expect(movieUnavailableLabel({ hasTrailer: true })).toBe('Unavailable');
+  });
+
+  it('autoplays trailer hero only when allowed', () => {
+    expect(shouldAutoplayTrailerHero({ hasTrailer: true, reduceMotion: false, userDismissed: false })).toBe(true);
+    expect(shouldAutoplayTrailerHero({ hasTrailer: false, reduceMotion: false, userDismissed: false })).toBe(false);
+    expect(shouldAutoplayTrailerHero({ hasTrailer: true, reduceMotion: true, userDismissed: false })).toBe(false);
+    expect(shouldAutoplayTrailerHero({ hasTrailer: true, reduceMotion: false, userDismissed: true })).toBe(false);
   });
 });

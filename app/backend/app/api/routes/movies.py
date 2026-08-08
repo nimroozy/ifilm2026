@@ -135,6 +135,18 @@ def list_movies(
     )
 
 
+@router.get("/movies/{id_or_slug}/similar", response_model=list[MovieOut])
+def get_similar_movies(
+    id_or_slug: str,
+    db: DbSession,
+    limit: int = Query(12, ge=1, le=24),
+) -> list[MovieOut]:
+    from app.services.similar_content import list_similar_movies
+
+    movie = resolve_movie(db, id_or_slug, published_only=True)
+    return list_similar_movies(db, movie, limit=limit)
+
+
 @router.get("/movies/{id_or_slug}", response_model=MovieOut)
 def get_public_movie(id_or_slug: str, db: DbSession) -> MovieOut:
     return movie_out(resolve_movie(db, id_or_slug, published_only=True), db)

@@ -317,6 +317,15 @@ class MovieUpdate(BaseModel):
         return normalized
 
 
+class CastCreditOut(BaseModel):
+    person_id: int
+    name: str
+    character: str = ""
+    profile_path: str = ""
+    profile_url: str = ""
+    order: int = 0
+
+
 class MovieOut(ORMModel):
     id: int
     title: str
@@ -354,9 +363,11 @@ class MovieOut(ORMModel):
     scheduled_publish_at: datetime | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    credits_synced_at: datetime | None = None
     genres: list[GenreOut] = Field(default_factory=list)
     director: str = ""
     cast: list[str] = Field(default_factory=list)
+    credits: list[CastCreditOut] = Field(default_factory=list)
     audio: list[str] = Field(default_factory=list)
     subtitles: list[str] = Field(default_factory=list)
     qualities: list[str] = Field(default_factory=list)

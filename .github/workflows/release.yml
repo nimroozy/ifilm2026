@@ -112,7 +112,7 @@ jobs:
           # Exact local parity: full pytest suite, zero failures required.
           pytest -q
           alembic heads | tee /tmp/alembic-heads.txt
-          grep -q '017_watchlist_v1' /tmp/alembic-heads.txt
+          grep -q '018_movie_detail_experience_v1' /tmp/alembic-heads.txt
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -411,7 +411,7 @@ jobs:
             --version "$VERSION" \
             --channel "$CHANNEL" \
             --archive "$ARCHIVE" \
-            --migration-head 017_watchlist_v1 \
+            --migration-head 018_movie_detail_experience_v1 \
             --minimum-version 0.1.0 \
             --database-backup-required \
             --rollback-supported \

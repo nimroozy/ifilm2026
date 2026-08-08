@@ -1,12 +1,14 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { act, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { LangProvider } from '@/components/CustomerLayout';
 import { ChildrenPage, MovieDetailsPage, MoviesPage } from '../Browse';
+import { MOVIE_HERO_TRAILER_DELAY_MS } from '@/lib/catalogPresentation';
 
 const fetchMovie = vi.fn();
 const fetchMovies = vi.fn();
 const fetchGenres = vi.fn();
+const fetchSimilarMovies = vi.fn();
 
 vi.mock('@/lib/catalogData', async () => {
   const actual = await vi.importActual<typeof import('@/lib/catalogData')>('@/lib/catalogData');
@@ -15,6 +17,7 @@ vi.mock('@/lib/catalogData', async () => {
     fetchMovie: (...args: unknown[]) => fetchMovie(...args),
     fetchMovies: (...args: unknown[]) => fetchMovies(...args),
     fetchGenres: (...args: unknown[]) => fetchGenres(...args),
+    fetchSimilarMovies: (...args: unknown[]) => fetchSimilarMovies(...args),
   };
 });
 
@@ -32,6 +35,15 @@ function movie(overrides: Record<string, unknown> = {}) {
     language: 'English',
     director: 'Director',
     cast: ['Actor'],
+    credits: [
+      {
+        personId: 1,
+        name: 'Actor One',
+        character: 'Hero',
+        profileUrl: 'https://image.tmdb.org/t/p/w185/a.jpg',
+        order: 0,
+      },
+    ],
     description: 'A demo catalog item.',
     poster: 'https://image.tmdb.org/t/p/w500/poster.jpg',
     backdrop: 'https://image.tmdb.org/t/p/w780/backdrop.jpg',
@@ -42,6 +54,7 @@ function movie(overrides: Record<string, unknown> = {}) {
     type: 'movie' as const,
     dubbed: [],
     views: 0,
+    status: 'published',
     demoOwned: true,
     hasDemoClip: true,
     trailerProvider: 'YouTube',
@@ -65,11 +78,28 @@ function renderMovieDetails(path = '/movie/42') {
 
 describe('demo catalog movie UI', () => {
   beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
     fetchMovie.mockReset();
     fetchMovies.mockReset();
     fetchGenres.mockReset();
+    fetchSimilarMovies.mockReset();
     fetchMovies.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20 });
+    fetchSimilarMovies.mockResolvedValue([]);
     fetchGenres.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('distinguishes trailer and demo clip; hides full play for demo-owned titles', async () => {
@@ -78,20 +108,47 @@ describe('demo catalog movie UI', () => {
     renderMovieDetails();
 
     expect(await screen.findByRole('button', { name: /Play demo clip for TMDB Demo Title/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Watch trailer for TMDB Demo Title/i })).toHaveAttribute(
-      'href',
-      'https://www.youtube-nocookie.com/embed/abc123XYZ'
-    );
-    // Demo clip present → do not show Full Movie Unavailable (Play Demo takes priority).
-    expect(screen.queryByTestId('full-movie-unavailable')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Watch trailer for TMDB Demo Title/i })).toBeInTheDocument();
+    expect(screen.queryByTestId('movie-unavailable')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Watch Full Movie/i })).not.toBeInTheDocument();
-    expect(screen.getByTestId('youtube-trailer-embed')).toHaveAttribute(
-      'src',
-      'https://www.youtube-nocookie.com/embed/abc123XYZ'
-    );
+    expect(screen.getByTestId('movie-hero')).toHaveAttribute('data-hero-mode', 'backdrop');
+    expect(screen.queryByTestId('youtube-trailer-embed')).not.toBeInTheDocument();
   });
 
-  it('exposes audio, dubbed, and subtitle availability on movie detail', async () => {
+  it('auto-transitions hero to muted YouTube trailer after 6 seconds', async () => {
+    fetchMovie.mockResolvedValue(movie());
+    renderMovieDetails();
+    await screen.findByTestId('movie-hero-backdrop');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(MOVIE_HERO_TRAILER_DELAY_MS + 50);
+    });
+
+    expect(screen.getByTestId('movie-hero')).toHaveAttribute('data-hero-mode', 'trailer');
+    const embed = screen.getByTestId('youtube-trailer-embed');
+    expect(embed.getAttribute('src')).toContain('autoplay=1');
+    expect(embed.getAttribute('src')).toContain('mute=1');
+    expect(embed.getAttribute('src')).toContain('youtube-nocookie.com/embed/abc123XYZ');
+  });
+
+  it('keeps backdrop when no trailer exists', async () => {
+    fetchMovie.mockResolvedValue(
+      movie({
+        trailerProvider: '',
+        trailerKey: '',
+        trailerUrl: '',
+      })
+    );
+    renderMovieDetails();
+    await screen.findByTestId('movie-hero-backdrop');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(MOVIE_HERO_TRAILER_DELAY_MS + 50);
+    });
+    expect(screen.getByTestId('movie-hero')).toHaveAttribute('data-hero-mode', 'backdrop');
+    expect(screen.queryByTestId('youtube-trailer-embed')).not.toBeInTheDocument();
+  });
+
+  it('exposes compact language badges and cast photos', async () => {
     fetchMovie.mockResolvedValue(
       movie({
         audio: ['en', 'fa'],
@@ -117,15 +174,14 @@ describe('demo catalog movie UI', () => {
 
     renderMovieDetails();
 
-    expect(await screen.findByTestId('movie-availability-chips')).toHaveTextContent(/Dubbed/i);
-    expect(screen.getByTestId('movie-availability-chips')).toHaveTextContent(/Original/i);
-    const technical = screen.getByTestId('movie-technical-details');
-    expect(technical).toHaveTextContent(/Persian/i);
-    expect(technical).toHaveTextContent(/English/i);
-    expect(screen.getByTestId('movie-availability-source-note')).toBeInTheDocument();
+    expect(await screen.findByTestId('movie-language-badges')).toHaveTextContent(/FA Dub/i);
+    expect(screen.getByTestId('movie-language-badges')).toHaveTextContent(/EN Audio|EN Subtitle/i);
+    expect(screen.getByTestId('movie-cast')).toHaveTextContent('Actor One');
+    expect(screen.getByTestId('movie-cast')).toHaveTextContent('Hero');
+    expect(screen.getByTestId('watchlist-toggle')).toBeInTheDocument();
   });
 
-  it('shows Full Movie Unavailable when neither playable nor demo clip exists', async () => {
+  it('shows Coming Soon when neither playable nor trailer exists', async () => {
     fetchMovie.mockResolvedValue(
       movie({
         demoOwned: false,
@@ -141,7 +197,8 @@ describe('demo catalog movie UI', () => {
 
     renderMovieDetails();
 
-    expect(await screen.findByTestId('full-movie-unavailable')).toHaveTextContent('Full Movie Unavailable');
+    expect(await screen.findByTestId('movie-unavailable')).toHaveTextContent('Coming Soon');
+    expect(screen.queryByText('Full Movie Unavailable')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Watch Full Movie/i })).not.toBeInTheDocument();
   });
 
@@ -164,9 +221,10 @@ describe('demo catalog movie UI', () => {
     renderMovieDetails();
 
     expect(await screen.findByRole('button', { name: /Play The Killer Man/i })).toBeInTheDocument();
-    expect(screen.queryByTestId('full-movie-unavailable')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('movie-unavailable')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Play demo clip/i })).not.toBeInTheDocument();
   });
+
   it('rejects non-HTTPS trailer embeds', async () => {
     fetchMovie.mockResolvedValue(
       movie({
@@ -179,8 +237,20 @@ describe('demo catalog movie UI', () => {
     renderMovieDetails();
 
     await screen.findByText('TMDB Demo Title');
-    expect(screen.queryByRole('link', { name: /Watch trailer/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Watch trailer/i })).not.toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(MOVIE_HERO_TRAILER_DELAY_MS + 50);
+    });
     expect(screen.queryByTestId('youtube-trailer-embed')).not.toBeInTheDocument();
+  });
+
+  it('renders similar movies shelf from API', async () => {
+    fetchMovie.mockResolvedValue(movie());
+    fetchSimilarMovies.mockResolvedValue([
+      movie({ id: 99, title: 'Similar Title', demoOwned: false, hasDemoClip: false, playable: true }),
+    ]);
+    renderMovieDetails();
+    expect(await screen.findByTestId('movie-similar')).toHaveTextContent('Similar Title');
   });
 
   it('shows Demo Clip badge on catalog cards', async () => {

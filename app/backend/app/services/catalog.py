@@ -95,6 +95,9 @@ def genre_out(genre: Genre, *, movie_count: int | None = None, series_count: int
 
 
 def movie_out(movie: Movie, db: Session | None = None) -> MovieOut:
+    from app.schemas.content import CastCreditOut
+    from app.services.tmdb.credits import list_movie_credits
+
     genres = [genre_out(g, movie_count=0, series_count=0) for g in (movie.genre_links or [])]
     playable, has_package, has_external = content_playability(db, movie_id=movie.id)
     audio_av, sub_av = availability_for_movie(
@@ -103,6 +106,19 @@ def movie_out(movie: Movie, db: Session | None = None) -> MovieOut:
         has_playable_package=has_package,
         has_external_media=has_external,
     )
+    credits_out: list[CastCreditOut] = []
+    if db is not None:
+        for row in list_movie_credits(db, movie.id):
+            credits_out.append(
+                CastCreditOut(
+                    person_id=row.tmdb_person_id,
+                    name=row.name,
+                    character=row.character_name or "",
+                    profile_path=row.profile_path or "",
+                    profile_url=row.profile_url or "",
+                    order=row.credit_order,
+                )
+            )
     return MovieOut(
         id=movie.id,
         title=movie.title,
@@ -146,6 +162,8 @@ def movie_out(movie: Movie, db: Session | None = None) -> MovieOut:
         writer=getattr(movie, "writer", "") or "",
         studio=getattr(movie, "studio", "") or "",
         cast=movie.cast or [],
+        credits=credits_out,
+        credits_synced_at=getattr(movie, "credits_synced_at", None),
         audio=movie.audio or [],
         subtitles=movie.subtitles or [],
         qualities=movie.qualities or [],

@@ -303,6 +303,7 @@ def import_movie(
         details = {**details, **client.movie_details(int(tmdb_id), language=settings.tmdb_fallback_language)}
     videos = client.movie_videos(int(tmdb_id))
     trailer = select_trailer(videos, language=settings.tmdb_language)
+    credits_payload = client.movie_credits(int(tmdb_id))
     config = client.configuration() if download_images else None
 
     created = existing is None
@@ -334,6 +335,9 @@ def import_movie(
 
     db.add(movie)
     db.flush()
+    from app.services.tmdb.credits import replace_movie_credits
+
+    replace_movie_credits(db, settings, movie, credits_payload)
     return ImportResult(
         "movie",
         movie.id,

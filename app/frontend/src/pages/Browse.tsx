@@ -24,6 +24,7 @@ import {
   fetchSearch,
   fetchSeries,
   fetchSeriesDetail,
+  fetchSimilarMovies,
   type CatalogMovie,
   type CatalogSeries,
 } from '@/lib/catalogData';
@@ -33,7 +34,7 @@ import {
   formatCatalogTracks,
   hasCatalogTracks,
 } from '@/lib/catalogAvailability';
-import { canPlayFullMovie, fullMovieUnavailableLabel, hasDemoClip, isDemoCatalogItem } from '@/lib/catalogPresentation';
+import { canPlayFullMovie, hasDemoClip, isDemoCatalogItem } from '@/lib/catalogPresentation';
 import { trailerEmbedUrl } from '@/lib/trailers';
 import { MediaCard } from '@/design-system';
 import { MovieDetailView } from '@/components/MovieDetailView';
@@ -429,20 +430,18 @@ export function MovieDetailsPage() {
     try {
       const item = await fetchMovie(id);
       setMovie(item);
-      const more = await fetchMovies({ page_size: 20, sort: 'newest' });
-      setRelated(
-        more.items
-          .filter((m) => {
-            if (m.id === item.id) return false;
-            const status =
-              'catalogStatus' in m && typeof (m as { catalogStatus?: string }).catalogStatus === 'string'
-                ? (m as { catalogStatus?: string }).catalogStatus
-                : 'published';
-            if (status !== 'published') return false;
-            return m.genres.some((g) => item.genres.includes(g));
-          })
-          .slice(0, 6)
-      );
+      try {
+        const similar = await fetchSimilarMovies(id, 12);
+        setRelated(similar);
+      } catch {
+        // Soft fallback: same-genre published titles if similar endpoint unavailable.
+        const more = await fetchMovies({ page_size: 20, sort: 'newest' });
+        setRelated(
+          more.items
+            .filter((m) => m.id !== item.id && m.genres.some((g) => item.genres.includes(g)))
+            .slice(0, 6)
+        );
+      }
     } catch (err) {
       setMovie(null);
       setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Movie not found');

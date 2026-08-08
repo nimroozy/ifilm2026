@@ -23,6 +23,17 @@ describe('api helpers', () => {
       language: 'Dari',
       director: 'Director',
       cast: ['A'],
+      credits: [
+        {
+          person_id: 11,
+          name: 'Actor',
+          character: 'Lead',
+          profile_path: '/x.jpg',
+          profile_url: 'https://image.tmdb.org/t/p/w185/x.jpg',
+          order: 0,
+        },
+      ],
+      credits_synced_at: '2026-08-08T00:00:00Z',
       description: 'desc',
       poster_url: 'p',
       backdrop_url: 'b',
@@ -47,6 +58,8 @@ describe('api helpers', () => {
     expect(mapped.featured).toBe(true);
     expect(mapped.genres).toEqual(['Drama']);
     expect(mapped.type).toBe('movie');
+    expect(mapped.credits[0]).toMatchObject({ personId: 11, name: 'Actor', character: 'Lead' });
+    expect(mapped.creditsSyncedAt).toBe('2026-08-08T00:00:00Z');
   });
 
   it('maps series DTOs using airing_status for UI status', () => {

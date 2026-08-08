@@ -3,6 +3,7 @@ from app.models.app_settings import AppSetting
 from app.models.cdn import Branch, CDNNode, CDNSyncJob
 from app.models.collections import Collection, CollectionItem
 from app.models.content import Episode, Genre, Movie, Season, Series
+from app.models.credits import MovieCastCredit, SeriesCastCredit
 from app.models.media import EncodingJob, UploadJob
 from app.models.media_assets import MediaAsset, UploadSession
 from app.models.media_encoding import MediaEncodingProfile, MediaPackage, MediaRendition
@@ -40,8 +41,10 @@ __all__ = [
     "MediaPublicationEvent",
     "MediaRendition",
     "Movie",
+    "MovieCastCredit",
     "Season",
     "Series",
+    "SeriesCastCredit",
     "Subscriber",
     "SubscriberDeviceSession",
     "SubscriberEntitlementSnapshot",

@@ -11,10 +11,28 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { adminApi, ApiError, type CatalogStatus, type GenreDto, type PublicationHistoryEventDto } from '@/lib/api';
+import {
+  adminApi,
+  api,
+  ApiError,
+  type CatalogStatus,
+  type GenreDto,
+  type MovieDto,
+  type PublicationHistoryEventDto,
+} from '@/lib/api';
 import { csvToList, ErrorState, listToCsv, LoadingBlock, POSTER_FALLBACK } from './adminShared';
 import PublishingPanel from './PublishingPanel';
 import MediaLinkingCard from './MediaLinkingCard';
+
+type TmdbDetailStatus = {
+  trailerAvailable: boolean;
+  trailerProvider: string;
+  trailerKey: string;
+  castCount: number;
+  creditsSyncedAt: string | null;
+  tmdbId: number | null;
+  similarCount: number | null;
+};
 
 const MOVIE_TABS = ['general', 'metadata', 'artwork', 'media', 'publishing', 'seo', 'history'] as const;
 type MovieTab = (typeof MOVIE_TABS)[number];
@@ -583,6 +601,25 @@ export default function MovieFormPage() {
   const [mediaRefreshToken, setMediaRefreshToken] = useState(0);
   const [history, setHistory] = useState<PublicationHistoryEventDto[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [tmdbStatus, setTmdbStatus] = useState<TmdbDetailStatus | null>(null);
+  const [tmdbRefreshing, setTmdbRefreshing] = useState(false);
+  const [similarStatus, setSimilarStatus] = useState<string>('Not checked');
+
+  function applyTmdbStatus(movie: MovieDto, similarCount: number | null = null) {
+    const trailerKey = movie.trailer_key || '';
+    const trailerProvider = movie.trailer_provider || '';
+    setTmdbStatus({
+      trailerAvailable: Boolean(
+        (trailerProvider.toLowerCase() === 'youtube' && trailerKey) || movie.trailer_url
+      ),
+      trailerProvider,
+      trailerKey,
+      castCount: Array.isArray(movie.credits) ? movie.credits.length : 0,
+      creditsSyncedAt: movie.credits_synced_at ?? null,
+      tmdbId: movie.tmdb_id ?? null,
+      similarCount,
+    });
+  }
 
   const form = useForm<MovieFormValues>({
     resolver: zodResolver(movieFormSchema),
@@ -646,6 +683,7 @@ export default function MovieFormPage() {
         const movie = await adminApi.getMovie(Number(id));
         if (cancelled) return;
         setCurrentStatus(movie.status);
+        applyTmdbStatus(movie);
         form.reset({
           title: movie.title,
           original_title: movie.original_title || '',
@@ -679,6 +717,15 @@ export default function MovieFormPage() {
                 .map((g) => g.id)
             : [],
         });
+        try {
+          const similar = await api.getSimilarMovies(Number(id), 12);
+          if (!cancelled) {
+            setSimilarStatus(similar.length ? `${similar.length} catalog matches` : 'No catalog matches');
+            applyTmdbStatus(movie, similar.length);
+          }
+        } catch {
+          if (!cancelled) setSimilarStatus('Unavailable (title may be unpublished)');
+        }
       } catch (err) {
         if (!cancelled) setError(err instanceof ApiError ? err.message : 'Failed to load movie');
       } finally {
@@ -781,6 +828,40 @@ export default function MovieFormPage() {
     }
   }
 
+  async function refreshTmdbDetails() {
+    if (!id) return;
+    setTmdbRefreshing(true);
+    try {
+      const res = await adminApi.refreshTmdbTitle({ media_type: 'movie', entity_id: Number(id) });
+      if (res.item && 'credits' in res.item) {
+        applyTmdbStatus(res.item as MovieDto, tmdbStatus?.similarCount ?? null);
+        const movie = res.item as MovieDto;
+        form.setValue('trailer_url', movie.trailer_url || form.getValues('trailer_url'), {
+          shouldDirty: false,
+        });
+        if (Array.isArray(movie.cast) && movie.cast.length) {
+          form.setValue('cast', listToCsv(movie.cast), { shouldDirty: false });
+        }
+      }
+      try {
+        const similar = await api.getSimilarMovies(Number(id), 12);
+        setSimilarStatus(similar.length ? `${similar.length} catalog matches` : 'No catalog matches');
+        if (res.item && 'credits' in res.item) applyTmdbStatus(res.item as MovieDto, similar.length);
+      } catch {
+        setSimilarStatus('Unavailable (title may be unpublished)');
+      }
+      toast.success(
+        `TMDB details refreshed (${res.result.credits_count ?? 0} cast${
+          res.result.trailer_updated ? ', trailer updated' : ''
+        })`
+      );
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'TMDB refresh failed');
+    } finally {
+      setTmdbRefreshing(false);
+    }
+  }
+
   if (loading) return <LoadingBlock />;
   if (error) return <ErrorState message={error} onRetry={() => window.location.reload()} />;
 
@@ -816,6 +897,51 @@ export default function MovieFormPage() {
 
               <TabsContent value="metadata" className="space-y-4">
                 <MetadataFields form={form} genres={genres} />
+                {isEdit ? (
+                  <Card className="bg-card border-border" data-testid="tmdb-detail-status">
+                    <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+                      <CardTitle className="text-base">TMDB detail status</CardTitle>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={tmdbRefreshing || !tmdbStatus?.tmdbId}
+                        onClick={() => void refreshTmdbDetails()}
+                        data-testid="refresh-tmdb-details"
+                      >
+                        {tmdbRefreshing ? 'Refreshing…' : 'Refresh TMDB Details'}
+                      </Button>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-sm">
+                      <p>
+                        Trailer:{' '}
+                        <span className="font-medium text-foreground">
+                          {tmdbStatus?.trailerAvailable
+                            ? `Available (${tmdbStatus.trailerProvider || 'YouTube'}${
+                                tmdbStatus.trailerKey ? ` · ${tmdbStatus.trailerKey}` : ''
+                              })`
+                            : 'Not available'}
+                        </span>
+                      </p>
+                      <p>
+                        Cast imported:{' '}
+                        <span className="font-medium text-foreground">
+                          {tmdbStatus?.castCount ?? 0}
+                          {tmdbStatus?.creditsSyncedAt
+                            ? ` · synced ${new Date(tmdbStatus.creditsSyncedAt).toLocaleString()}`
+                            : ''}
+                        </span>
+                      </p>
+                      <p>
+                        Similar content:{' '}
+                        <span className="font-medium text-foreground">{similarStatus}</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Refresh updates TMDB-owned trailer/credits only and never overwrites manual admin edits.
+                      </p>
+                    </CardContent>
+                  </Card>
+                ) : null}
               </TabsContent>
 
               <TabsContent value="artwork" className="space-y-4">

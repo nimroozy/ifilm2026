@@ -42,3 +42,20 @@ export function trailerEmbedUrl(item: {
   }
   return safeYoutubeEmbedUrl(trailerUrl);
 }
+
+/** YouTube embed with muted autoplay — never downloads or rehosts trailers. */
+export function trailerAutoplayEmbedUrl(item: unknown): string {
+  const base = trailerEmbedUrl(item);
+  if (!base) return '';
+  try {
+    const url = new URL(base);
+    url.searchParams.set('autoplay', '1');
+    url.searchParams.set('mute', '1');
+    url.searchParams.set('rel', '0');
+    url.searchParams.set('modestbranding', '1');
+    url.searchParams.set('playsinline', '1');
+    return url.toString();
+  } catch {
+    return '';
+  }
+}
