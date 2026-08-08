@@ -9,12 +9,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  ApiError,
-  adminApi,
-  type PlaybackSessionDto,
-  type StreamingStatusDto,
-} from '@/lib/api';
+import { ApiError, type PlaybackSessionDto, type StreamingStatusDto,  } from '@/lib/api';
+import { adminApi } from '@/lib/adminApi';
 import {
   AdminTableCard,
   EmptyState,

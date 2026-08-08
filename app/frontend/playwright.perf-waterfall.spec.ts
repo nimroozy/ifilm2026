@@ -30,6 +30,8 @@ type PageMetrics = {
   ttfb: number;
   domContentLoaded: number;
   lcp: number | null;
+  lcpElement: string | null;
+  firstShellVisibleMs: number | null;
   firstPosterVisibleMs: number | null;
   apiRequestCount: number;
   apiUrls: string[];
@@ -37,6 +39,8 @@ type PageMetrics = {
   totalTransferredBytes: number;
   imageTransferredBytes: number;
   jsTransferredBytes: number;
+  cssTransferredBytes: number;
+  jsAssetEncodings: Array<{ url: string; encoding: string; transferSize: number; encodedBodySize: number }>;
   slowestRequest: { url: string; duration: number; status: number } | null;
   imageUrls: string[];
   originalTmdbImages: string[];
@@ -88,6 +92,17 @@ async function collectMetrics(
   const navStart = Date.now();
   await page.goto(gotoPath, { waitUntil: 'domcontentloaded', timeout: 60_000 });
 
+  let firstShellVisibleMs: number | null = null;
+  try {
+    await page.locator('[data-testid="customer-header"], [data-testid="customer-shell"]').first().waitFor({
+      state: 'visible',
+      timeout: 45_000,
+    });
+    firstShellVisibleMs = Date.now() - navStart;
+  } catch {
+    firstShellVisibleMs = null;
+  }
+
   // Wait for primary cards or hero.
   const poster = page.locator('[data-testid="media-card"] img, img[src*="tmdb"], img[src*="poster"]').first();
   let firstPosterVisibleMs: number | null = null;
@@ -104,17 +119,30 @@ async function collectMetrics(
   const timing = await page.evaluate(() => {
     const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
     const resources = performance.getEntriesByType('resource') as PerformanceResourceTiming[];
-    const lcpEntries = performance.getEntriesByType('largest-contentful-paint') as PerformanceEntry[];
-    const lcp = lcpEntries.length ? lcpEntries[lcpEntries.length - 1].startTime : null;
+    const lcpEntries = performance.getEntriesByType('largest-contentful-paint') as Array<
+      PerformanceEntry & { element?: Element; url?: string; size?: number }
+    >;
+    const last = lcpEntries.length ? lcpEntries[lcpEntries.length - 1] : null;
+    let lcpElement: string | null = null;
+    if (last?.element instanceof HTMLElement) {
+      const el = last.element;
+      lcpElement = `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''}${
+        el.getAttribute('data-testid') ? `[data-testid=${el.getAttribute('data-testid')}]` : ''
+      }${el.getAttribute('src') ? ` src=${(el.getAttribute('src') || '').slice(0, 120)}` : ''}`;
+    } else if (last?.url) {
+      lcpElement = `url:${last.url.slice(0, 160)}`;
+    }
     return {
       ttfb: nav ? nav.responseStart : 0,
       domContentLoaded: nav ? nav.domContentLoadedEventEnd : 0,
-      lcp,
+      lcp: last ? last.startTime : null,
+      lcpElement,
       resources: resources.map((r) => ({
         url: r.name,
         resourceType: (r as PerformanceResourceTiming & { initiatorType: string }).initiatorType,
         transferSize: r.transferSize || 0,
         encodedBodySize: r.encodedBodySize || 0,
+        decodedBodySize: r.decodedBodySize || 0,
         startTime: r.startTime,
         duration: r.duration,
         ttfb: r.responseStart,
@@ -124,27 +152,67 @@ async function collectMetrics(
 
   // Observe LCP via PerformanceObserver buffer if empty.
   let lcp = timing.lcp;
+  let lcpElement = timing.lcpElement;
   if (lcp == null) {
-    lcp = await page.evaluate(() => {
-      return new Promise<number | null>((resolve) => {
+    const observed = await page.evaluate(() => {
+      return new Promise<{ lcp: number | null; lcpElement: string | null }>((resolve) => {
         let value: number | null = null;
+        let elDesc: string | null = null;
         const po = new PerformanceObserver((list) => {
-          const entries = list.getEntries();
-          if (entries.length) value = entries[entries.length - 1].startTime;
+          const entries = list.getEntries() as Array<
+            PerformanceEntry & { element?: Element; url?: string }
+          >;
+          if (entries.length) {
+            const last = entries[entries.length - 1];
+            value = last.startTime;
+            if (last.element instanceof HTMLElement) {
+              elDesc = `${last.element.tagName.toLowerCase()}${
+                last.element.getAttribute('data-testid')
+                  ? `[data-testid=${last.element.getAttribute('data-testid')}]`
+                  : ''
+              }`;
+            } else if (last.url) {
+              elDesc = `url:${last.url.slice(0, 160)}`;
+            }
+          }
         });
         try {
           po.observe({ type: 'largest-contentful-paint', buffered: true });
         } catch {
-          resolve(null);
+          resolve({ lcp: null, lcpElement: null });
           return;
         }
         setTimeout(() => {
           po.disconnect();
-          resolve(value);
+          resolve({ lcp: value, lcpElement: elDesc });
         }, 1000);
       });
     });
+    lcp = observed.lcp;
+    lcpElement = observed.lcpElement;
   }
+
+  const jsAssetEncodings = await page.evaluate(async () => {
+    const scripts = Array.from(document.querySelectorAll('script[src], link[rel="modulepreload"]'))
+      .map((el) => (el as HTMLScriptElement | HTMLLinkElement).href || (el as HTMLLinkElement).href)
+      .filter((u) => u && u.includes('/assets/') && u.endsWith('.js'));
+    const out: Array<{ url: string; encoding: string; transferSize: number; encodedBodySize: number }> = [];
+    for (const url of scripts.slice(0, 12)) {
+      try {
+        const res = await fetch(url, { method: 'GET', cache: 'force-cache' });
+        const buf = await res.arrayBuffer();
+        out.push({
+          url,
+          encoding: res.headers.get('content-encoding') || 'identity',
+          transferSize: Number(res.headers.get('content-length') || buf.byteLength),
+          encodedBodySize: buf.byteLength,
+        });
+      } catch {
+        /* ignore */
+      }
+    }
+    return out;
+  });
 
   const rows: ResourceRow[] = timing.resources.map((r) => ({
     url: r.url,
@@ -158,13 +226,18 @@ async function collectMetrics(
     ttfb: r.ttfb,
   }));
 
-  const totalTransferredBytes = rows.reduce((a, r) => a + (r.transferSize || r.encodedBodySize), 0);
+  // Prefer transferSize (wire bytes after compression). Fall back to encodedBodySize.
+  const wire = (r: ResourceRow) => r.transferSize || r.encodedBodySize || 0;
+  const totalTransferredBytes = rows.reduce((a, r) => a + wire(r), 0);
   const imageTransferredBytes = rows
     .filter((r) => r.resourceType === 'img' || /\.(jpg|jpeg|png|webp|avif)(\?|$)/i.test(r.url))
-    .reduce((a, r) => a + (r.transferSize || r.encodedBodySize), 0);
+    .reduce((a, r) => a + wire(r), 0);
   const jsTransferredBytes = rows
     .filter((r) => r.resourceType === 'script' || /\.js(\?|$)/i.test(r.url))
-    .reduce((a, r) => a + (r.transferSize || r.encodedBodySize), 0);
+    .reduce((a, r) => a + wire(r), 0);
+  const cssTransferredBytes = rows
+    .filter((r) => r.resourceType === 'css' || r.resourceType === 'link' || /\.css(\?|$)/i.test(r.url))
+    .reduce((a, r) => a + wire(r), 0);
 
   const slowest =
     responses.sort((a, b) => b.duration - a.duration)[0] ||
@@ -197,6 +270,8 @@ async function collectMetrics(
     ttfb: timing.ttfb,
     domContentLoaded: timing.domContentLoaded,
     lcp,
+    lcpElement,
+    firstShellVisibleMs,
     firstPosterVisibleMs,
     apiRequestCount: apiUrls.length,
     apiUrls,
@@ -204,6 +279,8 @@ async function collectMetrics(
     totalTransferredBytes,
     imageTransferredBytes,
     jsTransferredBytes,
+    cssTransferredBytes,
+    jsAssetEncodings,
     slowestRequest: slowest,
     imageUrls,
     originalTmdbImages,

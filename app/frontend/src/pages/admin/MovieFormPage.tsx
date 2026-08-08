@@ -11,15 +11,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  adminApi,
-  api,
-  ApiError,
-  type CatalogStatus,
-  type GenreDto,
-  type MovieDto,
-  type PublicationHistoryEventDto,
-} from '@/lib/api';
+import { api, ApiError, type CatalogStatus, type GenreDto, type MovieDto, type PublicationHistoryEventDto,  } from '@/lib/api';
+import { adminApi } from '@/lib/adminApi';
 import { csvToList, ErrorState, listToCsv, LoadingBlock, POSTER_FALLBACK } from './adminShared';
 import PublishingPanel from './PublishingPanel';
 import MediaLinkingCard from './MediaLinkingCard';

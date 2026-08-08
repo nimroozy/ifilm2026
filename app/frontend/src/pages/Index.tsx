@@ -36,9 +36,9 @@ type HomeCatalog = Awaited<ReturnType<typeof fetchHomeCatalog>>;
 
 function HomeLoading() {
   return (
-    <div className="space-y-6 pt-8" data-testid="home-loading">
-      <Skeleton className="h-[70vh] w-full rounded-none" />
-      <div className="space-y-4 px-4 sm:px-6 lg:px-8">
+    <div className="space-y-6 pt-8" data-testid="home-loading" aria-busy="true">
+      <Skeleton className="h-[70vh] w-full rounded-none" data-testid="home-hero-skeleton" />
+      <div className="space-y-4 px-4 sm:px-6 lg:px-8" data-testid="home-shelf-skeleton">
         <Skeleton className="h-7 w-56" />
         <div className="flex gap-4 overflow-hidden">
           {Array.from({ length: 6 }).map((_, i) => (

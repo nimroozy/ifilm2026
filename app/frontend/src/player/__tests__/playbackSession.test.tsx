@@ -19,6 +19,13 @@ vi.mock('@/lib/api', async () => {
       createPlaybackSession: (...args: unknown[]) => createPlaybackSession(...args),
       revokePlaybackSession: (...args: unknown[]) => revokePlaybackSession(...args),
     },
+  };
+});
+
+vi.mock('@/lib/adminApi', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/adminApi')>('@/lib/adminApi');
+  return {
+    ...actual,
     adminApi: {
       ...actual.adminApi,
       createPlaybackSession: (...args: unknown[]) => adminCreate(...args),

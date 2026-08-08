@@ -10,13 +10,13 @@ const listPlaybackSessions = vi.fn();
 const getStreamingStatus = vi.fn();
 const revokePlaybackSession = vi.fn();
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
+vi.mock('@/lib/adminApi', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/adminApi')>('@/lib/adminApi');
   return {
     ...actual,
     adminApi: {
       ...actual.adminApi,
-      listPlaybackSessions: (...args: unknown[]) => listPlaybackSessions(...args),
+listPlaybackSessions: (...args: unknown[]) => listPlaybackSessions(...args),
       getStreamingStatus: (...args: unknown[]) => getStreamingStatus(...args),
       revokePlaybackSession: (...args: unknown[]) => revokePlaybackSession(...args),
     },

@@ -2,24 +2,25 @@
 /**
  * Customer initial JS budget for homepage entry (PR #58).
  *
- * Measures bytes referenced from dist/index.html (modulepreload + entry scripts),
- * excluding admin/player/route chunks that are not part of the customer home shell.
+ * CI enforces RAW (parsed) initial JS from dist/index.html entry/modulepreload refs.
+ * Compression is reported for transfer awareness but does not relax the raw budget
+ * (parse/compile cost follows uncompressed bytes).
  *
- * Before (07024dd): ~1,108,574 bytes (~1083 KB) initial JS
- * Budget: fail if customer initial JS exceeds the threshold below.
+ * Before (07024dd): ~1,108,574 bytes (~1083 KB) raw initial JS
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.resolve(__dirname, '../dist');
 const htmlPath = path.join(distDir, 'index.html');
 
-/** Soft stretch target after Fast3G hardening; warn above this. */
-const WARN_BYTES = 720 * 1024;
-/** Hard CI fail — material cut vs ~1083 KB baseline (~1.1MB). */
-const FAIL_BYTES = 850 * 1024;
+/** Soft stretch target; warn above this (raw). */
+const WARN_BYTES = 700 * 1024;
+/** Hard CI fail — raw customer entry JS. */
+const FAIL_BYTES = 800 * 1024;
 const BASELINE_BEFORE_BYTES = 1108574;
 
 if (!fs.existsSync(htmlPath)) {
@@ -35,27 +36,34 @@ const refs = [...html.matchAll(/(?:src|href)="(\/?assets\/[^"]+\.(?:js|css))"/g)
 const assetsDir = path.join(distDir, 'assets');
 let initialJs = 0;
 let initialCss = 0;
+let initialJsGzip = 0;
 const rows = [];
 
 for (const rel of refs) {
   const file = path.basename(rel);
   const full = path.join(assetsDir, file);
   if (!fs.existsSync(full)) continue;
-  const size = fs.statSync(full).size;
+  const buf = fs.readFileSync(full);
+  const size = buf.length;
+  const gzip = zlib.gzipSync(buf, { level: 5 }).length;
   if (file.endsWith('.js')) {
     initialJs += size;
-    rows.push({ kind: 'js', file, size });
+    initialJsGzip += gzip;
+    rows.push({ kind: 'js', file, size, gzip });
   } else {
     initialCss += size;
-    rows.push({ kind: 'css', file, size });
+    rows.push({ kind: 'css', file, size, gzip });
   }
 }
 
 rows.sort((a, b) => b.size - a.size);
 
 const report = {
+  enforced_metric: 'raw_initial_js_bytes',
+  note: 'CI fails on raw JS (parse cost). gzip_bytes are informational transfer estimates.',
   baseline_before_bytes: BASELINE_BEFORE_BYTES,
   initial_js_bytes: initialJs,
+  initial_js_gzip_bytes: initialJsGzip,
   initial_css_bytes: initialCss,
   warn_budget_bytes: WARN_BYTES,
   fail_budget_bytes: FAIL_BYTES,
@@ -74,15 +82,19 @@ try {
   // Artifacts dir may be unavailable in some CI sandboxes; stdout is enough.
 }
 
-console.log('Customer initial bundle budget');
-console.log(`  Before (07024dd): ${(BASELINE_BEFORE_BYTES / 1024).toFixed(1)} KB`);
-console.log(`  Current initial JS: ${(initialJs / 1024).toFixed(1)} KB (${initialJs} bytes)`);
+console.log('Customer initial bundle budget (CI enforces RAW JS)');
+console.log(`  Before (07024dd) raw: ${(BASELINE_BEFORE_BYTES / 1024).toFixed(1)} KB`);
+console.log(
+  `  Current raw JS: ${(initialJs / 1024).toFixed(1)} KB | gzip≈ ${(initialJsGzip / 1024).toFixed(1)} KB`
+);
 console.log(`  Current initial CSS: ${(initialCss / 1024).toFixed(1)} KB`);
 console.log(`  Delta vs before: ${report.reduced_vs_baseline_pct}% (${report.reduced_vs_baseline_bytes} bytes)`);
 console.log(`  Warn budget: ${(WARN_BYTES / 1024).toFixed(0)} KB | Fail budget: ${(FAIL_BYTES / 1024).toFixed(0)} KB`);
 console.log('  Entry files:');
 for (const row of rows) {
-  console.log(`    ${row.kind.toUpperCase()} ${(row.size / 1024).toFixed(1)} KB  ${row.file}`);
+  console.log(
+    `    ${row.kind.toUpperCase()} raw ${(row.size / 1024).toFixed(1)} KB  gzip≈ ${(row.gzip / 1024).toFixed(1)} KB  ${row.file}`
+  );
 }
 
 if (initialJs > FAIL_BYTES) {

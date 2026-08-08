@@ -1,6 +1,9 @@
-import { lazy, Suspense, type ReactNode } from 'react';
-import { Toaster } from '@/components/ui/sonner';
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { TooltipProvider } from '@/components/ui/tooltip';
+
+const Toaster = lazy(() =>
+  import('@/components/ui/sonner').then((m) => ({ default: m.Toaster }))
+);
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createBrowserRouter, RouterProvider, Outlet, Navigate } from 'react-router-dom';
 import CustomerLayout, { LangProvider, AuthProvider } from '@/components/CustomerLayout';
@@ -272,13 +275,35 @@ const router = createBrowserRouter([
   },
 ]);
 
+function DeferredToaster() {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const w = window as Window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (typeof w.requestIdleCallback === 'function') {
+      const id = w.requestIdleCallback(() => setReady(true), { timeout: 2000 });
+      return () => w.cancelIdleCallback?.(id);
+    }
+    const id = window.setTimeout(() => setReady(true), 800);
+    return () => window.clearTimeout(id);
+  }, []);
+  if (!ready) return null;
+  return (
+    <Suspense fallback={null}>
+      <Toaster />
+    </Suspense>
+  );
+}
+
 const App = () => (
   <ErrorBoundary>
     <QueryClientProvider client={queryClient}>
       <LangProvider>
         <AuthProvider>
-          <TooltipProvider>
-            <Toaster />
+          <TooltipProvider delayDuration={400}>
+            <DeferredToaster />
             <RouterProvider router={router} />
           </TooltipProvider>
         </AuthProvider>

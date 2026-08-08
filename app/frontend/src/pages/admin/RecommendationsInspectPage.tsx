@@ -4,7 +4,8 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { adminApi, ApiError, type RecommendationInspectDto } from '@/lib/api';
+import { ApiError, type RecommendationInspectDto } from '@/lib/api';
+import { adminApi } from '@/lib/adminApi';
 
 /**
  * Restricted debug tool for recommendation ranking — not a surveillance dashboard.

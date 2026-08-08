@@ -13,13 +13,13 @@ const schedule = vi.fn();
 const unpublish = vi.fn();
 const archive = vi.fn();
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
+vi.mock('@/lib/adminApi', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/adminApi')>('@/lib/adminApi');
   return {
     ...actual,
     adminApi: {
       ...actual.adminApi,
-      getPublicationReadiness: (...args: unknown[]) => getPublicationReadiness(...args),
+getPublicationReadiness: (...args: unknown[]) => getPublicationReadiness(...args),
       getPublicationHistory: (...args: unknown[]) => getPublicationHistory(...args),
       submitReview: (...args: unknown[]) => submitReview(...args),
       approve: (...args: unknown[]) => approve(...args),

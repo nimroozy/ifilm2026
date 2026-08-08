@@ -16,14 +16,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import {
-  adminApi,
-  ApiError,
-  type CatalogEntityType,
-  type CatalogStatus,
-  type PublicationHistoryEventDto,
-  type PublicationReadinessDto,
-} from '@/lib/api';
+import { ApiError, type CatalogEntityType, type CatalogStatus, type PublicationHistoryEventDto, type PublicationReadinessDto,  } from '@/lib/api';
+import { adminApi } from '@/lib/adminApi';
 import { ErrorState, LoadingBlock, StatusBadge } from './adminShared';
 
 type ConfirmAction = 'publish' | 'schedule' | 'unpublish' | 'archive';

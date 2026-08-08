@@ -11,7 +11,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { adminApi, ApiError, type CatalogStatus, type GenreDto } from '@/lib/api';
+import { ApiError, type CatalogStatus, type GenreDto } from '@/lib/api';
+import { adminApi } from '@/lib/adminApi';
 import { csvToList, ErrorState, listToCsv, LoadingBlock, POSTER_FALLBACK } from './adminShared';
 import PublishingPanel from './PublishingPanel';
 

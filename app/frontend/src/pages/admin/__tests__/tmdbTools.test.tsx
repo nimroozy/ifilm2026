@@ -9,13 +9,13 @@ const importTmdbDraft = vi.fn();
 const refreshTmdbDemo = vi.fn();
 const replaceTmdbArtwork = vi.fn();
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
+vi.mock('@/lib/adminApi', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/adminApi')>('@/lib/adminApi');
   return {
     ...actual,
     adminApi: {
       ...actual.adminApi,
-      searchTmdb: (...args: unknown[]) => searchTmdb(...args),
+searchTmdb: (...args: unknown[]) => searchTmdb(...args),
       previewTmdb: (...args: unknown[]) => previewTmdb(...args),
       importTmdbDraft: (...args: unknown[]) => importTmdbDraft(...args),
       refreshTmdbDemo: (...args: unknown[]) => refreshTmdbDemo(...args),

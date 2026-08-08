@@ -17,13 +17,13 @@ const retryProcessingJob = vi.fn();
 const cancelProcessingJob = vi.fn();
 const listProcessingJobs = vi.fn();
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
+vi.mock('@/lib/adminApi', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/adminApi')>('@/lib/adminApi');
   return {
     ...actual,
     adminApi: {
       ...actual.adminApi,
-      getMediaAsset: (...args: unknown[]) => getMediaAsset(...args),
+getMediaAsset: (...args: unknown[]) => getMediaAsset(...args),
       listAssetProcessingJobs: (...args: unknown[]) => listAssetProcessingJobs(...args),
       listAssetPackages: (...args: unknown[]) => listAssetPackages(...args),
       getProcessingStatus: (...args: unknown[]) => getProcessingStatus(...args),

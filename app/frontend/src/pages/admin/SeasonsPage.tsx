@@ -20,7 +20,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { adminApi, ApiError, type SeasonDto, type SeriesDto } from '@/lib/api';
+import { ApiError, type SeasonDto, type SeriesDto } from '@/lib/api';
+import { adminApi } from '@/lib/adminApi';
 import {
   AdminTableCard,
   EmptyState,

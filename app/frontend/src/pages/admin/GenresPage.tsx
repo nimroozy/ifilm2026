@@ -20,7 +20,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { adminApi, ApiError, type GenreDto } from '@/lib/api';
+import { ApiError, type GenreDto } from '@/lib/api';
+import { adminApi } from '@/lib/adminApi';
 import { AdminTableCard, EmptyState, ErrorState, LoadingBlock, PageHeader } from './adminShared';
 
 const schema = z.object({

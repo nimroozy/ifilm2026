@@ -3,15 +3,15 @@ import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/re
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import MediaLinkingCard from '../MediaLinkingCard';
 import MediaUploadPage from '../MediaUploadPage';
-import { adminApi } from '@/lib/api';
+import { adminApi } from '@/lib/adminApi';
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
+vi.mock('@/lib/adminApi', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/adminApi')>('@/lib/adminApi');
   return {
     ...actual,
     adminApi: {
       ...actual.adminApi,
-      listMediaAssets: vi.fn(),
+listMediaAssets: vi.fn(),
       listAssetPackages: vi.fn(),
       linkMediaAsset: vi.fn(),
       detachMediaAsset: vi.fn(),

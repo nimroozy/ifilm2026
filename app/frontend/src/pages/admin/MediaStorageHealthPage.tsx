@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ApiError, adminApi, type MediaStorageHealthDto } from '@/lib/api';
+import { ApiError, type MediaStorageHealthDto } from '@/lib/api';
+import { adminApi } from '@/lib/adminApi';
 import { ErrorState, LoadingBlock, StatusBadge } from './adminShared';
 
 export default function MediaStorageHealthPage() {

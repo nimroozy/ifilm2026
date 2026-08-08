@@ -19,7 +19,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
-import { adminApi, tokenStore, type AdminUserDto } from '@/lib/api';
+import { tokenStore, type AdminUserDto } from '@/lib/api';
+import { adminApi } from '@/lib/adminApi';
 
 type NavItem = {
   to: string;

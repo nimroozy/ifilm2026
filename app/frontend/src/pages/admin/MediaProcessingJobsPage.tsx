@@ -10,7 +10,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ApiError, adminApi, type ProcessingJobDto, type ProcessingStatusDto } from '@/lib/api';
+import { ApiError, type ProcessingJobDto, type ProcessingStatusDto } from '@/lib/api';
+import { adminApi } from '@/lib/adminApi';
 import {
   AdminTableCard,
   EmptyState,

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, adminApi, tokenStore, ApiError } from '@/lib/api';
+import { api, tokenStore, ApiError } from '@/lib/api';
+import { adminApi } from '@/lib/adminApi';
 import type { LivePlaybackSession, PlayerTarget, SafePlayerError } from './types';
 import { mapApiErrorToPlayerError, safePlayerError } from './safeErrors';
 

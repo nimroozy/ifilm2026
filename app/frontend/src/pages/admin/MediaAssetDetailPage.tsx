@@ -1,15 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import {
-  ApiError,
-  adminApi,
-  type MediaAssetDto,
-  type MediaAssetUsageDto,
-  type MediaPackageDto,
-  type ProcessingJobDto,
-  type ProcessingStatusDto,
-} from '@/lib/api';
+import { ApiError, type MediaAssetDto, type MediaAssetUsageDto, type MediaPackageDto, type ProcessingJobDto, type ProcessingStatusDto,  } from '@/lib/api';
+import { adminApi } from '@/lib/adminApi';
 import { EmptyState, ErrorState, LoadingBlock, StatusBadge } from './adminShared';
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);

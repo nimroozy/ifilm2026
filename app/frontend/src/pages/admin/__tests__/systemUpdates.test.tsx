@@ -16,13 +16,13 @@ const getSystemUpdateJob = vi.fn();
 const rollbackSystemUpdate = vi.fn();
 const createSystemUpdateBackup = vi.fn();
 
-vi.mock('@/lib/api', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
+vi.mock('@/lib/adminApi', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/adminApi')>('@/lib/adminApi');
   return {
     ...actual,
     adminApi: {
       ...actual.adminApi,
-      me: (...args: unknown[]) => me(...args),
+me: (...args: unknown[]) => me(...args),
       getSystemVersion: (...args: unknown[]) => getSystemVersion(...args),
       checkSystemUpdates: (...args: unknown[]) => checkSystemUpdates(...args),
       runSystemUpdatePreflight: (...args: unknown[]) => runSystemUpdatePreflight(...args),
