@@ -57,9 +57,10 @@ def list_public_collections(
     payloads = [
         collections_service.collection_public_out(row, db, include_items=False) for row in rows
     ]
-    # Attach counts without loading full item payloads (index-friendly).
+    # Attach counts without loading full item payloads (index-friendly, batched).
+    counts = collections_service.visible_item_counts(db, [row.id for row in rows])
     for row, payload in zip(rows, payloads, strict=True):
-        payload.item_count = collections_service.visible_item_count(db, row.id)
+        payload.item_count = counts.get(row.id, 0)
     return paginated(payloads, total=total, page=page, page_size=page_size)
 
 

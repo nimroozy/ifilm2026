@@ -157,29 +157,41 @@ def item_out(
 
 
 def visible_item_count(db: Session, collection_id: int) -> int:
-    movie_count = (
-        db.query(func.count(CollectionItem.id))
+    return visible_item_counts(db, [collection_id]).get(collection_id, 0)
+
+
+def visible_item_counts(db: Session, collection_ids: list[int]) -> dict[int, int]:
+    """Batch visible-item counts (published movie + series) for many collections."""
+    if not collection_ids:
+        return {}
+    counts: dict[int, int] = {cid: 0 for cid in collection_ids}
+    movie_rows = (
+        db.query(CollectionItem.collection_id, func.count(CollectionItem.id))
         .join(Movie, CollectionItem.movie_id == Movie.id)
         .filter(
-            CollectionItem.collection_id == collection_id,
+            CollectionItem.collection_id.in_(collection_ids),
             Movie.deleted_at.is_(None),
             Movie.status == "published",
         )
-        .scalar()
-        or 0
+        .group_by(CollectionItem.collection_id)
+        .all()
     )
-    series_count = (
-        db.query(func.count(CollectionItem.id))
+    for cid, cnt in movie_rows:
+        counts[int(cid)] = counts.get(int(cid), 0) + int(cnt)
+    series_rows = (
+        db.query(CollectionItem.collection_id, func.count(CollectionItem.id))
         .join(Series, CollectionItem.series_id == Series.id)
         .filter(
-            CollectionItem.collection_id == collection_id,
+            CollectionItem.collection_id.in_(collection_ids),
             Series.deleted_at.is_(None),
             Series.status == "published",
         )
-        .scalar()
-        or 0
+        .group_by(CollectionItem.collection_id)
+        .all()
     )
-    return int(movie_count) + int(series_count)
+    for cid, cnt in series_rows:
+        counts[int(cid)] = counts.get(int(cid), 0) + int(cnt)
+    return counts
 
 
 def total_item_count(db: Session, collection_id: int) -> int:
@@ -671,14 +683,12 @@ def list_public_collections(
     query = query.filter(or_(movie_exists, series_exists))
     query = query.order_by(Collection.sort_order.asc(), Collection.id.asc())
 
-    # Materialize then filter by min_visible when > 1 (homepage shelf).
+    # Materialize candidates, then apply min_visible with a single batched count query
+    # (homepage shelves use min_visible_items > 1; avoids per-row N+1 COUNTs).
     all_rows = query.all()
-    if min_visible_items > 1:
-        filtered: list[Collection] = []
-        for row in all_rows:
-            if visible_item_count(db, row.id) >= min_visible_items:
-                filtered.append(row)
-        all_rows = filtered
+    if min_visible_items > 1 and all_rows:
+        counts = visible_item_counts(db, [row.id for row in all_rows])
+        all_rows = [row for row in all_rows if counts.get(row.id, 0) >= min_visible_items]
 
     total = len(all_rows)
     page_rows = all_rows[(page - 1) * page_size : page * page_size]
