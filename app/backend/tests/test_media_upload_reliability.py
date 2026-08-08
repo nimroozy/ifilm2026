@@ -232,7 +232,6 @@ def test_storage_health_detects_missing_and_duplicate(client, admin_headers, db_
 def test_temp_cleanup_only_old_parts(client, admin_headers, tmp_path, monkeypatch):
     monkeypatch.setenv("MEDIA_ROOT", str(tmp_path / "media"))
     get_settings.cache_clear()
-    import os
     import time
 
     from app.services.storage import ensure_media_layout, temp_upload_dir
