@@ -5,8 +5,9 @@ category volume is omitted, ``ensure_media_layout`` can create an empty
 container-local directory that looks present but is not the shared volume —
 probe then fails with "Uploaded media file is missing".
 
-This module verifies required category paths exist and (in container /
-production layouts) are real mounts, without creating missing directories.
+This module verifies required category paths exist, are readable, and (in
+container / production layouts) are real mounts — without creating missing
+directories.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any, Literal
 
 from app.core.config import Settings, get_settings
 
@@ -28,6 +30,14 @@ REQUIRED_MEDIA_MOUNT_CATEGORIES = (
     "posters",
     "backdrops",
 )
+
+MountStatusCode = Literal[
+    "ok",
+    "missing",
+    "not_directory",
+    "not_mounted",
+    "unreadable",
+]
 
 
 class MediaMountHealthError(RuntimeError):
@@ -45,8 +55,13 @@ class CategoryMountStatus:
     exists: bool
     is_directory: bool
     is_mount: bool
-    ok: bool
+    readable: bool
+    status: MountStatusCode
     detail: str
+
+    @property
+    def ok(self) -> bool:
+        return self.status == "ok"
 
 
 @dataclass(frozen=True)
@@ -60,12 +75,22 @@ class MediaMountHealth:
     def ok(self) -> bool:
         return not self.missing
 
+    def public_mounts(self) -> dict[str, MountStatusCode]:
+        """Category → status codes only (no host paths / volume names)."""
+        return {item.category: item.status for item in self.categories}
+
+    def public_report(self) -> dict[str, Any]:
+        return {
+            "media_processing_ready": self.ok,
+            "mounts": self.public_mounts(),
+        }
+
 
 def mounts_required(settings: Settings | None = None) -> bool:
     """Whether category paths must be Docker/volume mount points.
 
     Enabled for production/staging, inside Docker, or when explicitly requested.
-    Local pytest (APP_ENV=test, no /.dockerenv) only requires directories exist.
+    Local pytest (APP_ENV=test, no /.dockerenv) only requires readable directories.
     """
     settings = settings or get_settings()
     explicit = os.environ.get("MEDIA_REQUIRE_CATEGORY_MOUNTS", "").strip().lower()
@@ -78,6 +103,18 @@ def mounts_required(settings: Settings | None = None) -> bool:
     return Path("/.dockerenv").exists()
 
 
+def _path_readable(path: Path) -> bool:
+    """True when the process can list/read the directory (shared volume access)."""
+    try:
+        if not os.access(path, os.R_OK | os.X_OK):
+            return False
+        # Force a real read against the mount (catches some stale/broken binds).
+        os.listdir(path)
+        return True
+    except OSError:
+        return False
+
+
 def _category_status(
     root: Path, category: str, *, require_mounts: bool
 ) -> CategoryMountStatus:
@@ -85,27 +122,33 @@ def _category_status(
     exists = path.exists()
     is_directory = path.is_dir() if exists else False
     is_mount = False
+    readable = False
+
     if is_directory:
         try:
-            is_mount = path.is_mount() or root.is_mount()
+            is_mount = bool(path.is_mount() or root.is_mount())
         except OSError:
             is_mount = False
+        readable = _path_readable(path)
 
     if not exists:
-        detail = f"missing directory {path} (volume mount not configured)"
-        ok = False
+        status: MountStatusCode = "missing"
+        detail = f"{path} is missing (volume mount not configured)"
     elif not is_directory:
+        status = "not_directory"
         detail = f"{path} exists but is not a directory"
-        ok = False
     elif require_mounts and not is_mount:
+        status = "not_mounted"
         detail = (
-            f"{path} exists but is not a mount — empty container-local directory "
-            f"(shared volume for category '{category}' is missing)"
+            f"{path} exists but is not a valid shared media mount "
+            "(container-local empty directory; shared volume missing)"
         )
-        ok = False
+    elif not readable:
+        status = "unreadable"
+        detail = f"{path} exists but is not readable by the worker"
     else:
+        status = "ok"
         detail = "ok"
-        ok = True
 
     return CategoryMountStatus(
         category=category,
@@ -113,7 +156,8 @@ def _category_status(
         exists=exists,
         is_directory=is_directory,
         is_mount=is_mount,
-        ok=ok,
+        readable=readable,
+        status=status,
         detail=detail,
     )
 
@@ -138,16 +182,23 @@ def inspect_media_mount_health(settings: Settings | None = None) -> MediaMountHe
 
 def format_media_mount_health_error(health: MediaMountHealth) -> str:
     lines = [
+        "MEDIA MOUNT CHECK FAILED",
+        "",
         "Media processing worker unhealthy: required MEDIA_ROOT category "
-        f"mount(s) missing under {health.media_root}",
-        f"Missing mounts: {', '.join(health.missing)}",
+        "mount(s) unavailable.",
+        f"Failed categories: {', '.join(health.missing)}",
+        "",
     ]
     for item in health.categories:
         if not item.ok:
-            lines.append(f"  - {item.category}: {item.detail}")
-    lines.append(
-        "Fix: mount the same host/volume paths as backend-api for each category "
-        "(originals, trailers, subtitles, posters, backdrops)."
+            lines.append(item.detail)
+    lines.extend(
+        [
+            "",
+            "Worker will exit non-zero and will not consume jobs until mounts match "
+            "backend-api upload locations "
+            "(originals, trailers, subtitles, posters, backdrops).",
+        ]
     )
     return "\n".join(lines)
 
@@ -167,15 +218,19 @@ def log_media_mount_health(health: MediaMountHealth) -> None:
     if health.ok:
         mode = "mount-required" if health.require_mounts else "directory-only"
         logger.info(
-            "Media mount health OK (%s) root=%s categories=%s",
+            "Media mount health OK (%s) categories=%s",
             mode,
-            health.media_root,
             ",".join(REQUIRED_MEDIA_MOUNT_CATEGORIES),
         )
         return
-    logger.error(format_media_mount_health_error(health))
+    logger.error("%s", format_media_mount_health_error(health))
 
 
 def worker_media_mounts_healthy(settings: Settings | None = None) -> bool:
     """Return True when required media category mounts are usable."""
     return inspect_media_mount_health(settings).ok
+
+
+def media_processing_readiness(settings: Settings | None = None) -> dict[str, Any]:
+    """Public readiness payload (no host paths / secrets / volume names)."""
+    return inspect_media_mount_health(settings).public_report()

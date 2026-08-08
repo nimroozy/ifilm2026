@@ -462,68 +462,97 @@ def test_concurrent_queue_requests(client, admin_headers, db_session):
     assert len(active) == 1
 
 
-def test_worker_mount_health_ok_when_categories_exist(monkeypatch, tmp_path):
-    from app.services.media_processing.mount_health import (
-        REQUIRED_MEDIA_MOUNT_CATEGORIES,
-        assert_required_media_mounts,
-        inspect_media_mount_health,
-    )
+def _prepare_media_root(tmp_path, monkeypatch, *, categories: list[str] | None = None):
+    from app.services.media_processing.mount_health import REQUIRED_MEDIA_MOUNT_CATEGORIES
 
     media = tmp_path / "media"
-    for category in REQUIRED_MEDIA_MOUNT_CATEGORIES:
-        (media / category).mkdir(parents=True)
+    media.mkdir()
+    for category in categories if categories is not None else REQUIRED_MEDIA_MOUNT_CATEGORIES:
+        (media / category).mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("MEDIA_ROOT", str(media))
     monkeypatch.setenv("MEDIA_REQUIRE_CATEGORY_MOUNTS", "false")
     monkeypatch.setenv("APP_ENV", "test")
+    get_settings.cache_clear()
+    return media
+
+
+def test_worker_mount_health_ok_when_all_mounts_available(monkeypatch, tmp_path):
+    from app.services.media_processing.mount_health import (
+        REQUIRED_MEDIA_MOUNT_CATEGORIES,
+        assert_required_media_mounts,
+        media_processing_readiness,
+    )
+    from app.services.media_processing.worker import worker_startup_health_ok
+
+    _prepare_media_root(tmp_path, monkeypatch)
+    monkeypatch.setenv("ENABLE_HLS_ENCODING", "false")
+    monkeypatch.setenv("FFPROBE_BINARY", "ffprobe")
     get_settings.cache_clear()
     settings = get_settings()
     health = assert_required_media_mounts(settings)
     assert health.ok
-    assert inspect_media_mount_health(settings).missing == ()
+    report = media_processing_readiness(settings)
+    assert report["media_processing_ready"] is True
+    assert report["mounts"] == {c: "ok" for c in REQUIRED_MEDIA_MOUNT_CATEGORIES}
+    assert worker_startup_health_ok(settings) is True
 
 
-def test_worker_mount_health_reports_missing_directory(monkeypatch, tmp_path):
+@pytest.mark.parametrize(
+    "missing_category",
+    ["originals", "trailers", "subtitles", "posters", "backdrops"],
+)
+def test_worker_unhealthy_when_required_mount_missing(monkeypatch, tmp_path, missing_category):
     from app.services.media_processing.mount_health import (
+        REQUIRED_MEDIA_MOUNT_CATEGORIES,
         MediaMountHealthError,
         assert_required_media_mounts,
         format_media_mount_health_error,
         inspect_media_mount_health,
+        media_processing_readiness,
     )
+    from app.services.media_processing.worker import run_forever
 
-    media = tmp_path / "media"
-    media.mkdir()
-    (media / "originals").mkdir()
-    # trailers / subtitles / posters / backdrops intentionally absent
-    monkeypatch.setenv("MEDIA_ROOT", str(media))
-    monkeypatch.setenv("MEDIA_REQUIRE_CATEGORY_MOUNTS", "false")
-    monkeypatch.setenv("APP_ENV", "test")
+    present = [c for c in REQUIRED_MEDIA_MOUNT_CATEGORIES if c != missing_category]
+    _prepare_media_root(tmp_path, monkeypatch, categories=present)
+    monkeypatch.setenv("ENABLE_MEDIA_PROCESSING", "true")
+    monkeypatch.setenv("ENABLE_HLS_ENCODING", "false")
+    monkeypatch.setenv("FFPROBE_BINARY", "ffprobe")
     get_settings.cache_clear()
     settings = get_settings()
+
     health = inspect_media_mount_health(settings)
     assert not health.ok
-    assert "trailers" in health.missing
-    assert "subtitles" in health.missing
+    assert missing_category in health.missing
+    assert health.public_mounts()[missing_category] == "missing"
+    report = media_processing_readiness(settings)
+    assert report["media_processing_ready"] is False
+    assert report["mounts"][missing_category] == "missing"
+    # Public report must never leak host paths.
+    assert str(tmp_path) not in str(report)
+    assert "/data/media" not in str(report)
+
     message = format_media_mount_health_error(health)
-    assert "Missing mounts: " in message
-    assert "trailers" in message
+    assert "MEDIA MOUNT CHECK FAILED" in message
+    assert missing_category in message
+
     with pytest.raises(MediaMountHealthError) as excinfo:
         assert_required_media_mounts(settings)
-    assert "trailers" in excinfo.value.missing
+    assert missing_category in excinfo.value.missing
+
+    with pytest.raises(SystemExit) as exitinfo:
+        run_forever(settings=settings)
+    assert int(exitinfo.value.code or 0) == 3
 
 
 def test_worker_mount_health_detects_non_mount_directory(monkeypatch, tmp_path):
     """Regression: empty container-local dir must not pass as a shared mount."""
     from app.services.media_processing.mount_health import (
-        REQUIRED_MEDIA_MOUNT_CATEGORIES,
         MediaMountHealthError,
         assert_required_media_mounts,
         inspect_media_mount_health,
     )
 
-    media = tmp_path / "media"
-    for category in REQUIRED_MEDIA_MOUNT_CATEGORIES:
-        (media / category).mkdir(parents=True)
-    monkeypatch.setenv("MEDIA_ROOT", str(media))
+    _prepare_media_root(tmp_path, monkeypatch)
     monkeypatch.setenv("MEDIA_REQUIRE_CATEGORY_MOUNTS", "true")
     monkeypatch.setenv("APP_ENV", "production")
     get_settings.cache_clear()
@@ -539,39 +568,62 @@ def test_worker_mount_health_detects_non_mount_directory(monkeypatch, tmp_path):
     assert "trailers" in health.missing
     trailers = next(c for c in health.categories if c.category == "trailers")
     assert trailers.exists and trailers.is_directory and not trailers.is_mount
-    assert "not a mount" in trailers.detail
+    assert trailers.status == "not_mounted"
+    assert "not a valid shared media mount" in trailers.detail
     with pytest.raises(MediaMountHealthError) as excinfo:
         assert_required_media_mounts(settings)
+    assert "MEDIA MOUNT CHECK FAILED" in str(excinfo.value)
     assert "trailers" in str(excinfo.value)
 
 
-def test_worker_startup_exits_when_media_mount_missing(monkeypatch, tmp_path):
-    from app.services.media_processing.worker import run_forever
+def test_worker_mount_health_detects_unreadable_directory(monkeypatch, tmp_path):
+    from app.services.media_processing.mount_health import inspect_media_mount_health
 
-    media = tmp_path / "media"
-    media.mkdir()
-    (media / "originals").mkdir()
-    monkeypatch.setenv("MEDIA_ROOT", str(media))
-    monkeypatch.setenv("MEDIA_REQUIRE_CATEGORY_MOUNTS", "false")
-    monkeypatch.setenv("APP_ENV", "test")
-    monkeypatch.setenv("ENABLE_MEDIA_PROCESSING", "true")
-    monkeypatch.setenv("ENABLE_HLS_ENCODING", "false")
-    monkeypatch.setenv("FFPROBE_BINARY", "ffprobe")
-    get_settings.cache_clear()
-    with pytest.raises(SystemExit) as excinfo:
-        run_forever(settings=get_settings())
-    assert int(excinfo.value.code or 0) == 3
+    media = _prepare_media_root(tmp_path, monkeypatch)
+    trailers = media / "trailers"
+    monkeypatch.setattr(
+        "app.services.media_processing.mount_health._path_readable",
+        lambda path: path != trailers,
+    )
+    settings = get_settings()
+    health = inspect_media_mount_health(settings)
+    assert health.public_mounts()["trailers"] == "unreadable"
+    assert not health.ok
 
 
 def test_healthcheck_cli_fails_when_mount_missing(monkeypatch, tmp_path):
     from app.workers.media_processing import run_healthcheck
 
-    media = tmp_path / "media"
-    media.mkdir()
-    monkeypatch.setenv("MEDIA_ROOT", str(media))
-    monkeypatch.setenv("MEDIA_REQUIRE_CATEGORY_MOUNTS", "false")
-    monkeypatch.setenv("APP_ENV", "test")
+    _prepare_media_root(tmp_path, monkeypatch, categories=["originals"])
     monkeypatch.setenv("ENABLE_MEDIA_PROCESSING", "true")
     monkeypatch.setenv("ENABLE_HLS_ENCODING", "false")
     get_settings.cache_clear()
     assert run_healthcheck() == 1
+
+
+def test_health_ready_includes_media_mount_report(client, monkeypatch, tmp_path):
+    from app.services.media_processing.mount_health import REQUIRED_MEDIA_MOUNT_CATEGORIES
+
+    _prepare_media_root(tmp_path, monkeypatch)
+    monkeypatch.setenv("ENABLE_MEDIA_PROCESSING", "true")
+    get_settings.cache_clear()
+    ready = client.get("/api/health/ready")
+    body = ready.json()
+    assert "media_processing_ready" in body
+    assert "mounts" in body
+    assert set(body["mounts"]) == set(REQUIRED_MEDIA_MOUNT_CATEGORIES)
+    assert all(status == "ok" for status in body["mounts"].values())
+    assert body["media_processing_ready"] is True
+    # No host path leakage in ops payload.
+    assert "MEDIA_ROOT" not in str(body)
+    assert str(tmp_path) not in str(body)
+
+
+def test_admin_processing_status_includes_mounts(client, admin_headers):
+    status = client.get("/api/admin/media/processing/status", headers=admin_headers)
+    assert status.status_code == 200
+    body = status.json()
+    assert "media_processing_ready" in body
+    assert "mounts" in body
+    assert body["mounts"]["originals"] == "ok"
+    assert body["mounts"]["trailers"] == "ok"
