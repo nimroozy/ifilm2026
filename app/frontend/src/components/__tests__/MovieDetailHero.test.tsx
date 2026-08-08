@@ -100,7 +100,7 @@ describe('MovieDetailView hero experience', () => {
     renderDetail(baseMovie(), [baseMovie({ id: 8, title: 'Sibling Film', trailerKey: '' })]);
     expect(screen.getByTestId('movie-cast')).toHaveTextContent('Lead Actor');
     expect(screen.getByTestId('movie-similar')).toHaveTextContent('Sibling Film');
-    expect(screen.getByTestId('movie-mylist-button')).toHaveTextContent(/My List/i);
+    expect(screen.getByTestId('watchlist-toggle')).toBeInTheDocument();
     expect(screen.getByTestId('movie-reviews-placeholder')).toBeInTheDocument();
   });
 });

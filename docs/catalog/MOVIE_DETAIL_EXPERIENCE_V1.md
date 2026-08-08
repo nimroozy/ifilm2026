@@ -1,9 +1,9 @@
 # Movie Detail Experience V1
 
 **Status:** Implemented (Draft PR)  
-**Branch:** `cursor/movie-detail-experience-4873`  
-**Migration:** `018_movie_detail_experience_v1`  
-**Depends on:** real TMDB metadata already imported into the catalog
+**Branch:** `cursor/movie-detail-experience-4873` (rebased on Watchlist PR #49)  
+**Migration:** `018_movie_detail_experience_v1` (revises `017_watchlist_v1`)  
+**Depends on:** PR #49 Watchlist (`017_watchlist_v1`); real TMDB metadata already imported into the catalog
 
 ## Goal
 

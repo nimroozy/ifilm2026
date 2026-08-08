@@ -178,7 +178,7 @@ describe('demo catalog movie UI', () => {
     expect(screen.getByTestId('movie-language-badges')).toHaveTextContent(/EN Audio|EN Subtitle/i);
     expect(screen.getByTestId('movie-cast')).toHaveTextContent('Actor One');
     expect(screen.getByTestId('movie-cast')).toHaveTextContent('Hero');
-    expect(screen.getByTestId('movie-mylist-button')).toBeInTheDocument();
+    expect(screen.getByTestId('watchlist-toggle')).toBeInTheDocument();
   });
 
   it('shows Coming Soon when neither playable nor trailer exists', async () => {

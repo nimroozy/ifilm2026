@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Play,
-  Plus,
   Share2,
   Check,
   Clapperboard,
@@ -15,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ContentShelf, MediaCard, MetaChip, MetaRow, SectionHeader, typography } from '@/design-system';
 import { useLang } from '@/components/CustomerLayout';
+import { WatchlistButton } from '@/components/WatchlistButton';
 import type { CatalogMovie } from '@/lib/catalogData';
 import {
   formatCatalogTracks,
@@ -348,17 +348,7 @@ export function MovieDetailView({
                     {unavailableLabel}
                   </Badge>
                 ) : null}
-                <Button
-                  size="lg"
-                  variant="outline"
-                  disabled
-                  title="My List sync lands with watchlist APIs"
-                  className="gap-2 opacity-70"
-                  data-testid="movie-mylist-button"
-                >
-                  <Plus className="h-5 w-5" />
-                  My List
-                </Button>
+                <WatchlistButton movieId={movie.id} />
                 <Button
                   size="lg"
                   variant="ghost"
