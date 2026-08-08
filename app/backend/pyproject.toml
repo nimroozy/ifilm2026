@@ -10,6 +10,10 @@ ignore = ["E501", "B008", "UP046"]
 [tool.ruff.lint.per-file-ignores]
 "tests/conftest.py" = ["E402"]
 "tests/test_readiness_integration.py" = ["E402"]
+# Env must be set before app imports in local perf harness scripts.
+"scripts/perf_stack_bootstrap.py" = ["E402", "I001"]
+"scripts/perf_baseline_measure.py" = ["E402", "I001"]
+"scripts/perf_load_smoke.py" = ["E402", "I001"]
 
 [tool.mypy]
 python_version = "3.12"

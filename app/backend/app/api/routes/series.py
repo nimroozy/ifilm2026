@@ -34,12 +34,12 @@ from app.services.catalog import (
     soft_delete,
     utcnow,
 )
-from app.services.catalog_list import series_card_out
 from app.services.catalog_availability import (
     availability_for_series,
     item_has_dub,
     item_has_subtitles,
 )
+from app.services.catalog_list import series_card_out
 from app.services.publishing import workflow as publishing_workflow
 
 router = APIRouter(tags=["series"])
