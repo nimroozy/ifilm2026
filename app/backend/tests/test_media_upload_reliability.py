@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
+import os
 
 from app.core.config import get_settings
 from app.models.content import Movie
@@ -356,3 +358,38 @@ def test_delete_commits_before_unlink(client, admin_headers, db_session, monkeyp
     assert asset.storage_path is None
     # Physical file may remain as orphan; health tooling reports it (no auto-delete).
     assert stored.is_file()
+
+
+def test_durable_move_falls_back_on_exdev(tmp_path, monkeypatch):
+    from app.services import media_upload as mu
+
+    src = tmp_path / "src.bin"
+    dest = tmp_path / "nested" / "dest.bin"
+    payload = b"cross-device-bytes-123456"
+    src.write_bytes(payload)
+
+    real_replace = os.replace
+
+    def boom(a, b):
+        raise OSError(errno.EXDEV, "Invalid cross-device link")
+
+    monkeypatch.setattr(mu.os, "replace", boom)
+    mu._durable_move(src, dest)
+    assert dest.read_bytes() == payload
+    assert not src.exists()
+
+    # non-EXDEV still raises
+    src2 = tmp_path / "src2.bin"
+    src2.write_bytes(b"x")
+    dest2 = tmp_path / "dest2.bin"
+
+    def boom_other(a, b):
+        raise OSError(errno.EPERM, "denied")
+
+    monkeypatch.setattr(mu.os, "replace", boom_other)
+    try:
+        mu._durable_move(src2, dest2)
+        raised = False
+    except OSError as exc:
+        raised = exc.errno == errno.EPERM
+    assert raised
