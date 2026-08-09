@@ -205,6 +205,7 @@ def get_public_series(
         public_counts=True,
         db=db,
         locale=locale,
+        include_credits=True,
     )
 
 
@@ -282,7 +283,7 @@ def create_series(
     series.genre_links = genres
     db.add(series)
     db.commit()
-    return series_out(get_series(db, series.id), db=db)
+    return series_out(get_series(db, series.id), db=db, include_credits=True)
 
 
 @router.get("/admin/series/{series_id}", response_model=SeriesOut)
@@ -291,7 +292,7 @@ def admin_get_series(
     db: DbSession,
     _: Annotated[AdminUser, Depends(require_permissions("series.read"))],
 ) -> SeriesOut:
-    return series_out(get_series(db, series_id), db=db)
+    return series_out(get_series(db, series_id), db=db, include_credits=True)
 
 
 @router.patch("/admin/series/{series_id}", response_model=SeriesOut)
@@ -332,7 +333,7 @@ def update_series(
             "catalog_audit event=series_availability_updated details=%s",
             {"series_id": series.id, "admin_id": admin.id, "changes": changed},
         )
-    return series_out(get_series(db, series.id), db=db)
+    return series_out(get_series(db, series.id), db=db, include_credits=True)
 
 
 @router.delete("/admin/series/{series_id}", response_model=Message)

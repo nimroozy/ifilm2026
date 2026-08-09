@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { ContentShelf, MediaCard, MetaChip, MetaRow, SectionHeader, typography, heroSizing } from '@/design-system';
 import { useLang } from '@/components/CustomerLayout';
 import { WatchlistButton } from '@/components/WatchlistButton';
+import { CastRail, type CastCredit } from '@/components/CastRail';
 import type { CatalogMovie } from '@/lib/catalogData';
 import type { WatchProgressDto } from '@/lib/api';
 import {
@@ -35,14 +36,6 @@ import { cn } from '@/lib/utils';
 
 type HeroMode = 'backdrop' | 'trailer';
 
-type CastCredit = {
-  personId?: number;
-  name: string;
-  character?: string;
-  profileUrl?: string;
-  order?: number;
-};
-
 export type MovieWatchState =
   | { kind: 'continue'; progress: WatchProgressDto }
   | { kind: 'completed'; progress: WatchProgressDto }
@@ -51,41 +44,6 @@ export type MovieWatchState =
 function prefersReducedMotion(): boolean {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
-
-function CastCard({ credit }: { credit: CastCredit }) {
-  const initials = credit.name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('');
-  return (
-    <div
-      className="flex w-[104px] shrink-0 flex-col gap-2 text-start sm:w-[120px]"
-      data-testid="cast-card"
-    >
-      {credit.profileUrl ? (
-        <img
-          src={credit.profileUrl}
-          alt=""
-          className="aspect-[2/3] w-full rounded-xl object-cover ring-1 ring-white/10"
-          loading="lazy"
-          decoding="async"
-        />
-      ) : (
-        <div className="flex aspect-[2/3] w-full items-center justify-center rounded-xl bg-gradient-to-br from-primary/30 to-secondary text-sm font-semibold text-foreground ring-1 ring-white/10 sm:text-base">
-          {initials || '?'}
-        </div>
-      )}
-      <div className="space-y-0.5">
-        <p className="line-clamp-2 text-xs font-medium text-foreground sm:text-sm">{credit.name}</p>
-        {credit.character ? (
-          <p className="line-clamp-2 text-[11px] text-muted-foreground sm:text-xs">{credit.character}</p>
-        ) : null}
-      </div>
-    </div>
-  );
 }
 
 async function shareTitle(title: string, url: string) {
@@ -612,26 +570,15 @@ export function MovieDetailView({
           </section>
         )}
 
-        {credits.length ? (
-          <section
-            className="container mx-auto max-w-6xl px-4 sm:px-6 lg:px-8"
-            aria-labelledby="cast-heading"
-            data-testid="movie-cast"
-          >
-            <h2 id="cast-heading" className={cn(typography.sectionTitle, 'mb-5')}>
-              {t.movie.cast}
-            </h2>
-            <div
-              className="flex gap-4 overflow-x-auto pb-2 hide-scrollbar sm:gap-5"
-              dir={dir}
-              data-testid="movie-cast-rail"
-            >
-              {credits.map((person, index) => (
-                <CastCard key={`${person.personId ?? person.name}-${index}`} credit={person} />
-              ))}
-            </div>
-          </section>
-        ) : null}
+        <CastRail
+          credits={credits}
+          dir={dir}
+          headingId="cast-heading"
+          title={t.movie.cast}
+          titleClassName={typography.sectionTitle}
+          testId="movie-cast"
+          railTestId="movie-cast-rail"
+        />
 
         {related.length > 0 ? (
           <div data-testid="movie-similar">

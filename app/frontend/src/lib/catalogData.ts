@@ -50,12 +50,6 @@ export interface CatalogSearchResult {
   series: CatalogSeries[];
 }
 
-export interface SeriesDetailResult {
-  series: CatalogSeries;
-  seasons: { number: number; episodeCount?: number; id?: number; status?: string }[];
-  episodes: ReturnType<typeof mapEpisodeDto>[];
-}
-
 function publishedMockItems<T extends { catalogStatus?: string }>(items: T[]): T[] {
   return items.filter((item) => (item.catalogStatus ?? 'published') === 'published');
 }
@@ -183,9 +177,100 @@ export async function fetchSeries(params?: CatalogListParams): Promise<CatalogLi
   };
 }
 
+export type SeriesSeasonSummary = {
+  number: number;
+  episodeCount: number;
+  id?: number;
+  status?: string;
+};
+
+export type SeriesDetailResult = {
+  series: CatalogSeries;
+  seasons: SeriesSeasonSummary[];
+  /** Episodes for the requested season only (or all in mock mode when season omitted). */
+  episodes: ReturnType<typeof mapEpisodeDto>[];
+};
+
+/** Series metadata + seasons only — no episode dump. */
+export async function fetchSeriesShell(
+  idOrSlug: number | string,
+  locale?: AppLocale,
+): Promise<{ series: CatalogSeries; seasons: SeriesSeasonSummary[] }> {
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
+    const detail = await fetchSeriesDetail(idOrSlug, locale);
+    return { series: detail.series, seasons: detail.seasons };
+  }
+  const dto = await api.getSeries(idOrSlug, locale);
+  const mapped = mapSeriesDto(dto);
+  const seasonsDto = await api.listSeasons(idOrSlug);
+  const seasons = [...seasonsDto]
+    .sort((a, b) => a.season_number - b.season_number)
+    .map((s) => ({
+      number: s.season_number,
+      episodeCount: s.episode_count ?? 0,
+      id: s.id,
+      status: s.status,
+    }));
+  return { series: mapped, seasons };
+}
+
+/** Season-scoped episodes. Prefer this over loading the full series episode list. */
+export async function fetchSeasonEpisodes(
+  idOrSlug: number | string,
+  season: number,
+  locale?: AppLocale,
+): Promise<ReturnType<typeof mapEpisodeDto>[]> {
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
+    const detail = await fetchSeriesDetail(idOrSlug, locale);
+    return detail.episodes.filter((e) => e.season === season).sort((a, b) => a.episode - b.episode);
+  }
+  const episodesDto = await api.listEpisodes(idOrSlug, season, locale);
+  return [...episodesDto]
+    .map(mapEpisodeDto)
+    .map((ep) => {
+      if (!ep.season) ep.season = season;
+      return ep;
+    })
+    .sort((a, b) => a.episode - b.episode);
+}
+
+export async function fetchSeriesRecommendations(
+  idOrSlug: number | string,
+  limit = 12,
+): Promise<CatalogSeries[]> {
+  if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
+    return [];
+  }
+  const page = await api.getSeriesRecommendations(idOrSlug, limit);
+  const currentId = typeof idOrSlug === 'number' ? idOrSlug : Number(idOrSlug);
+  const seen = new Set<number>();
+  const out: CatalogSeries[] = [];
+  for (const row of page.items ?? []) {
+    if (row.content_type !== 'series') continue;
+    if (row.id === currentId || seen.has(row.id)) continue;
+    seen.add(row.id);
+    out.push(
+      mapSeriesDto({
+        id: row.id,
+        title: row.title,
+        slug: row.slug,
+        poster_url: row.poster_url || '',
+        backdrop_url: row.backdrop_url || '',
+        release_year: row.release_year ?? undefined,
+        imdb_rating: row.imdb_rating ?? undefined,
+        genres: row.genres || [],
+        status: 'published',
+        airing_status: 'Ongoing',
+      } as SeriesDto)
+    );
+  }
+  return out;
+}
+
 export async function fetchSeriesDetail(
   idOrSlug: number | string,
   locale?: AppLocale,
+  season?: number,
 ): Promise<SeriesDetailResult> {
   if (import.meta.env.VITE_DATA_MODE !== 'api' && isMockMode()) {
     const { series: mockSeries, episodes: mockEpisodes } = await loadMockData();
@@ -226,37 +311,15 @@ export async function fetchSeriesDetail(
             episodeCount: eps.filter((e) => e.season === n).length,
           }))
         : Array.from({ length: show.seasons }, (_, i) => ({ number: i + 1, episodeCount: 0 }));
-    return { series: show, seasons, episodes: eps };
+    const scoped = season != null ? eps.filter((e) => e.season === season) : eps;
+    return { series: show, seasons, episodes: scoped.sort((a, b) => a.episode - b.episode) };
   }
 
-  const dto = await api.getSeries(idOrSlug, locale);
-  const mapped = mapSeriesDto(dto);
-  const seasonsDto = await api.listSeasons(idOrSlug);
-  const seasons = [...seasonsDto]
-    .sort((a, b) => a.season_number - b.season_number)
-    .map((s) => ({
-      number: s.season_number,
-      episodeCount: s.episode_count ?? 0,
-      id: s.id,
-      status: s.status,
-    }));
-  const episodesDto = await api.listEpisodes(idOrSlug, undefined, locale);
-  const episodes = [...episodesDto]
-    .sort((a, b) => {
-      const sa = a.season ?? 0;
-      const sb = b.season ?? 0;
-      if (sa !== sb) return sa - sb;
-      return a.episode_number - b.episode_number;
-    })
-    .map(mapEpisodeDto);
-
-  // Attach season numbers onto episodes when compatibility field missing
-  const seasonById = new Map(seasonsDto.map((s) => [s.id, s.season_number]));
-  for (const ep of episodes) {
-    if (!ep.season && ep.seasonId) {
-      ep.season = seasonById.get(ep.seasonId) ?? 0;
-    }
-  }
+  const { series: mapped, seasons } = await fetchSeriesShell(idOrSlug, locale);
+  const initialSeason = season ?? seasons[0]?.number ?? 1;
+  const episodes = seasons.length
+    ? await fetchSeasonEpisodes(idOrSlug, initialSeason, locale)
+    : [];
 
   return { series: mapped, seasons, episodes };
 }

@@ -476,6 +476,9 @@ class SeriesOut(ORMModel):
     dubbed: list[str] = Field(default_factory=list)
     audio_availability: AudioAvailabilityOut = Field(default_factory=AudioAvailabilityOut)
     subtitle_availability: SubtitleAvailabilityOut = Field(default_factory=SubtitleAvailabilityOut)
+    # Detail-only by serializer flag (include_credits). List/card payloads keep these empty.
+    credits: list[CastCreditOut] = Field(default_factory=list)
+    credits_synced_at: datetime | None = None
     new_episode: bool = False
     views: int = 0
     type: str = "series"

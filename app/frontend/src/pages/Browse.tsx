@@ -9,7 +9,6 @@ import {
   List,
   Search as SearchIcon,
   X,
-  ExternalLink,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -23,27 +22,33 @@ import {
   fetchMovies,
   fetchSearch,
   fetchSeries,
-  fetchSeriesDetail,
+  fetchSeasonEpisodes,
+  fetchSeriesRecommendations,
+  fetchSeriesShell,
   fetchSimilarMovies,
   type CatalogMovie,
   type CatalogSeries,
 } from '@/lib/catalogData';
-import { api, ApiError, mapMovieDto, type MovieDto } from '@/lib/api';
+import { api, ApiError, mapMovieDto, type MovieDto, type WatchProgressDto } from '@/lib/api';
 import type { MovieWatchState } from '@/components/MovieDetailView';
 import {
   catalogAvailabilityBadges,
-  catalogAvailabilityChips,
-  formatCatalogTracks,
-  hasCatalogTracks,
-  resolveAudioAvailability,
-  resolveSubtitleAvailability,
 } from '@/lib/catalogAvailability';
-import { canPlayFullMovie, hasDemoClip, isDemoCatalogItem } from '@/lib/catalogPresentation';
-import { trailerEmbedUrl } from '@/lib/trailers';
-import { heroBackdropSrcSet, sizedArtworkUrl } from '@/lib/imageUrls';
+import { hasDemoClip } from '@/lib/catalogPresentation';
 import { MediaCard, mediaGridClass } from '@/design-system';
 import { MovieDetailView } from '@/components/MovieDetailView';
-import { WatchlistButton } from '@/components/WatchlistButton';
+import {
+  SeriesDetailView,
+  type SeriesEpisodeView,
+  type SeriesSeasonView,
+} from '@/components/SeriesDetailView';
+import {
+  buildEpisodeProgressMap,
+  defaultSeasonNumber,
+  findNextPlayableEpisode,
+  resolveSeriesHeroCta,
+  sortEpisodesByAirOrder,
+} from '@/lib/seriesDetailPlayback';
 
 function PageLoading() {
   return (
@@ -80,40 +85,6 @@ function DemoClipBadge({ item }: { item: unknown }) {
     <Badge className="bg-emerald-500 text-white text-[10px]" data-testid="demo-clip-badge">
       Demo Clip
     </Badge>
-  );
-}
-
-/** YouTube iframe stays off the initial series-detail network until the user opts in. */
-function SeriesTrailerSection({ title, embedUrl }: { title: string; embedUrl: string }) {
-  const [active, setActive] = useState(false);
-  return (
-    <section className="mt-10 space-y-3" aria-labelledby="series-trailer-heading">
-      <h2 id="series-trailer-heading" className="text-xl font-serif font-bold text-foreground">
-        Watch Trailer
-      </h2>
-      <div className="aspect-video overflow-hidden rounded-lg border border-border bg-black">
-        {active ? (
-          <iframe
-            src={embedUrl}
-            title={`${title} trailer`}
-            className="h-full w-full"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowFullScreen
-            data-testid="youtube-trailer-embed"
-          />
-        ) : (
-          <button
-            type="button"
-            className="flex h-full w-full items-center justify-center gap-2 text-sm text-white/90 transition hover:bg-white/5"
-            onClick={() => setActive(true)}
-            data-testid="youtube-trailer-load"
-          >
-            <Play className="h-5 w-5 fill-current" />
-            Load trailer
-          </button>
-        )}
-      </div>
-    </section>
   );
 }
 
@@ -564,322 +535,215 @@ export function MovieDetailsPage() {
 // ============ SERIES DETAILS PAGE ============
 export function SeriesDetailsPage() {
   const { id } = useParams();
-  const { t, lang } = useLang();
-  const navigate = useNavigate();
-  const [selectedSeason, setSelectedSeason] = useState(1);
+  const { lang } = useLang();
+  const { isLoggedIn } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [detail, setDetail] = useState<Awaited<ReturnType<typeof fetchSeriesDetail>> | null>(null);
+  const [series, setSeries] = useState<CatalogSeries | null>(null);
+  const [seasons, setSeasons] = useState<SeriesSeasonView[]>([]);
+  const [selectedSeason, setSelectedSeason] = useState(1);
+  const [seasonInitialized, setSeasonInitialized] = useState(false);
+  const [episodesBySeason, setEpisodesBySeason] = useState<Map<number, SeriesEpisodeView[]>>(
+    () => new Map()
+  );
+  const [seasonLoading, setSeasonLoading] = useState(false);
+  const [recommended, setRecommended] = useState<CatalogSeries[]>([]);
+  const [continueWatching, setContinueWatching] = useState<WatchProgressDto[]>([]);
+  const [watchHistory, setWatchHistory] = useState<WatchProgressDto[]>([]);
 
-  const load = useCallback(async () => {
+  const loadShell = useCallback(async () => {
     if (!id) return;
     setLoading(true);
     setError(null);
+    setSeasonInitialized(false);
+    setEpisodesBySeason(new Map());
     try {
-      const result = await fetchSeriesDetail(id, lang);
-      setDetail(result);
-      if (result.seasons.length) setSelectedSeason(result.seasons[0].number);
+      const [shell, recs] = await Promise.all([
+        fetchSeriesShell(id, lang),
+        fetchSeriesRecommendations(id, 12).catch(() => [] as CatalogSeries[]),
+      ]);
+      setSeries(shell.series);
+      setSeasons(shell.seasons as SeriesSeasonView[]);
+      setRecommended(recs.filter((item) => item.id !== shell.series.id));
+
+      let cw: WatchProgressDto[] = [];
+      let history: WatchProgressDto[] = [];
+      if (isLoggedIn) {
+        try {
+          cw = await api.listContinueWatching();
+          const hist = await api.listWatchHistory({ page: 1, page_size: 60 });
+          history = hist.items || [];
+        } catch {
+          cw = [];
+          history = [];
+        }
+      }
+      setContinueWatching(cw);
+      setWatchHistory(history);
+
+      // Prefetch a seed season for CTA / default season (watch season, else first).
+      const hintSeason =
+        cw.find((r) => r.content_type === 'episode' && r.series_id === shell.series.id && !r.completed)
+          ?.season_number ??
+        history.find((r) => r.content_type === 'episode' && r.series_id === shell.series.id && r.completed)
+          ?.season_number ??
+        shell.seasons[0]?.number ??
+        1;
+
+      const seasonsToPrefetch = new Set<number>([hintSeason]);
+      const nextSeason = shell.seasons.find((s) => s.number > hintSeason)?.number;
+      if (nextSeason != null) seasonsToPrefetch.add(nextSeason);
+
+      const fetched = new Map<number, SeriesEpisodeView[]>();
+      await Promise.all(
+        [...seasonsToPrefetch].map(async (seasonNum) => {
+          const eps = (await fetchSeasonEpisodes(id, seasonNum, lang)) as SeriesEpisodeView[];
+          fetched.set(seasonNum, eps);
+        })
+      );
+      setEpisodesBySeason(fetched);
+
+      const catalog = sortEpisodesByAirOrder([...fetched.values()].flat());
+      const cta = resolveSeriesHeroCta({
+        seriesId: shell.series.id,
+        catalogEpisodes: catalog,
+        continueWatching: cw,
+        watchHistory: history,
+      });
+      // If completed at season end, ensure next season episodes loaded for Next CTA.
+      if (cta.kind === 'watch_again' || (cta.kind === 'next' && !fetched.has(cta.episode.season))) {
+        const completed = history.find(
+          (r) => r.content_type === 'episode' && r.series_id === shell.series.id && r.completed
+        );
+        if (completed) {
+          const nextHint = shell.seasons.find(
+            (s) => s.number > (completed.season_number ?? 0)
+          )?.number;
+          if (nextHint != null && !fetched.has(nextHint)) {
+            const eps = (await fetchSeasonEpisodes(id, nextHint, lang)) as SeriesEpisodeView[];
+            fetched.set(nextHint, eps);
+            setEpisodesBySeason(new Map(fetched));
+            const nextEp = findNextPlayableEpisode(
+              sortEpisodesByAirOrder([...fetched.values()].flat()),
+              completed.season_number ?? 0,
+              completed.episode_number ?? 0
+            );
+            if (nextEp) {
+              // catalog refresh happens via state; season default uses updated map below
+            }
+          }
+        }
+      }
+
+      const refreshedCatalog = sortEpisodesByAirOrder([...fetched.values()].flat());
+      const refreshedCta = resolveSeriesHeroCta({
+        seriesId: shell.series.id,
+        catalogEpisodes: refreshedCatalog,
+        continueWatching: cw,
+        watchHistory: history,
+      });
+      const initial = defaultSeasonNumber({
+        seasons: shell.seasons,
+        cta: refreshedCta,
+        episodesBySeason: fetched,
+      });
+      setSelectedSeason(initial);
+      if (!fetched.has(initial)) {
+        const eps = (await fetchSeasonEpisodes(id, initial, lang)) as SeriesEpisodeView[];
+        fetched.set(initial, eps);
+        setEpisodesBySeason(new Map(fetched));
+      }
+      setSeasonInitialized(true);
     } catch (err) {
-      setDetail(null);
+      setSeries(null);
       setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Series not found');
     } finally {
       setLoading(false);
     }
-  }, [id, lang]);
+  }, [id, lang, isLoggedIn]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    void loadShell();
+  }, [loadShell]);
 
-  const showEpisodes = useMemo(() => {
-    if (!detail) return [];
-    return detail.episodes
-      .filter((e) => e.season === selectedSeason)
-      .sort((a, b) => a.episode - b.episode);
-  }, [detail, selectedSeason]);
+  const onSeasonChange = useCallback(
+    async (season: number) => {
+      setSelectedSeason(season);
+      if (!id) return;
+      if (episodesBySeason.has(season)) return;
+      setSeasonLoading(true);
+      try {
+        const eps = (await fetchSeasonEpisodes(id, season, lang)) as SeriesEpisodeView[];
+        setEpisodesBySeason((prev) => {
+          const next = new Map(prev);
+          next.set(season, eps);
+          return next;
+        });
+      } finally {
+        setSeasonLoading(false);
+      }
+    },
+    [id, lang, episodesBySeason]
+  );
 
-  if (loading) return <PageLoading />;
-  if (error || !detail) return <PageError message={error || 'Series not found'} onRetry={load} />;
+  const catalogEpisodes = useMemo(
+    () => sortEpisodesByAirOrder([...episodesBySeason.values()].flat()),
+    [episodesBySeason]
+  );
 
-  const show = detail.series;
-  const showTrailerEmbed = trailerEmbedUrl(show);
-  const showIsDemo = isDemoCatalogItem(show);
-  const seriesBackdrop = heroBackdropSrcSet(show.backdrop || show.poster);
-  const seriesPoster = sizedArtworkUrl(show.poster, 'poster', 'card');
-  const availabilityLabels = {
-    dubbed: t.movie.dubbed,
-    subtitled: t.nav.subtitled,
-    audio: t.movie.audio,
-  };
-  const availabilityChips = catalogAvailabilityChips(show, availabilityLabels);
-  const seriesAudioAv = resolveAudioAvailability(show);
-  const seriesSubAv = resolveSubtitleAvailability(show);
-  const hasTechnical =
-    hasCatalogTracks(show.audio) ||
-    hasCatalogTracks(show.subtitles) ||
-    hasCatalogTracks(show.dubbed) ||
-    Boolean(show.country) ||
-    Boolean(show.language) ||
-    (seriesAudioAv.languages?.length ?? 0) > 0 ||
-    (seriesAudioAv.dubbed_languages?.length ?? 0) > 0 ||
-    (seriesSubAv.languages?.length ?? 0) > 0;
+  const heroCta = useMemo(() => {
+    if (!series) {
+      return { kind: 'unavailable' as const };
+    }
+    return resolveSeriesHeroCta({
+      seriesId: series.id,
+      catalogEpisodes,
+      continueWatching,
+      watchHistory,
+    });
+  }, [series, catalogEpisodes, continueWatching, watchHistory]);
+
+  const progressByEpisode = useMemo(() => {
+    if (!series) return new Map<number, WatchProgressDto>();
+    return buildEpisodeProgressMap(series.id, [...continueWatching, ...watchHistory]);
+  }, [series, continueWatching, watchHistory]);
+
+  const selectedEpisodes = episodesBySeason.get(selectedSeason) ?? [];
+
+  if (loading || !seasonInitialized) {
+    return (
+      <div className="min-h-screen" data-testid="series-detail-loading">
+        <Skeleton className="h-[58vh] w-full rounded-none" />
+        <div className="container mx-auto max-w-6xl space-y-4 px-4 py-8">
+          <Skeleton className="h-8 w-48" />
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="grid grid-cols-[120px_1fr] gap-3">
+              <Skeleton className="aspect-video w-full" />
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-1/2" />
+                <Skeleton className="h-16 w-full" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  if (error || !series) return <PageError message={error || 'Series not found'} onRetry={loadShell} />;
 
   return (
-    <div className="min-h-screen" data-testid="series-detail">
-      <div className="relative h-[40vh] md:h-[50vh]">
-        <img
-          src={seriesBackdrop.src}
-          srcSet={seriesBackdrop.srcSet || undefined}
-          sizes={seriesBackdrop.srcSet ? seriesBackdrop.sizes : undefined}
-          alt={show.title}
-          className="w-full h-full object-cover"
-          loading="eager"
-          decoding="async"
-          {...({ fetchpriority: 'high' } as object)}
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
-      </div>
-
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 -mt-24 relative z-10 pb-12">
-        <div className="flex flex-col md:flex-row gap-6">
-          <div className="flex-shrink-0 w-[160px] md:w-[200px] mx-auto md:mx-0">
-            <img
-              src={seriesPoster}
-              alt={show.title}
-              className="w-full rounded-lg shadow-xl"
-              loading="eager"
-              decoding="async"
-            />
-          </div>
-          <div className="flex-1 space-y-3">
-            <h1 className="text-2xl md:text-3xl font-serif font-bold text-foreground">{show.title}</h1>
-            <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-              <Badge variant="outline" className="border-primary/50 text-primary">
-                {show.ageRating}
-              </Badge>
-              <span>{show.year}</span>
-              <span>
-                {show.seasons} {t.common.season}s
-              </span>
-              <span>
-                {show.episodes} {t.common.episode}s
-              </span>
-              <Badge variant={show.status === 'Ongoing' ? 'default' : 'secondary'}>{show.status}</Badge>
-              <Star className="h-4 w-4 text-primary fill-primary" />
-              <span>{show.rating}</span>
-            </div>
-            {availabilityChips.length ? (
-              <div
-                className="flex flex-wrap gap-2"
-                data-testid="series-availability-chips"
-                aria-label="Audio and subtitle availability"
-              >
-                {availabilityChips.map((chip) => (
-                  <Badge key={chip} variant="secondary">
-                    {chip}
-                  </Badge>
-                ))}
-              </div>
-            ) : null}
-            <p className="text-sm text-foreground/80">{show.description}</p>
-            <div className="flex flex-wrap gap-2">
-              {show.genres.map((g) => (
-                <Badge key={g} variant="secondary">
-                  {g}
-                </Badge>
-              ))}
-            </div>
-            <div className="flex flex-wrap items-center gap-3" aria-label="Series actions">
-              {showTrailerEmbed && (
-                <Button variant="outline" size="lg" asChild className="gap-2">
-                  <a href={showTrailerEmbed} target="_blank" rel="noreferrer" aria-label={`Watch trailer for ${show.title}`}>
-                    <ExternalLink className="h-5 w-5" />
-                    Watch Trailer
-                  </a>
-                </Button>
-              )}
-              {(() => {
-                const playableEpisode = showEpisodes.find(
-                  (ep) => canPlayFullMovie(ep) || hasDemoClip(ep)
-                );
-                if (playableEpisode) {
-                  return (
-                    <Button
-                      size="lg"
-                      onClick={() =>
-                        navigate(
-                          `/player/episode/${playableEpisode.id}?series=${encodeURIComponent(String(show.id))}&season=${selectedSeason}`,
-                          { state: { autoplay: true } }
-                        )
-                      }
-                      className="gap-2"
-                      aria-label={
-                        hasDemoClip(playableEpisode)
-                          ? `Play demo clip for ${show.title}`
-                          : `Play ${show.title}`
-                      }
-                    >
-                      <Play className="h-5 w-5 fill-current" />
-                      {hasDemoClip(playableEpisode) && !canPlayFullMovie(playableEpisode)
-                        ? 'Play Demo Clip'
-                        : t.movie.play}
-                    </Button>
-                  );
-                }
-                return (
-                  <Badge variant="secondary" className="px-3 py-2 text-sm" data-testid="full-series-unavailable">
-                    Full Series Unavailable
-                  </Badge>
-                );
-              })()}
-              <WatchlistButton seriesId={show.id} />
-              {showIsDemo ? (
-                <Badge variant="outline" className="px-3 py-2 text-sm">
-                  Demo catalog
-                </Badge>
-              ) : null}
-            </div>
-            {showIsDemo && (
-              <p className="text-xs text-muted-foreground">
-                Demo catalog item: trailer and demo clip access do not indicate full series availability.
-              </p>
-            )}
-          </div>
-        </div>
-
-        {hasTechnical ? (
-          <section
-            className="mt-8 rounded-lg border border-border bg-card/60 p-5"
-            data-testid="series-technical-details"
-            aria-labelledby="series-technical-heading"
-          >
-            <h2 id="series-technical-heading" className="mb-4 text-lg font-serif font-bold text-foreground">
-              Technical Details
-            </h2>
-            <dl className="space-y-3 text-sm">
-              {[
-                [
-                  t.movie.audio,
-                  formatCatalogTracks(
-                    seriesAudioAv.languages?.length ? seriesAudioAv.languages : show.audio
-                  ),
-                ],
-                [
-                  t.movie.dubbed,
-                  formatCatalogTracks(
-                    seriesAudioAv.dubbed_languages?.length
-                      ? seriesAudioAv.dubbed_languages
-                      : show.dubbed
-                  ),
-                ],
-                [
-                  t.movie.subtitles,
-                  formatCatalogTracks(
-                    seriesSubAv.languages?.length ? seriesSubAv.languages : show.subtitles
-                  ),
-                ],
-                ['Country', show.country],
-                ['Language', show.language],
-              ]
-                .filter(([, value]) => Boolean(value))
-                .map(([label, value]) => (
-                  <div key={String(label)} className="flex justify-between gap-4 border-b border-border/60 pb-2 last:border-0">
-                    <dt className="text-muted-foreground">{label}</dt>
-                    <dd className="text-right font-medium text-foreground">{value}</dd>
-                  </div>
-                ))}
-            </dl>
-          </section>
-        ) : null}
-
-        {showTrailerEmbed ? (
-          <SeriesTrailerSection title={show.title} embedUrl={showTrailerEmbed} />
-        ) : null}
-
-        <div className="mt-8">
-          <div className="flex items-center gap-4 mb-4">
-            <Select value={String(selectedSeason)} onValueChange={(v) => setSelectedSeason(Number(v))}>
-              <SelectTrigger className="w-[160px] bg-card border-border">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(detail.seasons.length
-                  ? detail.seasons
-                  : Array.from({ length: show.seasons }, (_, i) => ({ number: i + 1 }))
-                ).map((s) => (
-                  <SelectItem key={s.number} value={String(s.number)}>
-                    {t.common.season} {s.number}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-3">
-            {showEpisodes.length > 0 ? (
-              showEpisodes.map((ep) => {
-                const playable = canPlayFullMovie(ep) || hasDemoClip(ep);
-                return (
-                  <div
-                    key={ep.id}
-                    role={playable ? 'button' : undefined}
-                    tabIndex={playable ? 0 : undefined}
-                    onClick={() => {
-                      if (!playable) return;
-                      navigate(
-                        `/player/episode/${ep.id}?series=${encodeURIComponent(String(show.id))}&season=${selectedSeason}`,
-                        { state: { autoplay: true } }
-                      );
-                    }}
-                    onKeyDown={(e) => {
-                      if (!playable) return;
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        navigate(
-                          `/player/episode/${ep.id}?series=${encodeURIComponent(String(show.id))}&season=${selectedSeason}`,
-                          { state: { autoplay: true } }
-                        );
-                      }
-                    }}
-                    className={`flex gap-4 rounded-lg border border-border p-3 transition-colors ${
-                      playable ? 'cursor-pointer bg-card hover:bg-muted/40' : 'cursor-default bg-muted/20 opacity-80'
-                    }`}
-                    data-testid={`episode-row-${ep.id}`}
-                  >
-                    <div className="relative w-[120px] md:w-[160px] flex-shrink-0">
-                      <img
-                        src={sizedArtworkUrl(ep.thumbnail || show.poster, 'backdrop', 'card')}
-                        alt=""
-                        loading="lazy"
-                        decoding="async"
-                        className="w-full aspect-video rounded object-cover"
-                      />
-                      {hasDemoClip(ep) ? (
-                        <Badge className="absolute start-1 top-1 bg-emerald-600/90 text-[10px]">Demo Clip</Badge>
-                      ) : null}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-medium text-foreground text-sm">
-                        E{ep.episode} - {ep.title}
-                      </h4>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {ep.duration} {t.common.min}
-                        {!playable ? ' · Unavailable' : ''}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{ep.description}</p>
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <p>No episodes available for this season yet.</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+    <SeriesDetailView
+      series={series}
+      seasons={seasons}
+      episodes={selectedEpisodes}
+      selectedSeason={selectedSeason}
+      onSeasonChange={(n) => void onSeasonChange(n)}
+      seasonLoading={seasonLoading}
+      recommended={recommended}
+      heroCta={heroCta}
+      progressByEpisode={progressByEpisode}
+      catalogEpisodesForCta={catalogEpisodes}
+    />
   );
 }
 

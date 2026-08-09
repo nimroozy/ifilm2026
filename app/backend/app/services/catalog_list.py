@@ -398,6 +398,8 @@ def series_card_out(db: Session, series_items: list[Series], *, locale: str | No
                 dubbed=series.dubbed or [],
                 audio_availability=AudioAvailabilityOut.model_validate(audio.model_dump()),
                 subtitle_availability=SubtitleAvailabilityOut.model_validate(subs.model_dump()),
+                credits=[],
+                credits_synced_at=None,
                 views=series.views or 0,
                 type="series",
                 year=series.release_year,
