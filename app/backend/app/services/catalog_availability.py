@@ -147,6 +147,7 @@ def build_audio_availability(
     audio_stream_count: int | None = None,
     has_playable_package: bool = False,
     has_external_media: bool = False,
+    packaged_audio_tracks: list[Any] | None = None,
 ) -> AudioAvailability:
     original, original_source = resolve_original_language_code(
         language=language,
@@ -155,6 +156,33 @@ def build_audio_availability(
     )
     admin_audio_codes = normalize_language_list(admin_audio)
     admin_dubbed_codes = normalize_language_list(admin_dubbed)
+
+    packaged = packaged_audio_tracks or []
+    if packaged:
+        languages = normalize_language_list([getattr(t, "language_code", None) for t in packaged])
+        dubbed = normalize_language_list(
+            [
+                getattr(t, "language_code", None)
+                for t in packaged
+                if bool(getattr(t, "is_dubbed", False))
+            ]
+        )
+        if not dubbed:
+            dubbed = derive_dubbed_languages(
+                audio_languages=languages,
+                original_language=original,
+                admin_dubbed=admin_dubbed_codes,
+            )
+        # Tracks registered for packaging/HLS groups are selectable when present.
+        selectable = any(getattr(t, "hls_group_id", None) for t in packaged) or len(languages) > 1
+        return AudioAvailability(
+            original_language=original,
+            languages=languages,
+            dubbed_languages=dubbed,
+            track_count=len(packaged),
+            source="package_manifest",
+            selectable_in_player=selectable,
+        )
 
     probe_audio = _probe_track_languages(probe_json, {"audio"})
     probe_langs = normalize_language_list([t.get("language") for t in probe_audio])
@@ -246,7 +274,19 @@ def build_subtitle_availability(
     admin_subtitles: Any = None,
     probe_json: dict[str, Any] | None = None,
     subtitle_stream_count: int | None = None,
+    packaged_subtitle_tracks: list[Any] | None = None,
 ) -> SubtitleAvailability:
+    packaged = packaged_subtitle_tracks or []
+    if packaged:
+        languages = normalize_language_list([getattr(t, "language_code", None) for t in packaged])
+        selectable = any(getattr(t, "hls_group_id", None) for t in packaged) or len(languages) > 0
+        return SubtitleAvailability(
+            languages=languages,
+            track_count=len(packaged),
+            source="package_manifest",
+            selectable_in_player=selectable,
+        )
+
     admin_codes = normalize_language_list(admin_subtitles)
     probe_subs = _probe_track_languages(probe_json, {"subtitle", "text"})
     probe_langs = normalize_language_list([t.get("language") for t in probe_subs])
@@ -322,6 +362,33 @@ def load_primary_asset_probe(
     )
 
 
+def _packaged_tracks_for_movie(db: Session | None, movie_id: Any) -> tuple[list[Any], list[Any]]:
+    if db is None or movie_id is None:
+        return [], []
+    from app.models.media_assets import MediaAsset
+    from app.models.media_tracks import MediaTrack
+
+    asset_ids = [
+        row[0]
+        for row in db.query(MediaAsset.id)
+        .filter(MediaAsset.movie_id == movie_id)
+        .order_by(MediaAsset.id.desc())
+        .limit(20)
+        .all()
+    ]
+    if not asset_ids:
+        return [], []
+    rows = (
+        db.query(MediaTrack)
+        .filter(MediaTrack.media_asset_id.in_(asset_ids))
+        .order_by(MediaTrack.sort_order.asc(), MediaTrack.id.asc())
+        .all()
+    )
+    audio = [r for r in rows if r.track_type == "audio"]
+    subs = [r for r in rows if r.track_type == "subtitle"]
+    return audio, subs
+
+
 def availability_for_movie(
     movie: Any,
     db: Session | None = None,
@@ -330,6 +397,7 @@ def availability_for_movie(
     has_external_media: bool = False,
 ) -> tuple[AudioAvailability, SubtitleAvailability]:
     probe_json, audio_count, sub_count = load_primary_asset_probe(db, movie_id=getattr(movie, "id", None))
+    packaged_audio, packaged_subs = _packaged_tracks_for_movie(db, getattr(movie, "id", None))
     audio = build_audio_availability(
         language=getattr(movie, "language", None),
         spoken_languages=getattr(movie, "spoken_languages", None),
@@ -340,11 +408,13 @@ def availability_for_movie(
         audio_stream_count=audio_count,
         has_playable_package=has_playable_package,
         has_external_media=has_external_media,
+        packaged_audio_tracks=packaged_audio,
     )
     subs = build_subtitle_availability(
         admin_subtitles=getattr(movie, "subtitles", None),
         probe_json=probe_json,
         subtitle_stream_count=sub_count,
+        packaged_subtitle_tracks=packaged_subs,
     )
     return audio, subs
 
@@ -363,6 +433,33 @@ def availability_for_series(series: Any, db: Session | None = None) -> tuple[Aud
     return audio, subs
 
 
+def _packaged_tracks_for_episode(db: Session | None, episode_id: Any) -> tuple[list[Any], list[Any]]:
+    if db is None or episode_id is None:
+        return [], []
+    from app.models.media_assets import MediaAsset
+    from app.models.media_tracks import MediaTrack
+
+    asset_ids = [
+        row[0]
+        for row in db.query(MediaAsset.id)
+        .filter(MediaAsset.episode_id == episode_id)
+        .order_by(MediaAsset.id.desc())
+        .limit(20)
+        .all()
+    ]
+    if not asset_ids:
+        return [], []
+    rows = (
+        db.query(MediaTrack)
+        .filter(MediaTrack.media_asset_id.in_(asset_ids))
+        .order_by(MediaTrack.sort_order.asc(), MediaTrack.id.asc())
+        .all()
+    )
+    audio = [r for r in rows if r.track_type == "audio"]
+    subs = [r for r in rows if r.track_type == "subtitle"]
+    return audio, subs
+
+
 def availability_for_episode(
     episode: Any, db: Session | None = None, *, series: Any | None = None
 ) -> tuple[AudioAvailability, SubtitleAvailability]:
@@ -375,6 +472,7 @@ def availability_for_episode(
     admin_audio = getattr(series, "audio", None) if series is not None else None
     admin_dubbed = getattr(series, "dubbed", None) if series is not None else None
     admin_subs = getattr(series, "subtitles", None) if series is not None else None
+    packaged_audio, packaged_subs = _packaged_tracks_for_episode(db, getattr(episode, "id", None))
 
     audio = build_audio_availability(
         language=language,
@@ -384,10 +482,12 @@ def availability_for_episode(
         admin_dubbed=admin_dubbed,
         probe_json=probe_json,
         audio_stream_count=audio_count,
+        packaged_audio_tracks=packaged_audio,
     )
     subs = build_subtitle_availability(
         admin_subtitles=admin_subs,
         probe_json=probe_json,
         subtitle_stream_count=sub_count,
+        packaged_subtitle_tracks=packaged_subs,
     )
     return audio, subs

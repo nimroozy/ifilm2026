@@ -264,9 +264,14 @@ function ContinueWatchingRow({
             }
             onActivate={() => {
               if ('media_asset_id' in item) {
-                if (item.available && item.player_path) navigate(item.player_path);
+                if (item.available && item.player_path) {
+                  navigate(item.player_path, { state: { autoplay: true } });
+                }
               } else {
-                navigate(item.type === 'series' ? `/series/${item.contentId}` : `/player/movie/${item.contentId}`);
+                navigate(
+                  item.type === 'series' ? `/series/${item.contentId}` : `/player/movie/${item.contentId}`,
+                  item.type === 'series' ? undefined : { state: { autoplay: true } }
+                );
               }
             }}
           />

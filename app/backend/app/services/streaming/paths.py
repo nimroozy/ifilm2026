@@ -10,7 +10,8 @@ from app.services.media_processing.errors import PathSecurityError
 from app.services.storage import media_root, packages_dir
 
 _LABEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$")
-_SEGMENT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.ts$")
+# MPEG-TS video/audio segments and WebVTT subtitle cue files.
+_SEGMENT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.(?:ts|vtt)$")
 ALLOWED_PLAYLIST_NAMES = frozenset({"master.m3u8", "index.m3u8"})
 
 

@@ -34,6 +34,8 @@ import {
   catalogAvailabilityChips,
   formatCatalogTracks,
   hasCatalogTracks,
+  resolveAudioAvailability,
+  resolveSubtitleAvailability,
 } from '@/lib/catalogAvailability';
 import { canPlayFullMovie, hasDemoClip, isDemoCatalogItem } from '@/lib/catalogPresentation';
 import { trailerEmbedUrl } from '@/lib/trailers';
@@ -154,6 +156,8 @@ export function MoviesPage({ audience = 'all' }: { audience?: 'all' | 'children'
     dubbed: t.nav.dubbed,
     subtitled: t.nav.subtitled,
     multiAudio: 'Multi',
+    persianDubbed: t.player.persianDub,
+    pashtoDubbed: t.player.pashtoDub,
   };
 
   useEffect(() => {
@@ -357,6 +361,8 @@ export function SeriesPage() {
     dubbed: t.nav.dubbed,
     subtitled: t.nav.subtitled,
     multiAudio: 'Multi',
+    persianDubbed: t.player.persianDub,
+    pashtoDubbed: t.player.pashtoDub,
   };
 
   const load = useCallback(async () => {
@@ -552,12 +558,17 @@ export function SeriesDetailsPage() {
     audio: t.movie.audio,
   };
   const availabilityChips = catalogAvailabilityChips(show, availabilityLabels);
+  const seriesAudioAv = resolveAudioAvailability(show);
+  const seriesSubAv = resolveSubtitleAvailability(show);
   const hasTechnical =
     hasCatalogTracks(show.audio) ||
     hasCatalogTracks(show.subtitles) ||
     hasCatalogTracks(show.dubbed) ||
     Boolean(show.country) ||
-    Boolean(show.language);
+    Boolean(show.language) ||
+    (seriesAudioAv.languages?.length ?? 0) > 0 ||
+    (seriesAudioAv.dubbed_languages?.length ?? 0) > 0 ||
+    (seriesSubAv.languages?.length ?? 0) > 0;
 
   return (
     <div className="min-h-screen" data-testid="series-detail">
@@ -643,7 +654,8 @@ export function SeriesDetailsPage() {
                       size="lg"
                       onClick={() =>
                         navigate(
-                          `/player/episode/${playableEpisode.id}?series=${encodeURIComponent(String(show.id))}&season=${selectedSeason}`
+                          `/player/episode/${playableEpisode.id}?series=${encodeURIComponent(String(show.id))}&season=${selectedSeason}`,
+                          { state: { autoplay: true } }
                         )
                       }
                       className="gap-2"
@@ -692,9 +704,26 @@ export function SeriesDetailsPage() {
             </h2>
             <dl className="space-y-3 text-sm">
               {[
-                [t.movie.audio, formatCatalogTracks(show.audio)],
-                [t.movie.dubbed, formatCatalogTracks(show.dubbed)],
-                [t.movie.subtitles, formatCatalogTracks(show.subtitles)],
+                [
+                  t.movie.audio,
+                  formatCatalogTracks(
+                    seriesAudioAv.languages?.length ? seriesAudioAv.languages : show.audio
+                  ),
+                ],
+                [
+                  t.movie.dubbed,
+                  formatCatalogTracks(
+                    seriesAudioAv.dubbed_languages?.length
+                      ? seriesAudioAv.dubbed_languages
+                      : show.dubbed
+                  ),
+                ],
+                [
+                  t.movie.subtitles,
+                  formatCatalogTracks(
+                    seriesSubAv.languages?.length ? seriesSubAv.languages : show.subtitles
+                  ),
+                ],
                 ['Country', show.country],
                 ['Language', show.language],
               ]
@@ -744,7 +773,8 @@ export function SeriesDetailsPage() {
                     onClick={() => {
                       if (!playable) return;
                       navigate(
-                        `/player/episode/${ep.id}?series=${encodeURIComponent(String(show.id))}&season=${selectedSeason}`
+                        `/player/episode/${ep.id}?series=${encodeURIComponent(String(show.id))}&season=${selectedSeason}`,
+                        { state: { autoplay: true } }
                       );
                     }}
                     onKeyDown={(e) => {
@@ -752,7 +782,8 @@ export function SeriesDetailsPage() {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
                         navigate(
-                          `/player/episode/${ep.id}?series=${encodeURIComponent(String(show.id))}&season=${selectedSeason}`
+                          `/player/episode/${ep.id}?series=${encodeURIComponent(String(show.id))}&season=${selectedSeason}`,
+                          { state: { autoplay: true } }
                         );
                       }
                     }}

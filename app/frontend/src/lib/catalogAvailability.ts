@@ -175,29 +175,46 @@ export type AvailabilityBadge = {
   fullLabel: string;
 };
 
+export type AvailabilityBadgeLabels = {
+  dubbed: string;
+  subtitled: string;
+  multiAudio: string;
+  /** Localized human labels for dubbed languages (never FA/PS codes). */
+  persianDubbed?: string;
+  pashtoDubbed?: string;
+  audio?: string;
+  subtitles?: string;
+};
+
+function dubbedLabelForCode(code: string, labels: AvailabilityBadgeLabels): string {
+  if (code === 'fa' || code === 'prs') return labels.persianDubbed || labels.dubbed;
+  if (code === 'ps') return labels.pashtoDubbed || labels.dubbed;
+  return `${languageDisplayName(code)} ${labels.dubbed}`.trim();
+}
+
 /** Compact high-value card badges. Max 2 + overflow. */
 export function catalogAvailabilityBadges(
   item: CatalogAvailabilityFields,
-  labels: { dubbed: string; subtitled: string; multiAudio: string }
+  labels: AvailabilityBadgeLabels
 ): { badges: AvailabilityBadge[]; overflow: number } {
   const audio = resolveAudioAvailability(item);
   const subs = resolveSubtitleAvailability(item);
   const badges: AvailabilityBadge[] = [];
 
   for (const code of audio.dubbed_languages || []) {
-    const short = compactLanguageBadge(code);
+    const label = dubbedLabelForCode(code, labels);
     badges.push({
       key: `dub-${code}`,
-      label: `${short} Dub`,
-      fullLabel: `${languageDisplayName(code)} ${labels.dubbed}`,
+      label,
+      fullLabel: label,
     });
   }
   for (const code of (subs.languages || []).slice(0, 2)) {
-    const short = compactLanguageBadge(code);
+    const name = languageDisplayName(code);
     badges.push({
       key: `sub-${code}`,
-      label: `${short} Sub`,
-      fullLabel: `${languageDisplayName(code)} ${labels.subtitled}`,
+      label: `${name} ${labels.subtitled}`.trim(),
+      fullLabel: `${name} ${labels.subtitled}`.trim(),
     });
   }
   if ((audio.languages || []).length > 1 && !(audio.dubbed_languages || []).length) {
@@ -225,45 +242,45 @@ export function catalogAvailabilityBadge(
   return undefined;
 }
 
-/** Detail-page language badges: e.g. FA Dub, EN Audio, FA Subtitle. */
-export function movieDetailLanguageBadges(item: CatalogAvailabilityFields): AvailabilityBadge[] {
+/** Detail-page language badges — human-readable, never FA/PS shorthand. */
+export function movieDetailLanguageBadges(
+  item: CatalogAvailabilityFields,
+  labels?: AvailabilityBadgeLabels
+): AvailabilityBadge[] {
   const audio = resolveAudioAvailability(item);
   const subs = resolveSubtitleAvailability(item);
   const badges: AvailabilityBadge[] = [];
   const seen = new Set<string>();
+  const resolved: AvailabilityBadgeLabels = {
+    dubbed: labels?.dubbed || 'Dubbed',
+    subtitled: labels?.subtitled || 'Subtitles',
+    multiAudio: labels?.multiAudio || 'Multi Audio',
+    persianDubbed: labels?.persianDubbed,
+    pashtoDubbed: labels?.pashtoDubbed,
+    audio: labels?.audio || 'Audio',
+    subtitles: labels?.subtitles || 'Subtitles',
+  };
 
   for (const code of audio.dubbed_languages || []) {
-    const short = compactLanguageBadge(code);
     const key = `dub-${code}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    badges.push({
-      key,
-      label: `${short} Dub`,
-      fullLabel: `${languageDisplayName(code)} Dub`,
-    });
+    const label = dubbedLabelForCode(code, resolved);
+    badges.push({ key, label, fullLabel: label });
   }
   for (const code of audio.languages || []) {
-    const short = compactLanguageBadge(code);
     const key = `audio-${code}`;
     if (seen.has(key) || seen.has(`dub-${code}`)) continue;
     seen.add(key);
-    badges.push({
-      key,
-      label: `${short} Audio`,
-      fullLabel: `${languageDisplayName(code)} Audio`,
-    });
+    const label = `${languageDisplayName(code)} ${resolved.audio}`.trim();
+    badges.push({ key, label, fullLabel: label });
   }
   for (const code of subs.languages || []) {
-    const short = compactLanguageBadge(code);
     const key = `sub-${code}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    badges.push({
-      key,
-      label: `${short} Subtitle`,
-      fullLabel: `${languageDisplayName(code)} Subtitle`,
-    });
+    const label = `${languageDisplayName(code)} ${resolved.subtitles}`.trim();
+    badges.push({ key, label, fullLabel: label });
   }
   return badges;
 }

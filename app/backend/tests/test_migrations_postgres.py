@@ -168,7 +168,8 @@ def test_postgresql_migration_succeeds(postgres_url):
     assert "collection_items" in tables
     assert "content_requests" in tables
     assert "content_request_events" in tables
-    assert version == "021_content_requests_v1"
+    assert "media_tracks" in tables
+    assert version == "023_media_tracks_packaging_v1"
 
 
 def test_postgresql_migration_from_previous_revision(postgres_url):
@@ -201,7 +202,7 @@ def test_postgresql_migration_from_previous_revision(postgres_url):
     assert movie_slug == "ordinary-film"
     assert series_slug == "ordinary-show"
     assert null_imdb >= 1
-    assert version == "021_content_requests_v1"
+    assert version == "023_media_tracks_packaging_v1"
 
 
 def test_002_to_head_duplicate_and_messy_titles(postgres_url):
@@ -1159,9 +1160,9 @@ def test_alembic_heads_single(postgres_url):
     result = _run_alembic(postgres_url, "heads")
     assert result.returncode == 0, result.stdout + result.stderr
     lines = [ln for ln in (result.stdout + result.stderr).splitlines() if ln.strip()]
-    head_lines = [ln for ln in lines if "021_content_requests_v1" in ln]
+    head_lines = [ln for ln in lines if "023_media_tracks_packaging_v1" in ln]
     assert head_lines, result.stdout + result.stderr
-    assert sum(1 for ln in lines if ln.strip().startswith("021_content_requests_v1")) >= 1
+    assert sum(1 for ln in lines if ln.strip().startswith("023_media_tracks_packaging_v1")) >= 1
 
 
 def test_media_upload_reliability_migration_roundtrip(postgres_url):
@@ -1210,10 +1211,11 @@ def test_media_upload_reliability_migration_roundtrip(postgres_url):
             )
         }
     engine.dispose()
-    assert version == "021_content_requests_v1"
+    assert version == "023_media_tracks_packaging_v1"
     assert "media_admin_events" in tables
     assert "content_translations" in tables
     assert "content_requests" in tables
+    assert "media_tracks" in tables
 
 
 def test_content_translations_migration_roundtrip(postgres_url):
@@ -1314,5 +1316,80 @@ def test_content_requests_migration_roundtrip(postgres_url):
             )
         }
     engine.dispose()
-    assert version == "021_content_requests_v1"
+    assert version == "023_media_tracks_packaging_v1"
     assert "content_requests" in tables
+    assert "media_tracks" in tables
+
+
+def test_media_tracks_migration_roundtrip(postgres_url):
+    """021 → 022 → 023 → 022 → head for media_tracks packaging columns."""
+    _reset_schema(postgres_url)
+    assert _run_alembic(postgres_url, "upgrade", "021_content_requests_v1").returncode == 0
+    assert _run_alembic(postgres_url, "upgrade", "022_media_tracks_player_v1").returncode == 0
+    assert _run_alembic(postgres_url, "upgrade", "023_media_tracks_packaging_v1").returncode == 0
+
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        tables = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT tablename FROM pg_tables WHERE schemaname='public'")
+            )
+        }
+        cols = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='media_tracks'"
+                )
+            )
+        }
+    engine.dispose()
+    assert version == "023_media_tracks_packaging_v1"
+    assert "media_tracks" in tables
+    assert "content_requests" in tables
+    assert "source_media_asset_id" in cols
+    assert "source_stream_index" in cols
+
+    assert _run_alembic(postgres_url, "downgrade", "022_media_tracks_player_v1").returncode == 0
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        cols = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='media_tracks'"
+                )
+            )
+        }
+    engine.dispose()
+    assert version == "022_media_tracks_player_v1"
+    assert "source_media_asset_id" not in cols
+
+    assert _run_alembic(postgres_url, "upgrade", "head").returncode == 0
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        tables = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT tablename FROM pg_tables WHERE schemaname='public'")
+            )
+        }
+        cols = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='media_tracks'"
+                )
+            )
+        }
+    engine.dispose()
+    assert version == "023_media_tracks_packaging_v1"
+    assert "media_tracks" in tables
+    assert "source_media_asset_id" in cols

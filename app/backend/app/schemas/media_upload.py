@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.schemas.common import ORMModel
 
-MEDIA_CATEGORIES = ("originals", "posters", "backdrops", "trailers", "subtitles")
+MEDIA_CATEGORIES = ("originals", "posters", "backdrops", "trailers", "subtitles", "audio")
 
 
 class UploadSessionCreate(BaseModel):

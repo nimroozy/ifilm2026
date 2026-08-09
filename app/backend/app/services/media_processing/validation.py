@@ -27,6 +27,7 @@ def validate_hls_package(
     rendition_heights: dict[str, int],
     rendition_widths: dict[str, int],
     rendition_bandwidths: dict[str, int],
+    require_ext_x_media: bool = False,
 ) -> tuple[Path, list[ValidatedRendition]]:
     master = package_root / "master.m3u8"
     if not master.is_file():
@@ -36,6 +37,8 @@ def validate_hls_package(
         raise PackageValidationError("Invalid master playlist header")
     if "#EXT-X-STREAM-INF" not in master_text:
         raise PackageValidationError("Master playlist has no variants")
+    if require_ext_x_media and "#EXT-X-MEDIA:" not in master_text:
+        raise PackageValidationError("Master playlist missing #EXT-X-MEDIA groups")
 
     validated: list[ValidatedRendition] = []
     for label in expected_labels:
@@ -59,7 +62,7 @@ def validate_hls_package(
             seg_path = playlist.parent / name
             if not seg_path.is_file() or seg_path.stat().st_size <= 0:
                 raise PackageValidationError(f"Missing or empty segment {name} for {label}")
-        # Ensure master references this variant.
+        # Ensure master references this variant / media URI.
         rel = f"{label}/index.m3u8"
         if rel not in master_text:
             raise PackageValidationError(f"Master playlist missing {rel}")
@@ -67,10 +70,10 @@ def validate_hls_package(
             ValidatedRendition(
                 label=label,
                 height=height,
-                width=rendition_widths[label],
+                width=rendition_widths.get(label, 0),
                 playlist_path=playlist,
                 segment_count=count_media_segments(text),
-                bandwidth=rendition_bandwidths[label],
+                bandwidth=rendition_bandwidths.get(label, 0),
             )
         )
     return master, validated

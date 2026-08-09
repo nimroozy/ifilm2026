@@ -2,7 +2,16 @@ from pathlib import Path
 
 from app.core.config import get_settings
 
-MEDIA_SUBDIRS = ("originals", "posters", "backdrops", "trailers", "subtitles", "temp", "packages")
+MEDIA_SUBDIRS = (
+    "originals",
+    "posters",
+    "backdrops",
+    "trailers",
+    "subtitles",
+    "audio",
+    "temp",
+    "packages",
+)
 
 
 def media_root() -> Path:
@@ -67,7 +76,7 @@ def hls_dir() -> Path:
 def media_category_dir(category: str) -> Path:
     ensure_media_layout()
     normalized = category.strip().lower()
-    allowed = {"originals", "posters", "backdrops", "trailers", "subtitles"}
+    allowed = {"originals", "posters", "backdrops", "trailers", "subtitles", "audio"}
     if normalized not in allowed:
         raise ValueError(f"Unknown media category: {category}")
     path = media_root() / normalized

@@ -15,7 +15,9 @@ from app.models.media_processing import MediaProcessingJob
 from app.services.media_audit import record_media_event
 from app.services.storage import artwork_root, media_root
 
-OWNED_CATEGORIES = frozenset({"originals", "posters", "backdrops", "trailers", "subtitles"})
+OWNED_CATEGORIES = frozenset(
+    {"originals", "posters", "backdrops", "trailers", "subtitles", "audio"}
+)
 
 
 def _safe_resolve_under(root: Path, relative_or_abs: str) -> Path | None:

@@ -13,7 +13,7 @@ from app.models.media_processing import MediaProcessingJob
 from app.services.media_processing.mount_health import media_processing_readiness
 from app.services.storage import MEDIA_SUBDIRS, ensure_media_layout, media_root
 
-OWNED_CATEGORIES = ("originals", "posters", "backdrops", "trailers", "subtitles")
+OWNED_CATEGORIES = ("originals", "posters", "backdrops", "trailers", "subtitles", "audio")
 
 
 def _path_for_asset(root: Path, asset: MediaAsset) -> Path | None:

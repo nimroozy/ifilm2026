@@ -50,7 +50,13 @@ function CatalogGrid({
   moviesLabel: string;
   seriesLabel: string;
   emptyLabel: string;
-  availabilityLabels: { dubbed: string; subtitled: string; multiAudio: string };
+  availabilityLabels: {
+    dubbed: string;
+    subtitled: string;
+    multiAudio: string;
+    persianDubbed?: string;
+    pashtoDubbed?: string;
+  };
 }) {
   const navigate = useNavigate();
   if (movies.length === 0 && series.length === 0) {
@@ -320,6 +326,8 @@ export function CatalogShelfPage({ mode }: { mode: ShelfMode }) {
                 dubbed: t.nav.dubbed,
                 subtitled: t.nav.subtitled,
                 multiAudio: 'Multi Audio',
+                persianDubbed: t.player.persianDub,
+                pashtoDubbed: t.player.pashtoDub,
               }}
             />
           )}

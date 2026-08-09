@@ -14,6 +14,7 @@ from app.api.routes import (
     home,
     me,
     media_processing,
+    media_tracks,
     media_upload,
     movies,
     publishing,
@@ -47,6 +48,7 @@ api_router.include_router(search.router)
 api_router.include_router(upload.router)
 api_router.include_router(media_upload.router)
 api_router.include_router(media_processing.router)
+api_router.include_router(media_tracks.router)
 api_router.include_router(encoding.router)
 api_router.include_router(cdn.router)
 api_router.include_router(stream.router)

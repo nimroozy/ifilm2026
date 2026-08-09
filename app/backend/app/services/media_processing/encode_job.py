@@ -14,6 +14,7 @@ from app.models.media_processing import (
     JOB_TYPE_ENCODE_HLS,
     MediaProcessingJob,
 )
+from app.models.media_tracks import MediaTrack
 from app.services.media_processing.errors import (
     PROGRESS_COMPLETED,
     PROGRESS_ENCODING,
@@ -42,7 +43,15 @@ from app.services.media_processing.package_paths import (
     work_package_dir,
 )
 from app.services.media_processing.paths import resolve_completed_asset_path
+from app.services.media_processing.playlists import MediaGroupRef
 from app.services.media_processing.profiles import select_profiles_for_source
+from app.services.media_processing.track_packaging import (
+    AUDIO_GROUP,
+    SUBS_GROUP,
+    build_packaging_plan,
+    encode_audio_hls,
+    package_subtitle_hls,
+)
 from app.services.media_processing.validation import validate_hls_package
 from app.services.storage import media_root, relative_media_path
 from app.services.streaming.activation import activate_or_fail_encode
@@ -298,6 +307,9 @@ def execute_encode_hls_job(
             db.commit()
 
         has_audio = bool(asset.audio_stream_count and asset.audio_stream_count > 0)
+        plan = build_packaging_plan(db, primary=asset, settings=settings)
+        multi = plan.mode == "multi_track"
+        video_only = bool(plan.video_only)
 
         job.progress_percent = PROGRESS_ENCODING
         job.current_step = "encoding_hls"
@@ -339,6 +351,33 @@ def execute_encode_hls_job(
                 db.add(job)
                 db.commit()
 
+        media_groups: list[MediaGroupRef] = []
+        if multi:
+            for audio in plan.audio:
+                media_groups.append(
+                    MediaGroupRef(
+                        media_type="AUDIO",
+                        group_id=AUDIO_GROUP,
+                        name=audio.name,
+                        language=audio.language,
+                        playlist_rel=f"{audio.label}/index.m3u8",
+                        is_default=audio.is_default,
+                        autoselect=True,
+                    )
+                )
+            for sub in plan.subtitles:
+                media_groups.append(
+                    MediaGroupRef(
+                        media_type="SUBTITLES",
+                        group_id=SUBS_GROUP,
+                        name=sub.name,
+                        language=sub.language,
+                        playlist_rel=f"{sub.label}/index.m3u8",
+                        is_default=False,
+                        autoselect=True,
+                    )
+                )
+
         encoded = encode_hls_renditions(
             settings=settings,
             source=path,
@@ -349,9 +388,61 @@ def execute_encode_hls_job(
             frame_rate=asset.video_frame_rate,
             duration_seconds=asset.duration_seconds,
             has_audio=has_audio,
+            video_only=video_only,
+            media_groups=media_groups or None,
             cancel_check=cancel_check,
             on_rendition_progress=on_progress,
         )
+
+        audio_labels: list[str] = []
+        sub_labels: list[str] = []
+        if multi:
+            job.current_step = "encoding_audio_tracks"
+            db.add(job)
+            db.commit()
+            for audio in plan.audio:
+                if cancel_check():
+                    raise EncodeCancelledError("Encode cancelled")
+                encode_audio_hls(
+                    settings=settings,
+                    plan=audio,
+                    work_dir=work_dir,
+                    cancel_check=cancel_check,
+                )
+                audio_labels.append(audio.label)
+            job.current_step = "packaging_subtitles"
+            db.add(job)
+            db.commit()
+            for sub in plan.subtitles:
+                if cancel_check():
+                    raise EncodeCancelledError("Encode cancelled")
+                package_subtitle_hls(
+                    settings=settings,
+                    plan=sub,
+                    work_dir=work_dir,
+                    cancel_check=cancel_check,
+                )
+                sub_labels.append(sub.label)
+            # Rewrite master after audio/subs exist (encode_hls_renditions already wrote groups).
+            from app.services.media_processing.playlists import VariantRef, write_master_playlist
+
+            write_master_playlist(
+                work_dir / "master.m3u8",
+                [
+                    VariantRef(
+                        label=item.label,
+                        bandwidth=item.bandwidth,
+                        width=item.width,
+                        height=item.height,
+                        playlist_rel=item.playlist_rel,
+                        codecs="avc1.4d401f,mp4a.40.2",
+                        audio_group=AUDIO_GROUP if plan.audio else None,
+                        subtitles_group=SUBS_GROUP if plan.subtitles else None,
+                    )
+                    for item in encoded
+                ],
+                media_groups=media_groups,
+            )
 
         if path.stat().st_size != size_before or file_sha256(path) != checksum_before:
             raise PermanentProcessingError(
@@ -372,13 +463,27 @@ def execute_encode_hls_job(
         db.add(job)
         db.commit()
 
+        expected_labels = [item.label for item in encoded] + audio_labels + sub_labels
+        heights = {item.label: item.height for item in encoded}
+        widths = {item.label: item.width for item in encoded}
+        bandwidths = {item.label: item.bandwidth for item in encoded}
+        for label in audio_labels:
+            heights[label] = 0
+            widths[label] = 0
+            bandwidths[label] = 128_000
+        for label in sub_labels:
+            heights[label] = 0
+            widths[label] = 0
+            bandwidths[label] = 0
+
         master, validated = validate_hls_package(
             work_dir,
-            expected_labels=[item.label for item in encoded],
+            expected_labels=expected_labels,
             source_height=int(asset.height),
-            rendition_heights={item.label: item.height for item in encoded},
-            rendition_widths={item.label: item.width for item in encoded},
-            rendition_bandwidths={item.label: item.bandwidth for item in encoded},
+            rendition_heights=heights,
+            rendition_widths=widths,
+            rendition_bandwidths=bandwidths,
+            require_ext_x_media=multi,
         )
 
         if cancel_check():
@@ -401,13 +506,16 @@ def execute_encode_hls_job(
             for old in list(package.renditions or []):
                 db.delete(old)
             db.flush()
+            encoded_by_label = {e.label: e for e in encoded}
             for item in validated:
-                encoded_item = next(e for e in encoded if e.label == item.label)
+                encoded_item = encoded_by_label.get(item.label)
+                is_audio = item.label in audio_labels
+                is_sub = item.label in sub_labels
                 db.add(
                     MediaRendition(
                         id=new_uuid(),
                         package_id=package.id,
-                        profile_id=encoded_item.profile.id,
+                        profile_id=encoded_item.profile.id if encoded_item else None,
                         label=item.label,
                         height=item.height,
                         width=item.width,
@@ -415,11 +523,30 @@ def execute_encode_hls_job(
                         average_bandwidth=item.bandwidth,
                         playlist_path=relative_media_path(item.playlist_path),
                         segment_count=item.segment_count,
-                        video_codec="h264",
-                        audio_codec="aac" if has_audio else None,
+                        video_codec=None if (is_audio or is_sub) else "h264",
+                        audio_codec="aac" if (is_audio or (encoded_item and has_audio and not video_only)) else None,
                         status="completed",
                     )
                 )
+            # Persist HLS group hints on configured tracks.
+            if multi:
+                for audio in plan.audio:
+                    if audio.track_id is None:
+                        continue
+                    track = db.get(MediaTrack, audio.track_id)
+                    if track is not None:
+                        track.hls_group_id = AUDIO_GROUP
+                        track.hls_name = audio.name
+                        track.is_default = audio.is_default
+                        db.add(track)
+                for sub in plan.subtitles:
+                    if sub.track_id is None:
+                        continue
+                    track = db.get(MediaTrack, sub.track_id)
+                    if track is not None:
+                        track.hls_group_id = SUBS_GROUP
+                        track.hls_name = sub.name
+                        db.add(track)
             package.status = "completed"
             package.storage_path = relative_media_path(promoted)
             package.master_playlist_path = relative_media_path(

@@ -10,11 +10,20 @@ Customer-facing adaptive playback using the **protected Phase 7 streaming servic
 | `src/player/VideoPlayer.tsx` | Composition root |
 | `usePlaybackSession` | Session create / one-shot 410 refresh / revoke on unmount |
 | `useHlsPlayer` | Native HLS **or** `hls.js` (never both) |
-| `PlayerControls` | Play, seek, volume, fullscreen, PiP, speed |
+| `PlayerControls` | Play, seek, volume, AirPlay (WebKit), fullscreen, PiP, speed — always `dir=ltr` |
 | `QualitySelector` | Auto + manifest levels (hls.js only) |
-| `AudioTrackSelector` | Manifest audio tracks when >1 (external HLS only today) |
-| `SubtitleSelector` | Manifest text tracks + Off; local packaging deferred |
+| `AudioTrackSelector` | HLS native / hls.js audio tracks when >1; labels via i18n |
+| `SubtitleSelector` | Manifest text tracks + Off; labels via i18n |
+| `media_tracks` | Admin metadata for audio/subtitle languages (`is_dubbed`, `label_key`); exposed on playback session |
 | `PlaybackError` / `PlayerLoadingState` | Safe UX (no tokens in messages) |
+
+### Player UX rules (V1)
+
+- Player shell and controls are always **LTR**, even when the app locale is FA/PS RTL.
+- AirPlay uses the Lucide AirPlay icon; button is hidden when `webkitShowPlaybackTargetPicker` is unavailable. Never show the text “AP”.
+- Dubbed labels come from frontend i18n (`Dubbed` / `دوبله شده` / `ژباړل شوی`) — never store translated UI strings in `media_tracks`.
+- Navigating from **Play** passes `{ autoplay: true }` so playback starts when the stream is ready (browser autoplay policies still apply).
+- Resume uses existing `user_watch_progress` with Continue / Start Over dialog.
 
 ## Native HLS vs hls.js
 

@@ -7,6 +7,8 @@ export interface CollectionAvailabilityLabels {
   dubbed: string;
   subtitled: string;
   multiAudio: string;
+  persianDubbed?: string;
+  pashtoDubbed?: string;
 }
 
 /**

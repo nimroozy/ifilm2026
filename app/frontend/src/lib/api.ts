@@ -849,6 +849,17 @@ export interface PlaybackSessionDto {
   access_count: number;
 }
 
+export interface PlaybackTrackDto {
+  id: number;
+  track_type: 'audio' | 'subtitle';
+  language_code: string;
+  label_key?: string | null;
+  is_default?: boolean;
+  is_dubbed?: boolean;
+  hls_group_id?: string | null;
+  hls_name?: string | null;
+}
+
 export interface PlaybackSessionCreatedDto {
   id: string;
   media_asset_id: string;
@@ -865,6 +876,8 @@ export interface PlaybackSessionCreatedDto {
   supports_revocation?: boolean;
   is_demo_only?: boolean;
   external_kind?: string | null;
+  audio_tracks?: PlaybackTrackDto[];
+  subtitle_tracks?: PlaybackTrackDto[];
 }
 
 export type TmdbMediaType = 'movie' | 'series';

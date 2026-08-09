@@ -49,12 +49,18 @@ vi.mock('../useHlsPlayer', () => ({
     return {
       videoRef,
       ready: true,
+      buffering: false,
       levels: [],
       currentLevel: -1,
       setQuality: vi.fn(),
       audioTracks: [],
+      audioTrackId: 0,
       setAudioTrack: vi.fn(),
+      subtitleTracks: [],
+      subtitleTrackId: -1,
+      setSubtitleTrack: vi.fn(),
       manualQualitySupported: false,
+      getStats: vi.fn(() => null),
     };
   },
 }));
@@ -82,6 +88,7 @@ function configureVideo(video: HTMLVideoElement, currentTime = 0) {
     writable: true,
     value: currentTime,
   });
+  video.play = vi.fn().mockResolvedValue(undefined);
 }
 
 describe('watch progress player integration', () => {
@@ -108,7 +115,7 @@ describe('watch progress player integration', () => {
     expect(await screen.findByRole('dialog')).toHaveTextContent('Resume from 1:10');
     const video = screen.getByTestId('player-video') as HTMLVideoElement;
     configureVideo(video);
-    fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
+    fireEvent.click(screen.getByTestId('resume-continue'));
 
     expect(video.currentTime).toBe(70);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();

@@ -5,16 +5,32 @@ from __future__ import annotations
 import re
 
 _URI_LINE = re.compile(r"^(?!#)(.+)$")
+# Rewrite relative playlist URIs inside EXT-X-MEDIA attributes.
+_MEDIA_URI = re.compile(
+    r'(URI=")((?:(?!\.\.)[^"/])+)/([^"/]+\.m3u8)(")',
+    re.IGNORECASE,
+)
 
 
 def rewrite_master_playlist(text: str, *, stream_base: str) -> str:
-    """Rewrite variant playlist URIs to `{stream_base}/{label}/index.m3u8`."""
+    """Rewrite variant and EXT-X-MEDIA playlist URIs onto `{stream_base}/…`."""
     base = stream_base.rstrip("/")
     out: list[str] = []
     for line in text.splitlines():
         stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
+        if not stripped:
             out.append(line.rstrip("\n"))
+            continue
+        if stripped.startswith("#"):
+            if stripped.upper().startswith("#EXT-X-MEDIA:") and "URI=" in stripped.upper():
+
+                def _rewrite_media_uri(match: re.Match[str]) -> str:
+                    label = match.group(2)
+                    return f'{match.group(1)}{base}/{label}/index.m3u8{match.group(4)}'
+
+                out.append(_MEDIA_URI.sub(_rewrite_media_uri, stripped))
+            else:
+                out.append(line.rstrip("\n"))
             continue
         # Stored masters use `{label}/index.m3u8` (relative).
         name = stripped.split("?")[0].lstrip("./")

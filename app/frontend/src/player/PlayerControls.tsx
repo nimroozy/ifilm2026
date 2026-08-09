@@ -1,4 +1,5 @@
 import {
+  Airplay,
   Cast,
   ChevronLeft,
   ChevronRight,
@@ -18,6 +19,7 @@ import { Slider } from '@/components/ui/slider';
 import { QualitySelector } from './QualitySelector';
 import { AudioTrackSelector, SubtitleSelector } from './AudioTrackSelector';
 import type { AudioTrackInfo, QualityLevel, SubtitleTrackInfo } from './types';
+import type { PlayerI18n } from './trackLabels';
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
@@ -64,6 +66,7 @@ export function PlayerControls({
   onStartOver,
   onPreviousEpisode,
   onNextEpisode,
+  labels,
 }: {
   visible: boolean;
   playing: boolean;
@@ -100,6 +103,7 @@ export function PlayerControls({
   onStartOver?: () => void;
   onPreviousEpisode?: () => void;
   onNextEpisode?: () => void;
+  labels?: Pick<PlayerI18n, 'audio' | 'subtitles' | 'off'>;
 }) {
   const progressPct = duration > 0 ? (currentTime / duration) * 100 : 0;
   const bufferedPct = duration > 0 ? (buffered / duration) * 100 : 0;
@@ -110,6 +114,8 @@ export function PlayerControls({
         visible ? 'opacity-100 translate-y-0' : 'pointer-events-none translate-y-2 opacity-0'
       }`}
       data-testid="player-controls"
+      dir="ltr"
+      style={{ direction: 'ltr' }}
     >
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-black via-black/70 to-transparent" />
 
@@ -247,11 +253,18 @@ export function PlayerControls({
               : 'Quality selection is managed by the browser on this device'
           }
         />
-        <AudioTrackSelector tracks={audioTracks} value={audioTrackId} onChange={onAudio} />
+        <AudioTrackSelector
+          tracks={audioTracks}
+          value={audioTrackId}
+          onChange={onAudio}
+          label={labels?.audio}
+        />
         <SubtitleSelector
           tracks={subtitleTracks}
           value={subtitleTrackId}
           onChange={(id) => onSubtitle?.(id)}
+          label={labels?.subtitles}
+          offLabel={labels?.off}
         />
 
         <select
@@ -276,7 +289,7 @@ export function PlayerControls({
             aria-label="AirPlay"
             data-testid="airplay-button"
           >
-            <span className="text-[10px] font-semibold tracking-wide">AP</span>
+            <Airplay className="h-5 w-5" aria-hidden />
           </Button>
         ) : null}
 
