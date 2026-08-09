@@ -3,7 +3,7 @@
 **Status:** READY for human visual approval (Draft PR)  
 **PR:** https://github.com/nimroozy/ifilm2026/pull/75  
 **Branch:** `cursor/g2b-series-detail-impl-4873`  
-**Head SHA:** `86924bbdd51f50d9f5cd0c1f8807253f9e2c952e`  
+**Head SHA:** `a43ac347d2659e99451f367b421a7f5ee19e0eec`  
 **Baseline:** production `v1.16.0`  
 **Ready-fix commit:** `9e984ff890116db5423ae6b3ed64638b0a126dc3`  
 **Planning PR (unchanged):** #74  
@@ -22,7 +22,7 @@
 | Frontend build | PASS (`vite build`) |
 | Secret build scan | PASS (`scan-build-secrets`) |
 | Customer initial JS budget | PASS (raw ~692 KB; fail budget 800 KB) |
-| Backend CI (GitHub `quality`) | Re-run after ruff import fix (prior tip failed I001/F401 on `series.py`) |
+| Backend CI (GitHub `quality`) | Pending on tip after mypy fix (`catalog_list` assignment narrowing) |
 | Backend series credit tests | PASS (`test_series_detail_credits.py`) |
 | Backend query-ceiling / list perf | PASS (`test_catalog_list_perf.py`) |
 | Episode season SQL measurement | PASS (`test_series_episode_list_query_counts.py`) — flat after batch fix |

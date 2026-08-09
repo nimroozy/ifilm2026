@@ -160,10 +160,10 @@ def _batch_episode_packaged_tracks(
         eid: ([], []) for eid in by_episode_assets
     }
     for row in rows:
-        episode_id = asset_to_episode.get(row.media_asset_id)
-        if episode_id is None:
+        mapped_episode_id = asset_to_episode.get(row.media_asset_id)
+        if mapped_episode_id is None:
             continue
-        audio, subs = out[episode_id]
+        audio, subs = out[mapped_episode_id]
         if row.track_type == "audio":
             audio.append(row)
         elif row.track_type == "subtitle":
