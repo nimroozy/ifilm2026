@@ -5,6 +5,7 @@ import { LangProvider } from '@/components/CustomerLayout';
 import { MovieDetailView } from '@/components/MovieDetailView';
 import { MOVIE_HERO_TRAILER_DELAY_MS } from '@/lib/catalogPresentation';
 import type { CatalogMovie } from '@/lib/catalogData';
+import type { WatchProgressDto } from '@/lib/api';
 
 function baseMovie(overrides: Partial<CatalogMovie> = {}): CatalogMovie {
   return {
@@ -19,6 +20,7 @@ function baseMovie(overrides: Partial<CatalogMovie> = {}): CatalogMovie {
     country: 'US',
     language: 'English',
     director: 'Director',
+    writer: 'Screenwriter',
     cast: [],
     description: 'Cinematic hero test.',
     poster: 'https://image.tmdb.org/t/p/w500/p.jpg',
@@ -45,11 +47,32 @@ function baseMovie(overrides: Partial<CatalogMovie> = {}): CatalogMovie {
   } as CatalogMovie;
 }
 
-function renderDetail(movie: CatalogMovie, related: CatalogMovie[] = []) {
+function progress(partial: Partial<WatchProgressDto> = {}): WatchProgressDto {
+  return {
+    id: 1,
+    media_asset_id: 'asset-1',
+    content_type: 'movie',
+    movie_id: 7,
+    title: 'Hero Film',
+    position_seconds: 600,
+    duration_seconds: 7200,
+    progress_percent: 42,
+    completed: false,
+    available: true,
+    player_path: '/player/movie/7',
+    ...partial,
+  };
+}
+
+function renderDetail(
+  movie: CatalogMovie,
+  related: CatalogMovie[] = [],
+  extras?: { watchState?: Parameters<typeof MovieDetailView>[0]['watchState'] }
+) {
   return render(
     <LangProvider>
       <MemoryRouter>
-        <MovieDetailView movie={movie} related={related} />
+        <MovieDetailView movie={movie} related={related} watchState={extras?.watchState ?? null} />
       </MemoryRouter>
     </LangProvider>
   );
@@ -73,14 +96,16 @@ describe('MovieDetailView hero experience', () => {
     vi.useRealTimers();
   });
 
-  it('starts on backdrop and transitions to trailer', async () => {
+  it('starts on backdrop and transitions to muted trailer', async () => {
     renderDetail(baseMovie());
     expect(screen.getByTestId('movie-hero')).toHaveAttribute('data-hero-mode', 'backdrop');
     await act(async () => {
       await vi.advanceTimersByTimeAsync(MOVIE_HERO_TRAILER_DELAY_MS + 10);
     });
     expect(screen.getByTestId('movie-hero')).toHaveAttribute('data-hero-mode', 'trailer');
-    expect(screen.getByTestId('youtube-trailer-embed').getAttribute('src')).toContain('mute=1');
+    const src = screen.getByTestId('youtube-trailer-embed').getAttribute('src') || '';
+    expect(src).toContain('mute=1');
+    expect(src).toContain('controls=0');
   });
 
   it('supports mute toggle, pause, and return to backdrop', async () => {
@@ -96,11 +121,33 @@ describe('MovieDetailView hero experience', () => {
     expect(screen.getByTestId('movie-hero')).toHaveAttribute('data-hero-mode', 'backdrop');
   });
 
-  it('renders RTL-friendly cast and similar shelves', () => {
+  it('shows Continue Watching with progress for incomplete state', () => {
+    renderDetail(baseMovie(), [], { watchState: { kind: 'continue', progress: progress() } });
+    expect(screen.getByTestId('movie-continue-button')).toHaveTextContent('Continue Watching');
+    expect(screen.getByTestId('movie-continue-progress')).toBeInTheDocument();
+    expect(screen.queryByTestId('movie-play-button')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('movie-watch-again-button')).not.toBeInTheDocument();
+    expect(screen.getByTestId('movie-share-button')).toHaveAttribute('aria-label', 'Share');
+    expect(screen.getByTestId('movie-share-button')).not.toHaveTextContent('Share');
+  });
+
+  it('shows Watch Again for completed progress', () => {
+    renderDetail(baseMovie(), [], {
+      watchState: { kind: 'completed', progress: progress({ completed: true, progress_percent: 100 }) },
+    });
+    expect(screen.getByTestId('movie-watch-again-button')).toHaveTextContent('Watch Again');
+  });
+
+  it('renders portrait cast, crew, truthful tracks, and similar shelves', () => {
     renderDetail(baseMovie(), [baseMovie({ id: 8, title: 'Sibling Film', trailerKey: '' })]);
     expect(screen.getByTestId('movie-cast')).toHaveTextContent('Lead Actor');
+    expect(screen.getByTestId('movie-cast')).toHaveTextContent('Captain');
+    expect(screen.getByTestId('movie-crew')).toHaveTextContent('Director');
+    expect(screen.getByTestId('movie-crew')).toHaveTextContent('Screenwriter');
+    expect(screen.getByTestId('movie-track-meta')).toHaveTextContent('فارسی دوبله');
+    expect(screen.getByTestId('movie-track-meta')).toHaveTextContent('فارسی');
     expect(screen.getByTestId('movie-similar')).toHaveTextContent('Sibling Film');
     expect(screen.getByTestId('watchlist-toggle')).toBeInTheDocument();
-    expect(screen.getByTestId('movie-reviews-placeholder')).toBeInTheDocument();
+    expect(screen.queryByTestId('movie-reviews-placeholder')).not.toBeInTheDocument();
   });
 });

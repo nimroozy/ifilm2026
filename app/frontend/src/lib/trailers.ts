@@ -54,6 +54,10 @@ export function trailerAutoplayEmbedUrl(item: unknown): string {
     url.searchParams.set('rel', '0');
     url.searchParams.set('modestbranding', '1');
     url.searchParams.set('playsinline', '1');
+    url.searchParams.set('controls', '0');
+    url.searchParams.set('disablekb', '1');
+    url.searchParams.set('fs', '0');
+    url.searchParams.set('iv_load_policy', '3');
     return url.toString();
   } catch {
     return '';
