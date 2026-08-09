@@ -1,0 +1,114 @@
+{
+  "en": {
+    "title": "Breaking Bad",
+    "meta": ["2008–2013", "★ 9.5", "5 seasons", "TV-MA", "Crime", "Drama"],
+    "continue": "Continue Watching S01E03",
+    "continuePct": "42%",
+    "myList": "My List",
+    "trailer": "Trailer",
+    "audio": "Audio: English",
+    "subs": "Subtitles: English · فارسی",
+    "overview": "A chemistry teacher diagnosed with cancer teams with a former student to secure his family's future.",
+    "more": "More",
+    "episodes": "Episodes",
+    "season": "Season 1",
+    "cast": "Cast",
+    "moreLike": "More Like This",
+    "play": "Play",
+    "resume": "Resume",
+    "selectSeason": "Select season",
+    "items": [
+      {
+        "code": "S01E01",
+        "title": "Pilot",
+        "duration": "58m",
+        "desc": "Walter White, a high school chemistry teacher, is diagnosed with cancer and partners with Jesse Pinkman.",
+        "progress": 0,
+        "action": "Play",
+        "tracks": "EN · FA subs"
+      },
+      {
+        "code": "S01E02",
+        "title": "Cat's in the Bag...",
+        "duration": "48m",
+        "desc": "Walt and Jesse attempt to dispose of the remains of their first deal gone wrong.",
+        "progress": 0,
+        "action": "Play",
+        "tracks": "EN · FA subs"
+      },
+      {
+        "code": "S01E03",
+        "title": "...And the Bag's in the River",
+        "duration": "48m",
+        "desc": "Walt faces the consequences of his choices as pressure mounts at home and on the job.",
+        "progress": 42,
+        "action": "Resume",
+        "tracks": "EN · FA subs"
+      }
+    ],
+    "castNames": [
+      { "name": "Bryan Cranston", "role": "Walter White", "initials": "BC" },
+      { "name": "Aaron Paul", "role": "Jesse Pinkman", "initials": "AP" },
+      { "name": "Anna Gunn", "role": "Skyler White", "initials": "AG" },
+      { "name": "Dean Norris", "role": "Hank Schrader", "initials": "DN" }
+    ],
+    "recs": ["Better Call Saul", "The Wire", "Narcos"],
+    "seasons": ["Season 1 (7 episodes)", "Season 2 (13 episodes)", "Season 3 (13 episodes)"]
+  },
+  "fa": {
+    "title": "بریکینگ بد",
+    "meta": ["۲۰۰۸–۲۰۱۳", "★ ۹٫۵", "۵ فصل", "TV-MA", "جنایی", "درام"],
+    "continue": "ادامه تماشا S01E03",
+    "continuePct": "۴۲٪",
+    "myList": "فهرست من",
+    "trailer": "تریلر",
+    "audio": "صدا: انگلیسی",
+    "subs": "زیرنویس: انگلیسی · فارسی",
+    "overview": "معلم شیمی که به سرطان مبتلا شده با دانش‌آموز سابقش برای تأمین آینده خانواده‌اش همراه می‌شود.",
+    "more": "بیشتر",
+    "episodes": "قسمت‌ها",
+    "season": "فصل ۱",
+    "cast": "بازیگران",
+    "moreLike": "مشابه",
+    "play": "پخش",
+    "resume": "ادامه",
+    "selectSeason": "انتخاب فصل",
+    "items": [
+      {
+        "code": "S01E01",
+        "title": "قسمت آزمایشی",
+        "duration": "۵۸د",
+        "desc": "والتر وایت با تشخیص سرطان با جسی پینکمن شریک می‌شود.",
+        "progress": 0,
+        "action": "پخش",
+        "tracks": "EN · زیرنویس FA"
+      },
+      {
+        "code": "S01E02",
+        "title": "گربه در کیسه…",
+        "duration": "۴۸د",
+        "desc": "والت و جسی پیامدهای معاملهٔ ناموفق را مدیریت می‌کنند.",
+        "progress": 0,
+        "action": "پخش",
+        "tracks": "EN · زیرنویس FA"
+      },
+      {
+        "code": "S01E03",
+        "title": "…و کیسه در رودخانه",
+        "duration": "۴۸د",
+        "desc": "فشار در خانه و کار افزایش می‌یابد.",
+        "progress": 42,
+        "action": "ادامه",
+        "tracks": "EN · زیرنویس FA"
+      }
+    ],
+    "castNames": [
+      { "name": "برایان کرانستون", "role": "والتر وایت", "initials": "BC" },
+      { "name": "آرون پل", "role": "جسی پینکمن", "initials": "AP" },
+      { "name": "آنا گان", "role": "اسکایلر", "initials": "AG" },
+      { "name": "دین نوریس", "role": "هنک", "initials": "DN" }
+    ],
+    "recs": ["Better Call Saul", "The Wire", "Narcos"],
+    "seasons": ["فصل ۱ (۷ قسمت)", "فصل ۲ (۱۳ قسمت)", "فصل ۳ (۱۳ قسمت)"]
+  }
+}

@@ -1,8 +1,8 @@
 # G2 — Movie & Series Detail Experience V2
 
-**Status:** PLAN APPROVED — implementation split into **G2a** (Movie) then **G2b** (Series)  
-**Baseline:** production `v1.15.0` (G1 homepage healthy)  
-**Do not modify G1.** No production deploy until G2a Ready + human approval.
+**Status:** PLAN APPROVED — **G2a shipped** (`v1.16.0`); **G2b planning** in [`G2B_SERIES_DETAIL_V2_PLAN.md`](./G2B_SERIES_DETAIL_V2_PLAN.md)  
+**Baseline:** production `v1.16.0` (Movie Detail V2 healthy)  
+**Do not modify G1.** Do not modify G2a while planning G2b. No Series Detail implementation until G2b plan approval.
 
 ### Approved decisions (2026-08-09)
 

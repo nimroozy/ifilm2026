@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>G2b — Series Detail V2 Prototype</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=Source+Sans+3:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./prototype.css" />
+  </head>
+  <body>
+    <header class="header">
+      <div class="brand">iFilm</div>
+      <nav class="nav" aria-label="Primary">
+        <a href="#">Home</a>
+        <a href="#">Movies</a>
+        <a class="active" href="#">Series</a>
+        <a href="#">Children</a>
+        <a href="#">Genres</a>
+      </nav>
+      <div class="header-actions">
+        <span>⌕</span>
+        <span id="langLabel">EN</span>
+        <span aria-hidden="true">◯</span>
+      </div>
+    </header>
+
+    <section class="hero" data-testid="series-hero">
+      <img
+        class="hero-bg"
+        alt=""
+        src="https://image.tmdb.org/t/p/w1280/tsRy63Mu5cu8etL1X7ZLyf7UP1M.jpg"
+        width="1280"
+        height="720"
+      />
+      <div class="hero-content">
+        <h1 id="title">Breaking Bad</h1>
+        <div class="meta" id="meta"></div>
+        <div class="actions">
+          <button class="btn btn-primary" type="button" id="ctaContinue">
+            ▶ <span id="continueLabel">Continue Watching S01E03</span>
+            <span id="continuePct">42%</span>
+          </button>
+          <button class="btn btn-secondary" type="button" id="myList">+ My List</button>
+          <button class="btn btn-ghost desktop-only" type="button" id="trailer">Trailer</button>
+        </div>
+        <div class="tracks">
+          <span id="audioLabel">Audio: English</span>
+          <span class="chip" id="subsLabel">Subtitles: English · فارسی</span>
+        </div>
+        <div class="progress" aria-hidden="true"><span></span></div>
+        <p class="overview">
+          <span id="overviewText"></span>
+          <span class="more" id="moreLabel">More</span>
+        </p>
+      </div>
+    </section>
+
+    <section class="section" data-testid="episodes">
+      <div class="section-head">
+        <h2 id="episodesHeading">Episodes</h2>
+        <button class="season-control desktop-only" type="button" id="seasonDesktop" aria-label="Season selector">
+          <span id="seasonLabel">Season 1</span> ▾
+        </button>
+        <button class="season-control mobile-season" type="button" id="seasonMobile" aria-label="Open season picker">
+          <span id="seasonLabelMobile">Season 1</span> ▾
+        </button>
+      </div>
+      <div class="episode-list" id="episodeList"></div>
+    </section>
+
+    <section class="section" data-testid="cast">
+      <div class="section-head">
+        <h2 id="castHeading">Cast</h2>
+      </div>
+      <div class="cast-rail" id="castRail"></div>
+    </section>
+
+    <section class="section" data-testid="recs">
+      <div class="section-head">
+        <h2 id="recsHeading">More Like This</h2>
+      </div>
+      <div class="shelf" id="recsShelf"></div>
+    </section>
+
+    <p class="footer-note">
+      G2b planning prototype only — not production UI. Player remains LTR. Reuses G1/G2a design language.
+    </p>
+
+    <div class="sheet-backdrop" id="sheetBackdrop"></div>
+    <div class="sheet" id="seasonSheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+      <h3 id="sheetTitle">Select season</h3>
+      <div id="sheetOptions"></div>
+    </div>
+
+    <script>
+      const params = new URLSearchParams(location.search);
+      const locale = (params.get("locale") || "en").toLowerCase();
+      const showSheet = params.get("sheet") === "1";
+      const dir = locale === "fa" || locale === "ps" ? "rtl" : "ltr";
+      document.documentElement.lang = locale === "fa" ? "fa" : locale === "ps" ? "ps" : "en";
+      document.documentElement.dir = dir;
+
+      const posterFallback =
+        "https://image.tmdb.org/t/p/w342/ggFHVNu6YYI5L9pCfOacjizRGt.jpg";
+
+      function render(data) {
+        const copy = data[locale] || data.en;
+        document.getElementById("langLabel").textContent = locale.toUpperCase();
+        document.getElementById("title").textContent = copy.title;
+        document.getElementById("meta").innerHTML = copy.meta
+          .map((m) => `<span class="chip${m.includes("★") ? " accent" : ""}">${m}</span>`)
+          .join("");
+        document.getElementById("continueLabel").textContent = copy.continue;
+        document.getElementById("continuePct").textContent = copy.continuePct;
+        document.getElementById("myList").textContent = "+ " + copy.myList;
+        document.getElementById("trailer").textContent = copy.trailer;
+        document.getElementById("audioLabel").textContent = copy.audio;
+        document.getElementById("subsLabel").textContent = copy.subs;
+        document.getElementById("overviewText").textContent = copy.overview;
+        document.getElementById("moreLabel").textContent = copy.more;
+        document.getElementById("episodesHeading").textContent = copy.episodes;
+        document.getElementById("seasonLabel").textContent = copy.season;
+        document.getElementById("seasonLabelMobile").textContent = copy.season;
+        document.getElementById("castHeading").textContent = copy.cast;
+        document.getElementById("recsHeading").textContent = copy.moreLike;
+        document.getElementById("sheetTitle").textContent = copy.selectSeason;
+
+        document.getElementById("episodeList").innerHTML = copy.items
+          .map(
+            (ep) => `
+          <article class="episode">
+            <img class="episode-thumb" alt="" src="${posterFallback}" loading="lazy" />
+            <div class="episode-body">
+              <h3>${ep.code} · ${ep.title}</h3>
+              <div class="episode-meta">${ep.duration} · ${ep.tracks}</div>
+              <p class="episode-desc">${ep.desc}</p>
+              ${
+                ep.progress
+                  ? `<div class="episode-progress"><span style="width:${ep.progress}%"></span></div>`
+                  : ""
+              }
+            </div>
+            <button class="btn btn-primary ep-play" type="button">${ep.action}</button>
+          </article>`
+          )
+          .join("");
+
+        document.getElementById("castRail").innerHTML = copy.castNames
+          .map(
+            (c) => `
+          <div class="cast-card">
+            <div class="cast-fallback">${c.initials}</div>
+            <p>${c.name}</p>
+            <p class="role">${c.role}</p>
+          </div>`
+          )
+          .join("");
+
+        document.getElementById("recsShelf").innerHTML = copy.recs
+          .map(
+            (title) => `
+          <div class="shelf-card">
+            <img alt="" src="${posterFallback}" loading="lazy" />
+            <p>${title}</p>
+          </div>`
+          )
+          .join("");
+
+        document.getElementById("sheetOptions").innerHTML = copy.seasons
+          .map(
+            (s, i) =>
+              `<div class="sheet-option${i === 0 ? " active" : ""}">${s}<span>${
+                i === 0 ? "✓" : ""
+              }</span></div>`
+          )
+          .join("");
+      }
+
+      function openSheet() {
+        document.getElementById("sheetBackdrop").classList.add("open");
+        document.getElementById("seasonSheet").classList.add("open");
+      }
+      function closeSheet() {
+        document.getElementById("sheetBackdrop").classList.remove("open");
+        document.getElementById("seasonSheet").classList.remove("open");
+      }
+
+      document.getElementById("seasonMobile").addEventListener("click", openSheet);
+      document.getElementById("sheetBackdrop").addEventListener("click", closeSheet);
+
+      fetch("./series-data.json")
+        .then((r) => r.json())
+        .then((data) => {
+          render(data);
+          if (showSheet) openSheet();
+        })
+        .catch(() => {
+          document.getElementById("overviewText").textContent =
+            "Failed to load series-data.json (open via local server).";
+        });
+    </script>
+  </body>
+</html>
