@@ -69,15 +69,28 @@ DEFAULT_ENCODING_PROFILES = [
 ]
 
 
-def ensure_super_admin_permissions(db: Session) -> bool:
-    """Merge SUPER_PERMISSIONS into an existing Super Admin role.
+REQUIRED_SUPER_ADMIN_PERMISSIONS = (
+    "content_requests.read",
+    "content_requests.manage",
+)
 
-    Safe for production startup: does not create users, reset passwords, or seed demo data.
-    Returns True when permissions were changed.
+
+def ensure_super_admin_permissions(db: Session) -> bool:
+    """Ensure Super Admin has the full SUPER_PERMISSIONS set (idempotent).
+
+    Safe for production startup:
+    - creates the Super Admin role when missing (no users / passwords touched)
+    - merges newly introduced capabilities without duplicates
+    - never removes existing permissions or renames roles
+
+    Returns True when the role row was created or permissions changed.
     """
     role = db.query(AdminRole).filter(AdminRole.name == "Super Admin").one_or_none()
     if role is None:
-        return False
+        role = AdminRole(name="Super Admin", permissions=list(SUPER_PERMISSIONS))
+        db.add(role)
+        db.flush()
+        return True
     current = list(role.permissions or [])
     merged = list(dict.fromkeys([*current, *SUPER_PERMISSIONS]))
     if merged == current:

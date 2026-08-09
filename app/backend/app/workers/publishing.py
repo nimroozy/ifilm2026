@@ -14,9 +14,11 @@ import time
 from types import FrameType
 
 from sqlalchemy import text
+from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.db.session import SessionLocal, get_engine
-from app.services.publishing.worker import run_due_batch, run_once
+from app.services.publishing.worker import claim_due_entity, run_due_batch, run_once
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 logger = logging.getLogger("publishing-worker")
@@ -30,21 +32,49 @@ def _handle_signal(signum: int, _frame: FrameType | None) -> None:
     _shutdown = True
 
 
-def run_healthcheck() -> int:
-    """Exit 0 when the worker can reach the database; 1 otherwise.
+def _required_dependencies_ok() -> None:
+    """Raise if worker process cannot load required runtime dependencies."""
+    # Import-time / settings failures surface as unhealthy without leaking secrets.
+    get_settings.cache_clear()
+    settings = get_settings()
+    if not (settings.database_url or "").strip():
+        raise RuntimeError("DATABASE_URL is not configured")
+    # Touch modules the consumer needs so missing deps fail the probe.
+    from app.models.content import Episode, Movie, Season, Series  # noqa: F401
+    from app.services.publishing.readiness import assess_readiness  # noqa: F401
+    from app.services.publishing.workflow import transition  # noqa: F401
 
-    Publishing workers do not expose HTTP. Do not inherit the API curl :8000 probe.
+
+def _database_ok(db: Session) -> None:
+    db.execute(text("SELECT 1"))
+
+
+def _queue_consumer_ok(db: Session) -> None:
+    """Ensure the scheduled-publish claim path can initialize (no work required)."""
+    # claim_due_entity runs the same FOR UPDATE queries the loop uses; None is healthy.
+    claim_due_entity(db)
+
+
+def run_healthcheck() -> int:
+    """Exit 0 when the publishing worker is ready; 1 when unhealthy.
+
+    Verifies dependency load, database connectivity, and queue-consumer init.
+    Publishing workers do not expose HTTP — do not inherit the API :8000 probe.
+    Never logs secret values.
     """
+    db: Session | None = None
     try:
+        _required_dependencies_ok()
         get_engine()
         db = SessionLocal()
-        try:
-            db.execute(text("SELECT 1"))
-        finally:
-            db.close()
+        _database_ok(db)
+        _queue_consumer_ok(db)
     except Exception:
         logger.exception("Publishing worker healthcheck failed")
         return 1
+    finally:
+        if db is not None:
+            db.close()
     return 0
 
 
