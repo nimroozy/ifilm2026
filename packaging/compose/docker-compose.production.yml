@@ -75,6 +75,9 @@ services:
       IFILM_VERSION_FILE: ${IFILM_VERSION_FILE:-/opt/ifilm/current/release-manifest.json}
       MAINTENANCE_MODE: ${MAINTENANCE_MODE:-false}
       ENABLE_UPLOADS: ${ENABLE_UPLOADS:-false}
+      # Canonical pipeline: media-processing-worker only (docs/media/PIPELINE.md).
+      # Legacy ARQ EncodingJob path is hard-blocked when APP_ENV=production.
+      ENABLE_ENCODING: "false"
       ENABLE_MEDIA_PROCESSING: ${ENABLE_MEDIA_PROCESSING:-true}
       ENABLE_HLS_ENCODING: ${ENABLE_HLS_ENCODING:-true}
       ENABLE_LOCAL_STREAMING: ${ENABLE_LOCAL_STREAMING:-true}

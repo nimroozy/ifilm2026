@@ -83,7 +83,11 @@ services:
       redis:
         condition: service_healthy
 
+  # Legacy ARQ EncodingJob worker — opt-in only. Not part of the canonical
+  # media pipeline (docs/media/PIPELINE.md). Start with:
+  #   docker compose --profile legacy-arq up worker
   worker:
+    profiles: ["legacy-arq"]
     build:
       context: ./app/backend
     command: arq app.workers.tasks.WorkerSettings
