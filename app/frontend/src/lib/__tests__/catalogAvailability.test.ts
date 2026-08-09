@@ -7,6 +7,7 @@ import {
   hasCatalogTracks,
   itemIsDubbed,
   itemIsSubtitled,
+  movieDetailTrackGroups,
   normalizeLanguageCode,
 } from '../catalogAvailability';
 
@@ -93,6 +94,33 @@ describe('catalogAvailability', () => {
     expect(badges[0].label).toBe('Persian Dubbed');
     expect(badges[1].label).toBe('Pashto Dubbed');
     expect(badges.map((b) => b.label).join(' ')).not.toMatch(/\bFA\b|\bPS\b/);
+  });
+
+  it('omits und/unknown audio placeholders from detail track chips', () => {
+    const groups = movieDetailTrackGroups(
+      {
+        audioAvailability: {
+          original_language: 'en',
+          languages: ['und'],
+          dubbed_languages: [],
+          track_count: 1,
+          source: 'media_probe',
+        },
+        subtitleAvailability: { languages: ['fa'], source: 'admin_metadata' },
+      },
+      {
+        ...badgeLabels,
+        english: 'English',
+        persian: 'فارسی',
+        pashto: 'پښتو',
+        persianDubbed: 'فارسی دوبله',
+        pashtoDubbed: 'پښتو دوبله',
+        audio: 'Audio',
+        subtitles: 'Subtitles',
+      }
+    );
+    expect(groups.audio).toEqual([]);
+    expect(groups.subtitles.map((b) => b.label)).toEqual(['فارسی']);
   });
 
   it('returns availability chips including original', () => {

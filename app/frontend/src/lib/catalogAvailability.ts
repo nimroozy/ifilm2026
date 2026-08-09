@@ -269,6 +269,15 @@ export function detailLanguageLabel(
   return languageDisplayName(code);
 }
 
+/** Omit probe placeholders that are not useful customer labels. */
+function isCustomerFacingLanguageCode(code: string | null | undefined): code is string {
+  if (!code) return false;
+  const normalized = normalizeLanguageCode(code);
+  if (!normalized) return false;
+  if (normalized === 'und' || normalized === 'unknown' || normalized === 'zxx') return false;
+  return true;
+}
+
 /** Detail-page language badges — human-readable, never FA/PS shorthand codes. */
 export function movieDetailLanguageBadges(
   item: CatalogAvailabilityFields,
@@ -293,6 +302,7 @@ export function movieDetailLanguageBadges(
   };
 
   for (const code of audio.dubbed_languages || []) {
+    if (!isCustomerFacingLanguageCode(code)) continue;
     const key = `dub-${code}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -300,6 +310,7 @@ export function movieDetailLanguageBadges(
     badges.push({ key, label, fullLabel: `${resolved.audio}: ${label}` });
   }
   for (const code of audio.languages || []) {
+    if (!isCustomerFacingLanguageCode(code)) continue;
     const key = `audio-${code}`;
     if (seen.has(key) || seen.has(`dub-${code}`)) continue;
     seen.add(key);
@@ -307,6 +318,7 @@ export function movieDetailLanguageBadges(
     badges.push({ key, label, fullLabel: `${resolved.audio}: ${label}` });
   }
   for (const code of subs.languages || []) {
+    if (!isCustomerFacingLanguageCode(code)) continue;
     const key = `sub-${code}`;
     if (seen.has(key)) continue;
     seen.add(key);

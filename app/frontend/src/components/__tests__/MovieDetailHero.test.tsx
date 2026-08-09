@@ -126,6 +126,9 @@ describe('MovieDetailView hero experience', () => {
     expect(screen.getByTestId('movie-continue-button')).toHaveTextContent('Continue Watching');
     expect(screen.getByTestId('movie-continue-progress')).toBeInTheDocument();
     expect(screen.queryByTestId('movie-play-button')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('movie-watch-again-button')).not.toBeInTheDocument();
+    expect(screen.getByTestId('movie-share-button')).toHaveAttribute('aria-label', 'Share');
+    expect(screen.getByTestId('movie-share-button')).not.toHaveTextContent('Share');
   });
 
   it('shows Watch Again for completed progress', () => {

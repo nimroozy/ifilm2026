@@ -158,7 +158,7 @@ export function MovieDetailView({
       : '';
   const runtimeLabel = formatRuntime(movie.duration || 0, t.common.min);
   const ratingLabel = movie.rating ? `★ ${Number(movie.rating).toFixed(1)}` : '';
-  const credits = resolveCredits(movie);
+  const credits = resolveCredits(movie).slice(0, 16);
   const trackGroups = movieDetailTrackGroups(movie, {
     dubbed: t.movie.dubbed,
     subtitled: t.nav.subtitled,
@@ -349,7 +349,7 @@ export function MovieDetailView({
                 {/* Desktop: actions near title; mobile order enforced via flex order utilities */}
                 <div className="flex flex-col gap-3">
                   <div
-                    className="order-1 flex flex-wrap items-center gap-2"
+                    className="order-1 flex flex-wrap items-center gap-2 sm:gap-3"
                     aria-label="Movie actions"
                     data-testid="movie-actions"
                   >
@@ -428,14 +428,15 @@ export function MovieDetailView({
                       </span>
                     ) : null}
                     <Button
-                      size="lg"
+                      size="icon"
                       variant="ghost"
-                      className="gap-2"
+                      className="h-11 w-11 shrink-0"
                       onClick={() => void onShare()}
                       data-testid="movie-share-button"
+                      aria-label={shared ? 'Copied' : t.movie.share}
+                      title={shared ? 'Copied' : t.movie.share}
                     >
                       {shared ? <Check className="h-5 w-5 text-success" /> : <Share2 className="h-5 w-5" />}
-                      {shared ? 'Copied' : t.movie.share}
                     </Button>
                   </div>
 
@@ -556,7 +557,25 @@ export function MovieDetailView({
             data-testid="movie-about"
           >
             <SectionHeader title={t.movie.overview} className="mb-3 px-0" />
-            <p className={cn(typography.body, 'max-w-3xl text-foreground/90')}>{movie.description}</p>
+            <p
+              className={cn(
+                typography.body,
+                'max-w-3xl text-foreground/90',
+                !overviewExpanded && 'line-clamp-5'
+              )}
+            >
+              {movie.description}
+            </p>
+            {movie.description.length > 160 ? (
+              <button
+                type="button"
+                className="mt-2 text-sm font-medium text-primary"
+                onClick={() => setOverviewExpanded((v) => !v)}
+                data-testid="movie-overview-more-mobile"
+              >
+                {overviewExpanded ? 'Show less' : 'More'}
+              </button>
+            ) : null}
           </section>
         ) : null}
 
