@@ -12,6 +12,7 @@ from app.models.media_assets import MediaAsset, UploadSession
 from app.models.media_encoding import MediaEncodingProfile, MediaPackage, MediaRendition
 from app.models.media_playback import MediaPlaybackSession
 from app.models.media_processing import MediaProcessingJob, MediaProcessingJobEvent
+from app.models.media_tracks import MediaTrack
 from app.models.publication import MediaPublicationEvent
 from app.models.subscriber_auth import (
     SubscriberDeviceSession,
@@ -47,6 +48,7 @@ __all__ = [
     "MediaProcessingJobEvent",
     "MediaPublicationEvent",
     "MediaRendition",
+    "MediaTrack",
     "Movie",
     "MovieCastCredit",
     "Season",

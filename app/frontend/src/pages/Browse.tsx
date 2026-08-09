@@ -643,7 +643,8 @@ export function SeriesDetailsPage() {
                       size="lg"
                       onClick={() =>
                         navigate(
-                          `/player/episode/${playableEpisode.id}?series=${encodeURIComponent(String(show.id))}&season=${selectedSeason}`
+                          `/player/episode/${playableEpisode.id}?series=${encodeURIComponent(String(show.id))}&season=${selectedSeason}`,
+                          { state: { autoplay: true } }
                         )
                       }
                       className="gap-2"
@@ -744,7 +745,8 @@ export function SeriesDetailsPage() {
                     onClick={() => {
                       if (!playable) return;
                       navigate(
-                        `/player/episode/${ep.id}?series=${encodeURIComponent(String(show.id))}&season=${selectedSeason}`
+                        `/player/episode/${ep.id}?series=${encodeURIComponent(String(show.id))}&season=${selectedSeason}`,
+                        { state: { autoplay: true } }
                       );
                     }}
                     onKeyDown={(e) => {
@@ -752,7 +754,8 @@ export function SeriesDetailsPage() {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
                         navigate(
-                          `/player/episode/${ep.id}?series=${encodeURIComponent(String(show.id))}&season=${selectedSeason}`
+                          `/player/episode/${ep.id}?series=${encodeURIComponent(String(show.id))}&season=${selectedSeason}`,
+                          { state: { autoplay: true } }
                         );
                       }
                     }}

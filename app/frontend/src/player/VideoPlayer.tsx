@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { useLang } from '@/components/CustomerLayout';
 import { usePlaybackSession } from './usePlaybackSession';
 import { useHlsPlayer } from './useHlsPlayer';
 import { useWatchProgress } from './useWatchProgress';
@@ -24,6 +25,11 @@ import {
 } from './FullscreenController';
 import { isAirPlaySupported, isPiPSupported, showAirPlayPicker } from './castAirPlay';
 import { StatsOverlay } from './StatsOverlay';
+import {
+  localizeAudioTrackName,
+  localizeSubtitleTrackName,
+  matchSessionAudioMeta,
+} from './trackLabels';
 import type { PlayerStatsSnapshot, PlayerTarget, SafePlayerError } from './types';
 
 export function VideoPlayer({
@@ -33,6 +39,7 @@ export function VideoPlayer({
   previousEpisodeId: _previousEpisodeId = null,
   nextEpisodeId = null,
   autoplayNext = true,
+  autoplayOnReady = false,
   onAutoplayNextChange,
   onPreviousEpisode,
   onNextEpisode,
@@ -43,10 +50,14 @@ export function VideoPlayer({
   previousEpisodeId?: number | null;
   nextEpisodeId?: number | null;
   autoplayNext?: boolean;
+  /** Start playback when the stream is ready (after Play navigation). Respects browser autoplay rules. */
+  autoplayOnReady?: boolean;
   onAutoplayNextChange?: (value: boolean) => void;
   onPreviousEpisode?: () => void;
   onNextEpisode?: () => void;
 }) {
+  const { t } = useLang();
+  const playerT = t.player;
   const { session, loading, error, refreshAfterGone, retry } = usePlaybackSession(target);
   const [fatal, setFatal] = useState<SafePlayerError | null>(null);
 
@@ -95,7 +106,32 @@ export function VideoPlayer({
   const [upNextSeconds, setUpNextSeconds] = useState<number | null>(null);
   const [statsOpen, setStatsOpen] = useState(false);
   const [stats, setStats] = useState<PlayerStatsSnapshot | null>(null);
+  const [autoplayAttempted, setAutoplayAttempted] = useState(false);
   const pipSupported = isPiPSupported();
+
+  const localizedAudioTracks = useMemo(
+    () =>
+      audioTracks.map((track) => {
+        const meta = matchSessionAudioMeta(track.lang, session?.audioTracks);
+        return {
+          ...track,
+          name: localizeAudioTrackName(track.lang, playerT, {
+            isDubbed: Boolean(meta?.is_dubbed),
+            fallback: track.name,
+          }),
+        };
+      }),
+    [audioTracks, playerT, session?.audioTracks]
+  );
+
+  const localizedSubtitleTracks = useMemo(
+    () =>
+      subtitleTracks.map((track) => ({
+        ...track,
+        name: localizeSubtitleTrackName(track.lang, playerT, { fallback: track.name }),
+      })),
+    [playerT, subtitleTracks]
+  );
 
   useEffect(() => {
     const video = videoRef.current;
@@ -145,7 +181,14 @@ export function VideoPlayer({
 
   useEffect(() => {
     setUpNextSeconds(null);
+    setAutoplayAttempted(false);
   }, [target]);
+
+  const tryPlay = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    void video.play().catch(() => undefined);
+  }, [videoRef]);
 
   useEffect(() => {
     if (!autoplayNext || !onNextEpisode || !nextEpisodeId || !duration || duration < 15) {
@@ -281,11 +324,29 @@ export function VideoPlayer({
 
   const displayError = fatal || error;
 
+  // Autoplay after Play navigation — wait for stream ready and resume dialog resolution.
+  useEffect(() => {
+    if (!autoplayOnReady || !ready || !session || displayError || autoplayAttempted) return;
+    if (resumePosition != null) return;
+    setAutoplayAttempted(true);
+    tryPlay();
+  }, [
+    autoplayOnReady,
+    ready,
+    session,
+    displayError,
+    autoplayAttempted,
+    resumePosition,
+    tryPlay,
+  ]);
+
   return (
     <div
       ref={setRootEl}
       className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-black text-white overscroll-none"
       data-testid="video-player"
+      dir="ltr"
+      style={{ direction: 'ltr' }}
       onPointerMove={() => setShowControls(true)}
       onClick={() => setShowControls(true)}
     >
@@ -386,9 +447,9 @@ export function VideoPlayer({
             levels={levels}
             currentLevel={currentLevel}
             manualQualitySupported={manualQualitySupported}
-            audioTracks={audioTracks}
+            audioTracks={localizedAudioTracks}
             audioTrackId={audioTrackId}
-            subtitleTracks={subtitleTracks}
+            subtitleTracks={localizedSubtitleTracks}
             subtitleTrackId={subtitleTrackId}
             playbackRate={playbackRate}
             isFs={fs}
@@ -396,6 +457,11 @@ export function VideoPlayer({
             airPlaySupported={airPlaySupported}
             hasPreviousEpisode={Boolean(onPreviousEpisode)}
             hasNextEpisode={Boolean(onNextEpisode)}
+            labels={{
+              audio: playerT.audio,
+              subtitles: playerT.subtitles,
+              off: playerT.off,
+            }}
             onTogglePlay={togglePlay}
             onSeek={(t) => {
               const video = videoRef.current;
@@ -475,17 +541,39 @@ export function VideoPlayer({
         <DialogContent
           className="max-w-md border-white/10 bg-card text-foreground [&>button]:end-4 [&>button]:right-auto"
           data-testid="resume-dialog"
+          dir="ltr"
+          style={{ direction: 'ltr' }}
         >
           <DialogHeader className="text-start">
-            <DialogTitle>Continue watching?</DialogTitle>
+            <DialogTitle>{playerT.resumeTitle}</DialogTitle>
             <DialogDescription>
-              Resume from {formatResumeTime(resumePosition ?? 0)}, or start from the beginning.
+              {playerT.resumeDescription.replace(
+                '{time}',
+                formatResumeTime(resumePosition ?? 0)
+              )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 space-x-0 sm:justify-start">
-            <Button onClick={resume}>Resume</Button>
-            <Button variant="outline" onClick={startOver}>
-              Start Over
+            <Button
+              data-testid="resume-continue"
+              onClick={() => {
+                resume();
+                setAutoplayAttempted(true);
+                tryPlay();
+              }}
+            >
+              {playerT.continue}
+            </Button>
+            <Button
+              variant="outline"
+              data-testid="resume-start-over"
+              onClick={() => {
+                startOver();
+                setAutoplayAttempted(true);
+                tryPlay();
+              }}
+            >
+              {playerT.startOver}
             </Button>
           </DialogFooter>
         </DialogContent>

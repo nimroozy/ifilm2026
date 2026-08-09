@@ -59,6 +59,17 @@ export interface PlayerStatsSnapshot {
   audioCodec: string | null;
 }
 
+export interface PlaybackTrackMeta {
+  id: number;
+  track_type: 'audio' | 'subtitle';
+  language_code: string;
+  label_key?: string | null;
+  is_default?: boolean;
+  is_dubbed?: boolean;
+  hls_group_id?: string | null;
+  hls_name?: string | null;
+}
+
 /** In-memory session handle — never persist. */
 export interface LivePlaybackSession {
   id: string;
@@ -72,4 +83,6 @@ export interface LivePlaybackSession {
   protectionLevel?: 'session_proxied' | 'unprotected_direct' | string;
   supportsRevocation?: boolean;
   isDemoOnly?: boolean;
+  audioTracks?: PlaybackTrackMeta[];
+  subtitleTracks?: PlaybackTrackMeta[];
 }

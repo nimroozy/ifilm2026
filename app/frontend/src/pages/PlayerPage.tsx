@@ -116,12 +116,19 @@ export default function PlayerPage() {
     };
   }, [target, seriesRef, seasonRef]);
 
+  const autoplayOnReady = Boolean(
+    (location.state as { autoplay?: boolean } | null)?.autoplay
+  );
+
   function goToEpisode(episodeId: number) {
     const qs = new URLSearchParams();
     if (seriesRef) qs.set('series', seriesRef);
     if (seasonRef) qs.set('season', seasonRef);
     const query = qs.toString();
-    navigate(`/player/episode/${episodeId}${query ? `?${query}` : ''}`, { replace: true });
+    navigate(`/player/episode/${episodeId}${query ? `?${query}` : ''}`, {
+      replace: true,
+      state: { autoplay: true },
+    });
   }
 
   function toggleAutoplayNext(next: boolean) {
@@ -168,6 +175,7 @@ export default function PlayerPage() {
       previousEpisodeId={neighbors.prevId}
       nextEpisodeId={neighbors.nextId}
       autoplayNext={autoplayNext}
+      autoplayOnReady={autoplayOnReady}
       onAutoplayNextChange={toggleAutoplayNext}
       onPreviousEpisode={neighbors.prevId != null ? () => goToEpisode(neighbors.prevId!) : undefined}
       onNextEpisode={neighbors.nextId != null ? () => goToEpisode(neighbors.nextId!) : undefined}

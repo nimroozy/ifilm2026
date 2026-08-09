@@ -66,6 +66,49 @@ def get_playback_principal(
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unsupported token type")
 
 
+def _session_tracks(db, media_asset_id: str) -> tuple[list, list]:
+    if db is None or not media_asset_id:
+        return [], []
+    from app.models.media_tracks import MediaTrack
+    from app.schemas.streaming import PlaybackTrackOut
+
+    rows = (
+        db.query(MediaTrack)
+        .filter(MediaTrack.media_asset_id == media_asset_id)
+        .order_by(MediaTrack.sort_order.asc(), MediaTrack.id.asc())
+        .all()
+    )
+    audio = [
+        PlaybackTrackOut(
+            id=r.id,
+            track_type="audio",
+            language_code=r.language_code,
+            label_key=r.label_key,
+            is_default=r.is_default,
+            is_dubbed=r.is_dubbed,
+            hls_group_id=r.hls_group_id,
+            hls_name=r.hls_name,
+        )
+        for r in rows
+        if r.track_type == "audio"
+    ]
+    subs = [
+        PlaybackTrackOut(
+            id=r.id,
+            track_type="subtitle",
+            language_code=r.language_code,
+            label_key=r.label_key,
+            is_default=r.is_default,
+            is_dubbed=False,
+            hls_group_id=r.hls_group_id,
+            hls_name=r.hls_name,
+        )
+        for r in rows
+        if r.track_type == "subtitle"
+    ]
+    return audio, subs
+
+
 def _created_response(session: MediaPlaybackSession, raw_token: str) -> PlaybackSessionCreated:
     settings = get_settings()
     from sqlalchemy.orm import object_session
@@ -76,6 +119,7 @@ def _created_response(session: MediaPlaybackSession, raw_token: str) -> Playback
     media_asset = session.media_asset
     if media_asset is None and db is not None:
         media_asset = db.get(MediaAsset, session.media_asset_id)
+    audio_tracks, subtitle_tracks = _session_tracks(db, session.media_asset_id)
 
     if (
         media_asset is not None
@@ -99,6 +143,8 @@ def _created_response(session: MediaPlaybackSession, raw_token: str) -> Playback
             supports_revocation=False,
             is_demo_only=True,
             external_kind=getattr(media_asset, "external_kind", None),
+            audio_tracks=audio_tracks,
+            subtitle_tracks=subtitle_tracks,
         )
 
     url = master_playlist_url(api_prefix=settings.api_prefix, token=raw_token)
@@ -117,6 +163,8 @@ def _created_response(session: MediaPlaybackSession, raw_token: str) -> Playback
         supports_quality_selection=True,
         supports_revocation=True,
         is_demo_only=False,
+        audio_tracks=audio_tracks,
+        subtitle_tracks=subtitle_tracks,
         external_kind=None,
     )
 

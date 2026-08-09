@@ -321,7 +321,9 @@ export function MovieDetailView({
                     size="xl"
                     variant="play"
                     className="gap-2"
-                    onClick={() => navigate(`/player/movie/${movie.id}`)}
+                    onClick={() =>
+                      navigate(`/player/movie/${movie.id}`, { state: { autoplay: true } })
+                    }
                     aria-label={`Play ${movie.title}`}
                     data-testid="movie-play-button"
                   >
@@ -334,7 +336,9 @@ export function MovieDetailView({
                     size="xl"
                     variant={playable ? 'glass' : 'play'}
                     className="gap-2"
-                    onClick={() => navigate(`/player/movie/${movie.id}`)}
+                    onClick={() =>
+                      navigate(`/player/movie/${movie.id}`, { state: { autoplay: true } })
+                    }
                     aria-label={`Play demo clip for ${movie.title}`}
                     data-testid="movie-demo-button"
                   >

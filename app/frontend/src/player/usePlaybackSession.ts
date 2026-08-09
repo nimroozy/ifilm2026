@@ -27,6 +27,8 @@ async function createSessionForTarget(target: PlayerTarget): Promise<LivePlaybac
     protection_level?: string;
     supports_revocation?: boolean;
     is_demo_only?: boolean;
+    audio_tracks?: LivePlaybackSession['audioTracks'];
+    subtitle_tracks?: LivePlaybackSession['subtitleTracks'];
   }): LivePlaybackSession => ({
     id: created.id,
     mediaAssetId: created.media_asset_id,
@@ -38,6 +40,8 @@ async function createSessionForTarget(target: PlayerTarget): Promise<LivePlaybac
     protectionLevel: created.protection_level,
     supportsRevocation: created.supports_revocation,
     isDemoOnly: created.is_demo_only,
+    audioTracks: created.audio_tracks ?? [],
+    subtitleTracks: created.subtitle_tracks ?? [],
   });
 
   if (target.kind === 'asset') {

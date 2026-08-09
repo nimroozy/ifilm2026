@@ -74,6 +74,28 @@ def test_english_plus_persian_dub():
     assert item_has_dub(audio)
 
 
+def test_packaged_tracks_prefer_is_dubbed_flag():
+    class Track:
+        def __init__(self, language_code: str, is_dubbed: bool, hls_group_id: str | None = "audio"):
+            self.language_code = language_code
+            self.is_dubbed = is_dubbed
+            self.hls_group_id = hls_group_id
+
+    audio = build_audio_availability(
+        language="en",
+        packaged_audio_tracks=[
+            Track("en", False),
+            Track("fa", True),
+            Track("ps", True),
+        ],
+    )
+    assert audio.source == "package_manifest"
+    assert audio.languages == ["en", "fa", "ps"]
+    assert audio.dubbed_languages == ["fa", "ps"]
+    assert audio.selectable_in_player is True
+    assert item_has_dub(audio)
+
+
 def test_persian_original_not_dubbed_when_only_persian_audio():
     audio = build_audio_availability(
         language="Persian",

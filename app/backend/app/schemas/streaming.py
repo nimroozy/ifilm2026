@@ -34,6 +34,19 @@ class CustomerPlaybackSessionCreate(BaseModel):
         return self
 
 
+class PlaybackTrackOut(BaseModel):
+    """Language-coded track metadata for player selectors (labels via frontend i18n)."""
+
+    id: int
+    track_type: Literal["audio", "subtitle"]
+    language_code: str
+    label_key: str | None = None
+    is_default: bool = False
+    is_dubbed: bool = False
+    hls_group_id: str | None = None
+    hls_name: str | None = None
+
+
 class PlaybackSessionCreated(BaseModel):
     id: str
     media_asset_id: str
@@ -51,6 +64,8 @@ class PlaybackSessionCreated(BaseModel):
     supports_revocation: bool = True
     is_demo_only: bool = False
     external_kind: str | None = None
+    audio_tracks: list[PlaybackTrackOut] = Field(default_factory=list)
+    subtitle_tracks: list[PlaybackTrackOut] = Field(default_factory=list)
 
 
 class PlaybackSessionOut(ORMModel):

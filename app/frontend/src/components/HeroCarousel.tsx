@@ -220,7 +220,9 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
                 <Button
                   size="xl"
                   variant="play"
-                  onClick={() => navigate(`/player/movie/${movie.id}`)}
+                  onClick={() =>
+                    navigate(`/player/movie/${movie.id}`, { state: { autoplay: true } })
+                  }
                   className="gap-2"
                   aria-label={demo && !playable ? `Play demo clip for ${movie.title}` : `Play ${movie.title}`}
                 >
