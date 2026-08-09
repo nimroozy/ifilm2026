@@ -21,6 +21,19 @@ vi.mock('@/lib/catalogData', async () => {
   };
 });
 
+vi.mock('@/lib/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
+  return {
+    ...actual,
+    api: {
+      ...actual.api,
+      getMovieRecommendations: vi.fn().mockResolvedValue({ items: [], mode: 'catalog', personalized: false, label: '', count: 0 }),
+      listContinueWatching: vi.fn().mockResolvedValue([]),
+      listWatchHistory: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 40 }),
+    },
+  };
+});
+
 function movie(overrides: Record<string, unknown> = {}) {
   return {
     id: 42,
@@ -174,9 +187,9 @@ describe('demo catalog movie UI', () => {
 
     renderMovieDetails();
 
-    expect(await screen.findByTestId('movie-language-badges')).toHaveTextContent(/Persian Dubbed/i);
-    expect(screen.getByTestId('movie-language-badges')).not.toHaveTextContent(/\bFA Dub\b/i);
-    expect(screen.getByTestId('movie-language-badges')).toHaveTextContent(/English Audio|English Subtitles/i);
+    expect(await screen.findByTestId('movie-track-meta')).toHaveTextContent(/فارسی دوبله/);
+    expect(screen.getByTestId('movie-track-meta')).not.toHaveTextContent(/\bFA Dub\b/i);
+    expect(screen.getByTestId('movie-track-meta')).toHaveTextContent(/English|انگلیسی/);
     expect(screen.getByTestId('movie-cast')).toHaveTextContent('Actor One');
     expect(screen.getByTestId('movie-cast')).toHaveTextContent('Hero');
     expect(screen.getByTestId('watchlist-toggle')).toBeInTheDocument();

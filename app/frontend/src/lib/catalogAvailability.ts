@@ -242,10 +242,41 @@ export function catalogAvailabilityBadge(
   return undefined;
 }
 
-/** Detail-page language badges — human-readable, never FA/PS shorthand. */
+/**
+ * Native / product labels for detail-page audio & subtitle chips.
+ * Prefer script forms for FA/PS (e.g. فارسی دوبله) — never invent tracks.
+ */
+export function detailLanguageLabel(
+  code: string,
+  kind: 'audio' | 'dub' | 'subtitle',
+  labels?: {
+    english?: string;
+    persian?: string;
+    pashto?: string;
+    persianDubbed?: string;
+    pashtoDubbed?: string;
+  }
+): string {
+  const en = labels?.english || 'English';
+  if (kind === 'dub') {
+    if (code === 'fa' || code === 'prs') return labels?.persianDubbed || 'فارسی دوبله';
+    if (code === 'ps') return labels?.pashtoDubbed || 'پښتو دوبله';
+    return `${languageDisplayName(code)} Dubbed`;
+  }
+  if (code === 'en') return en;
+  if (code === 'fa' || code === 'prs') return labels?.persian || 'فارسی';
+  if (code === 'ps') return labels?.pashto || 'پښتو';
+  return languageDisplayName(code);
+}
+
+/** Detail-page language badges — human-readable, never FA/PS shorthand codes. */
 export function movieDetailLanguageBadges(
   item: CatalogAvailabilityFields,
-  labels?: AvailabilityBadgeLabels
+  labels?: AvailabilityBadgeLabels & {
+    english?: string;
+    persian?: string;
+    pashto?: string;
+  }
 ): AvailabilityBadge[] {
   const audio = resolveAudioAvailability(item);
   const subs = resolveSubtitleAvailability(item);
@@ -265,24 +296,40 @@ export function movieDetailLanguageBadges(
     const key = `dub-${code}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    const label = dubbedLabelForCode(code, resolved);
-    badges.push({ key, label, fullLabel: label });
+    const label = detailLanguageLabel(code, 'dub', labels);
+    badges.push({ key, label, fullLabel: `${resolved.audio}: ${label}` });
   }
   for (const code of audio.languages || []) {
     const key = `audio-${code}`;
     if (seen.has(key) || seen.has(`dub-${code}`)) continue;
     seen.add(key);
-    const label = `${languageDisplayName(code)} ${resolved.audio}`.trim();
-    badges.push({ key, label, fullLabel: label });
+    const label = detailLanguageLabel(code, 'audio', labels);
+    badges.push({ key, label, fullLabel: `${resolved.audio}: ${label}` });
   }
   for (const code of subs.languages || []) {
     const key = `sub-${code}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    const label = `${languageDisplayName(code)} ${resolved.subtitles}`.trim();
-    badges.push({ key, label, fullLabel: label });
+    const label = detailLanguageLabel(code, 'subtitle', labels);
+    badges.push({ key, label, fullLabel: `${resolved.subtitles}: ${label}` });
   }
   return badges;
+}
+
+/** Split audio vs subtitle chips for hero meta rows. */
+export function movieDetailTrackGroups(
+  item: CatalogAvailabilityFields,
+  labels?: AvailabilityBadgeLabels & {
+    english?: string;
+    persian?: string;
+    pashto?: string;
+  }
+): { audio: AvailabilityBadge[]; subtitles: AvailabilityBadge[] } {
+  const all = movieDetailLanguageBadges(item, labels);
+  return {
+    audio: all.filter((b) => b.key.startsWith('audio-') || b.key.startsWith('dub-')),
+    subtitles: all.filter((b) => b.key.startsWith('sub-')),
+  };
 }
 
 export function catalogAvailabilityChips(

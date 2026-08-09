@@ -16,7 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useLang } from '@/components/CustomerLayout';
+import { useAuth, useLang } from '@/components/CustomerLayout';
 import {
   fetchGenres,
   fetchMovie,
@@ -28,7 +28,8 @@ import {
   type CatalogMovie,
   type CatalogSeries,
 } from '@/lib/catalogData';
-import { ApiError } from '@/lib/api';
+import { api, ApiError, mapMovieDto, type MovieDto } from '@/lib/api';
+import type { MovieWatchState } from '@/components/MovieDetailView';
 import {
   catalogAvailabilityBadges,
   catalogAvailabilityChips,
@@ -465,8 +466,11 @@ export function SeriesPage() {
 export function MovieDetailsPage() {
   const { id } = useParams();
   const { lang } = useLang();
+  const { isLoggedIn } = useAuth();
   const [movie, setMovie] = useState<CatalogMovie | null>(null);
   const [related, setRelated] = useState<CatalogMovie[]>([]);
+  const [recommended, setRecommended] = useState<CatalogMovie[]>([]);
+  const [watchState, setWatchState] = useState<MovieWatchState>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -477,17 +481,60 @@ export function MovieDetailsPage() {
     try {
       const item = await fetchMovie(id, lang);
       setMovie(item);
-      try {
-        const similar = await fetchSimilarMovies(id, 12, lang);
-        setRelated(similar);
-      } catch {
-        // Soft fallback: same-genre published titles if similar endpoint unavailable.
+
+      const similarPromise = fetchSimilarMovies(id, 12, lang).catch(async () => {
         const more = await fetchMovies({ page_size: 20, sort: 'newest', locale: lang });
-        setRelated(
-          more.items
-            .filter((m) => m.id !== item.id && m.genres.some((g) => item.genres.includes(g)))
-            .slice(0, 6)
-        );
+        return more.items
+          .filter((m) => m.id !== item.id && m.genres.some((g) => item.genres.includes(g)))
+          .slice(0, 6);
+      });
+
+      const recPromise = api
+        .getMovieRecommendations(id, 12)
+        .then((payload) =>
+          (payload.items || [])
+            .filter((row) => row.content_type === 'movie' && row.id !== item.id)
+            .map((row) =>
+              mapMovieDto({
+                id: row.id,
+                title: row.title,
+                slug: row.slug,
+                poster_url: row.poster_url || '',
+                backdrop_url: row.backdrop_url || '',
+                release_year: row.release_year ?? undefined,
+                imdb_rating: row.imdb_rating ?? undefined,
+                genres: row.genres || [],
+                playable: row.playable,
+                status: 'published',
+              } as MovieDto)
+            )
+        )
+        .catch(() => [] as CatalogMovie[]);
+
+      const [similar, recs] = await Promise.all([similarPromise, recPromise]);
+      setRelated(similar);
+      setRecommended(recs);
+
+      if (isLoggedIn) {
+        try {
+          const cw = await api.listContinueWatching();
+          const active = cw.find(
+            (row) => row.content_type === 'movie' && row.movie_id === item.id && !row.completed
+          );
+          if (active) {
+            setWatchState({ kind: 'continue', progress: active });
+          } else {
+            const history = await api.listWatchHistory({ page: 1, page_size: 40 });
+            const done = history.items.find(
+              (row) => row.content_type === 'movie' && row.movie_id === item.id && row.completed
+            );
+            setWatchState(done ? { kind: 'completed', progress: done } : null);
+          }
+        } catch {
+          setWatchState(null);
+        }
+      } else {
+        setWatchState(null);
       }
     } catch (err) {
       setMovie(null);
@@ -495,7 +542,7 @@ export function MovieDetailsPage() {
     } finally {
       setLoading(false);
     }
-  }, [id, lang]);
+  }, [id, lang, isLoggedIn]);
 
   useEffect(() => {
     load();
@@ -504,7 +551,14 @@ export function MovieDetailsPage() {
   if (loading) return <PageLoading />;
   if (error || !movie) return <PageError message={error || 'Movie not found'} onRetry={load} />;
 
-  return <MovieDetailView movie={movie} related={related} />;
+  return (
+    <MovieDetailView
+      movie={movie}
+      related={related}
+      recommended={recommended}
+      watchState={watchState}
+    />
+  );
 }
 
 // ============ SERIES DETAILS PAGE ============
