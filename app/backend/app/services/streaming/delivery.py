@@ -134,10 +134,12 @@ def deliver_segment(
 
     touch_session_access(db, session, settings=settings)
 
+    media_type = "text/vtt" if path.suffix.lower() == ".vtt" else "video/mp2t"
+
     if byte_range is None:
         data = path.read_bytes()
         headers = {**SEGMENT_HEADERS, "Content-Length": str(len(data))}
-        return Response(content=data, media_type="video/mp2t", headers=headers, status_code=200)
+        return Response(content=data, media_type=media_type, headers=headers, status_code=200)
 
     with path.open("rb") as handle:
         handle.seek(byte_range.start)
@@ -147,7 +149,7 @@ def deliver_segment(
         "Content-Length": str(len(data)),
         "Content-Range": f"bytes {byte_range.start}-{byte_range.end}/{file_size}",
     }
-    return Response(content=data, media_type="video/mp2t", headers=headers, status_code=206)
+    return Response(content=data, media_type=media_type, headers=headers, status_code=206)
 
 
 def read_file_unchanged(path: Path) -> bytes:
