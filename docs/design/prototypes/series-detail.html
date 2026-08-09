@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>iFilm V2 Prototype — Series Detail</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./prototype.css" />
+</head>
+<body class="has-bottom-nav">
+  <div class="proto-banner">G2 DESIGN PROTOTYPE · Series Detail V2 · Breaking Bad · production catalog artwork</div>
+  <header class="header is-top" id="header">
+    <a class="logo" href="./home.html">iFilm</a>
+    <nav class="nav-main" id="navMain" aria-label="Primary"></nav>
+    <div class="nav-actions">
+      <button class="icon-btn" type="button" aria-label="Search">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="9" r="6"/><path d="M14 14l4 4"/></svg>
+      </button>
+      <button class="icon-btn" type="button" id="langBtn" aria-label="Language">EN</button>
+      <button class="icon-btn" type="button" aria-label="Profile"><span class="avatar"></span></button>
+    </div>
+  </header>
+
+  <section class="detail-hero" id="detailHero">
+    <div class="hero-bg" id="heroBg"></div>
+    <div class="hero-scrim-side"></div>
+    <div class="hero-scrim-bottom"></div>
+    <div class="hero-vignette"></div>
+    <div class="detail-panel detail-panel-with-poster" id="panel"></div>
+  </section>
+
+  <section class="detail-section" id="episodeSection">
+    <div class="episode-head">
+      <h2 id="episodeTitle">Episodes</h2>
+      <label class="season-select-wrap">
+        <span class="sr-only" id="seasonLabel">Season</span>
+        <select id="seasonSelect" aria-labelledby="seasonLabel"></select>
+      </label>
+    </div>
+    <div class="episode-list" id="episodeList"></div>
+  </section>
+
+  <section class="detail-section" id="moreSection" hidden>
+    <h2 id="moreTitle">More Like This</h2>
+    <div class="rail" id="moreRail"></div>
+  </section>
+
+  <footer class="footer">
+    <div class="footer-brand">iFilm</div>
+    <div class="footer-by" id="footerBy">iFilm by Haroon Net</div>
+    <div class="footer-grid">
+      <div><h3>Discover</h3><a href="#">Movies</a><a href="#">Series</a><a href="#">Genres</a></div>
+      <div><h3>Company</h3><a href="#">About</a><a href="#">Contact</a><a href="#">Help / FAQ</a></div>
+      <div><h3>Legal</h3><a href="#">Privacy</a><a href="#">Terms</a><a href="#">Credits</a></div>
+    </div>
+  </footer>
+
+  <nav class="bottom-nav" aria-label="Mobile">
+    <a href="./home.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10l8-6 8 6v9a1 1 0 01-1 1h-5v-6H10v6H5a1 1 0 01-1-1z"/></svg><span>Home</span></a>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/></svg><span>Movies</span></a>
+    <a class="active" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/></svg><span>Series</span></a>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="6"/><path d="M20 20l-3-3"/></svg><span>Search</span></a>
+    <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3"/><path d="M5 19c1.5-3 4-5 7-5s5.5 2 7 5"/></svg><span>Profile</span></a>
+  </nav>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const locale = (params.get('locale') || 'en').toLowerCase();
+
+    function langLabel(code) {
+      const map = { en: 'English', fa: 'فارسی', ps: 'پښتو', und: 'Original' };
+      return map[code] || code;
+    }
+
+    function cardHTML(m) {
+      const poster = m.poster
+        ? `<img src="${m.poster}" alt="" loading="lazy" />`
+        : `<div class="card-fallback">${(m.title||'?').slice(0,1)}</div>`;
+      return `<article class="card" tabindex="0">
+        <div class="card-poster">${poster}</div>
+        <h3 class="card-title">${m.title || ''}</h3>
+        <p class="card-sub">${m.year || ''}</p>
+      </article>`;
+    }
+
+    Promise.any([
+      fetch('./series-data.json').then(r => { if (!r.ok) throw 0; return r.json(); }),
+    ]).then(async (data) => {
+      const ui = (data.ui && data.ui[locale]) || data.ui.en;
+      let s = data.series;
+      if (locale === 'fa' && data.series_fa) {
+        s = { ...s, title: data.series_fa.title || s.title, overview: data.series_fa.overview || s.overview };
+      }
+      const rtl = locale === 'fa' || locale === 'ps';
+      document.documentElement.lang = locale;
+      document.documentElement.dir = rtl ? 'rtl' : 'ltr';
+      document.title = `iFilm V2 Prototype — ${s.title}`;
+      document.getElementById('navMain').innerHTML = (ui.nav || []).map((label, i) =>
+        `<a href="./home.html?locale=${locale}" class="${i===2?'active':''}">${label}</a>`).join('');
+      document.getElementById('langBtn').textContent = locale.toUpperCase();
+      document.getElementById('footerBy').textContent = ui.by || 'iFilm by Haroon Net';
+      document.getElementById('heroBg').style.backgroundImage = s.backdrop ? `url('${s.backdrop}')` : 'none';
+
+      const genres = (s.genres || []).join(' · ');
+      const aa = s.audio_availability || {};
+      const sa = s.subtitle_availability || {};
+      const audioCodes = [...(aa.languages || []), ...(aa.dubbed_languages || [])].filter(Boolean);
+      const subCodes = [...(sa.languages || [])].filter(Boolean);
+      const audioLine = [...new Set(audioCodes.map(langLabel))].join(' · ');
+      const subLine = [...new Set(subCodes.map(langLabel))].join(' · ');
+      const resumeEp = (data.episodes || []).find(e => e.progress_percent > 0);
+      const primaryLabel = resumeEp ? (ui.resume || 'Resume') : (ui.play || 'Play');
+      const primaryMeta = resumeEp
+        ? `S${resumeEp.season_number} · E${resumeEp.episode_number}`
+        : (s.season_count ? `${s.season_count} seasons` : '');
+
+      document.getElementById('panel').innerHTML = `
+        <div class="detail-poster-col">
+          ${s.poster ? `<img class="detail-poster" src="${s.poster}" alt="" />` : ''}
+        </div>
+        <div class="detail-copy">
+          <h1 class="hero-title">${s.title}</h1>
+          <div class="hero-meta">
+            ${s.year ? `<span>${s.year}</span>` : ''}
+            ${s.rating != null ? `<span class="rating">${s.rating} ★</span>` : ''}
+            ${s.season_count ? `<span>${s.season_count} seasons</span>` : ''}
+            ${genres ? `<span>${genres}</span>` : ''}
+          </div>
+          <div class="hero-actions">
+            <button class="btn btn-primary" type="button">▶ ${primaryLabel}${primaryMeta ? ` · ${primaryMeta}` : ''}</button>
+            <button class="btn btn-secondary" type="button">${ui.mylist || 'My List'}</button>
+            ${s.trailer_key ? `<button class="btn btn-secondary" type="button">${ui.trailer || 'Trailer'}</button>` : ''}
+          </div>
+          <div class="tracks">
+            ${audioLine ? `<div><strong>${ui.audio || 'Audio'}:</strong> ${audioLine}</div>` : ''}
+            ${subLine ? `<div><strong>${ui.subs || 'Subtitles'}:</strong> ${subLine}</div>` : `<div><strong>${ui.subs || 'Subtitles'}:</strong> <span style="color:var(--text-muted)">Not listed</span></div>`}
+          </div>
+          <p class="overview">${s.overview || ''}</p>
+        </div>`;
+
+      document.getElementById('episodeTitle').textContent = ui.episodes || 'Episodes';
+      document.getElementById('seasonLabel').textContent = ui.seasons || 'Season';
+      const select = document.getElementById('seasonSelect');
+      select.innerHTML = (data.seasons || []).map(sea =>
+        `<option value="${sea.season_number}">${ui.seasons || 'Season'} ${sea.season_number}</option>`
+      ).join('');
+
+      function renderEpisodes(seasonNumber) {
+        const list = (data.episodes || [])
+          .filter(e => e.season_number === Number(seasonNumber))
+          .sort((a, b) => a.episode_number - b.episode_number);
+        document.getElementById('episodeList').innerHTML = list.map(e => {
+          const thumb = e.thumbnail
+            ? `<img src="${e.thumbnail}" alt="" loading="lazy" />`
+            : `<div class="episode-fallback">E${e.episode_number}</div>`;
+          const progress = e.progress_percent
+            ? `<div class="episode-progress" aria-hidden="true"><span style="width:${e.progress_percent}%"></span></div>`
+            : '';
+          const cta = e.progress_percent ? (ui.resume || 'Resume') : (ui.play || 'Play');
+          return `<article class="episode-row" data-testid="episode-row">
+            <div class="episode-thumb">${thumb}${progress}</div>
+            <div class="episode-body">
+              <div class="episode-title-row">
+                <h3><span class="ep-num">E${e.episode_number}</span> ${e.title || ''}</h3>
+                ${e.duration ? `<span class="ep-dur">${e.duration}m</span>` : ''}
+              </div>
+              <p class="episode-overview">${e.overview || ''}</p>
+              <button class="btn btn-secondary btn-sm" type="button">▶ ${cta}</button>
+            </div>
+          </article>`;
+        }).join('') || `<p class="overview" style="color:var(--text-muted)">No episodes in this season.</p>`;
+      }
+
+      select.addEventListener('change', () => renderEpisodes(select.value));
+      renderEpisodes(select.value || 1);
+
+      // Optional more-like-this from movie catalog pack if present
+      try {
+        const pack = await Promise.any([
+          fetch('./catalog-data.local.json').then(r => { if (!r.ok) throw 0; return r.json(); }),
+          fetch('./catalog-data.json').then(r => r.json()),
+        ]);
+        const more = (pack.locales?.[locale]?.detail?.moreLikeThis || pack.locales?.en?.detail?.moreLikeThis || []).slice(0, 8);
+        if (more.length) {
+          document.getElementById('moreSection').hidden = false;
+          document.getElementById('moreTitle').textContent = ui.more || 'More Like This';
+          document.getElementById('moreRail').innerHTML = more.map(cardHTML).join('');
+        }
+      } catch {}
+    });
+
+    window.addEventListener('scroll', () => {
+      document.getElementById('header').classList.toggle('is-solid', scrollY > 24);
+      document.getElementById('header').classList.toggle('is-top', scrollY <= 24);
+    }, { passive: true });
+  </script>
+</body>
+</html>
