@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { ChevronDown } from 'lucide-react';
 import { useLang } from '@/components/CustomerLayout';
 import {
   FOOTER_COMPANY_PATHS,
@@ -6,10 +8,8 @@ import {
   FOOTER_LEGAL_PATHS,
 } from '@/components/customer/navConfig';
 import { getAppVersion } from '@/lib/appVersion';
-import {
-  FOOTER_SOCIAL_LINKS,
-  TMDB_WEBSITE,
-} from '@/lib/siteLinks';
+import { FOOTER_SOCIAL_LINKS } from '@/lib/siteLinks';
+import { cn } from '@/lib/utils';
 
 function footerLabel(
   id: string,
@@ -22,11 +22,68 @@ function footerLabel(
   return id;
 }
 
+function FooterSection({
+  title,
+  testId,
+  items,
+  t,
+  open,
+  onToggle,
+}: {
+  title: string;
+  testId: string;
+  items: { id: string; path: string }[];
+  t: ReturnType<typeof useLang>['t'];
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <nav aria-label={title} data-testid={testId}>
+      <button
+        type="button"
+        className="flex w-full items-center justify-between border-b border-border/60 py-2.5 text-start text-sm font-semibold text-foreground sm:pointer-events-none sm:border-0 sm:py-0 sm:text-xs sm:font-semibold sm:uppercase sm:tracking-wide sm:text-muted-foreground"
+        onClick={onToggle}
+        aria-expanded={open}
+        data-testid={`${testId}-toggle`}
+      >
+        {title}
+        <ChevronDown
+          className={cn('h-4 w-4 text-muted-foreground transition sm:hidden', open && 'rotate-180')}
+          aria-hidden
+        />
+      </button>
+      <ul
+        className={cn(
+          'space-y-2 overflow-hidden pb-3 pt-1 sm:mt-3 sm:block sm:pb-0 sm:pt-0',
+          open ? 'block' : 'hidden sm:block'
+        )}
+      >
+        {items.map((item) => (
+          <li key={item.path}>
+            <Link
+              to={item.path}
+              className="text-sm text-foreground/80 hover:text-primary"
+              data-testid={`footer-link-${item.id}`}
+            >
+              {footerLabel(item.id, t)}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+}
+
 export default function CustomerFooter() {
   const { t } = useLang();
   const version = getAppVersion();
   const year = new Date().getFullYear();
   const rights = t.footer.rights.replace('{year}', String(year));
+  const [openSection, setOpenSection] = useState<string | null>(null);
+
+  const toggle = (id: string) => {
+    setOpenSection((prev) => (prev === id ? null : id));
+  };
 
   return (
     <footer
@@ -34,13 +91,18 @@ export default function CustomerFooter() {
       data-testid="customer-footer"
       role="contentinfo"
     >
-      <div className="container mx-auto px-4 py-10 sm:px-6 lg:px-8">
-        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
+      <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-10 lg:px-8">
+        <div className="grid gap-1 sm:grid-cols-2 sm:gap-8 lg:grid-cols-4">
+          <div className="pb-3 sm:pb-0">
             <p className="font-display text-xl font-bold tracking-tight text-primary">iFilm</p>
-            <p className="mt-2 max-w-xs text-sm text-muted-foreground">{t.footer.tagline}</p>
+            <p
+              className="mt-1 max-w-xs text-sm text-muted-foreground"
+              data-testid="footer-brand-byline"
+            >
+              {t.footer.tagline}
+            </p>
             {FOOTER_SOCIAL_LINKS.length > 0 ? (
-              <div className="mt-4" data-testid="footer-social">
+              <div className="mt-3 hidden sm:block" data-testid="footer-social">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {t.footer.follow}
                 </p>
@@ -63,76 +125,41 @@ export default function CustomerFooter() {
             ) : null}
           </div>
 
-          <nav aria-label={t.footer.discover} data-testid="footer-discover">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {t.footer.discover}
-            </p>
-            <ul className="mt-3 space-y-2">
-              {FOOTER_DISCOVER_PATHS.map((item) => (
-                <li key={item.path}>
-                  <Link
-                    to={item.path}
-                    className="text-sm text-foreground/80 hover:text-primary"
-                    data-testid={`footer-link-${item.id}`}
-                  >
-                    {footerLabel(item.id, t)}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
-
-          <nav aria-label={t.footer.company} data-testid="footer-company">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {t.footer.company}
-            </p>
-            <ul className="mt-3 space-y-2">
-              {FOOTER_COMPANY_PATHS.map((item) => (
-                <li key={item.path}>
-                  <Link
-                    to={item.path}
-                    className="text-sm text-foreground/80 hover:text-primary"
-                    data-testid={`footer-link-${item.id}`}
-                  >
-                    {footerLabel(item.id, t)}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
-
-          <nav aria-label={t.footer.legal} data-testid="footer-legal">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {t.footer.legal}
-            </p>
-            <ul className="mt-3 space-y-2">
-              {FOOTER_LEGAL_PATHS.map((item) => (
-                <li key={item.path}>
-                  <Link
-                    to={item.path}
-                    className="text-sm text-foreground/80 hover:text-primary"
-                    data-testid={`footer-link-${item.id}`}
-                  >
-                    {footerLabel(item.id, t)}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
+          <FooterSection
+            title={t.footer.discover}
+            testId="footer-discover"
+            items={FOOTER_DISCOVER_PATHS}
+            t={t}
+            open={openSection === 'discover'}
+            onToggle={() => toggle('discover')}
+          />
+          <FooterSection
+            title={t.footer.company}
+            testId="footer-company"
+            items={FOOTER_COMPANY_PATHS}
+            t={t}
+            open={openSection === 'company'}
+            onToggle={() => toggle('company')}
+          />
+          <FooterSection
+            title={t.footer.legal}
+            testId="footer-legal"
+            items={FOOTER_LEGAL_PATHS}
+            t={t}
+            open={openSection === 'legal'}
+            onToggle={() => toggle('legal')}
+          />
         </div>
 
-        <div className="mt-10 space-y-3 border-t border-border pt-6">
-          <p className="text-xs leading-relaxed text-muted-foreground" data-testid="footer-tmdb">
-            {t.footer.tmdbAttribution}{' '}
-            <a
-              href={TMDB_WEBSITE}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary underline-offset-4 hover:underline"
-            >
-              TMDB
-            </a>
-            .
+        <div className="mt-5 space-y-2 border-t border-border pt-4 sm:mt-10 sm:space-y-3 sm:pt-6">
+          <p className="text-xs text-muted-foreground">
+            <Link to="/credits" className="hover:text-primary" data-testid="footer-credits-link">
+              {t.footer.credits}
+            </Link>
+            <span className="mx-2 text-border" aria-hidden>
+              ·
+            </span>
+            <span data-testid="footer-haroon-net">iFilm by Haroon Net</span>
           </p>
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
             <p data-testid="footer-rights">{rights}</p>

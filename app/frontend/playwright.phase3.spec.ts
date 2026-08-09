@@ -100,15 +100,9 @@ test.describe('Phase 3 desktop chrome', () => {
         expect(logoBox.x + logoBox.width).toBeLessThan(searchBox.x);
       }
 
-      const moreVisible = await page.getByTestId('desktop-nav-more').isVisible().catch(() => false);
-      if (vp.width >= 1536) {
-        if (!moreVisible) {
-          await expect(page.getByTestId('desktop-nav-dubbed')).toBeVisible();
-        }
-      } else {
-        await expect(page.getByTestId('desktop-nav-more')).toBeVisible();
-        await expect(page.getByTestId('desktop-nav-dubbed')).toHaveCount(0);
-      }
+      // G1: More menu always holds secondary destinations (never inline dubbed/etc).
+      await expect(page.getByTestId('desktop-nav-more')).toBeVisible();
+      await expect(page.getByTestId('desktop-nav-dubbed')).toHaveCount(0);
 
       // No app store badges — Collections is now a legitimate nav destination.
       await expect(page.getByText(/app store|google play/i)).toHaveCount(0);
@@ -244,7 +238,9 @@ test.describe('Phase 3 RTL/LTR', () => {
       await page.keyboard.press('Escape');
       await page.goto('/about');
       await expect(page.getByTestId('about-page')).toBeVisible();
-      await expect(page.getByTestId('footer-tmdb')).toContainText(/TMDB/i);
+      await expect(page.getByTestId('credits-tmdb')).toContainText(/TMDB/i);
+      await expect(page.getByTestId('footer-credits-link')).toBeVisible();
+      await expect(page.getByTestId('footer-tmdb')).toHaveCount(0);
     });
   }
 });

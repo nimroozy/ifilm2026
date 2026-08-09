@@ -4,8 +4,10 @@ import { ChevronDown } from 'lucide-react';
 import { useLang } from '@/components/CustomerLayout';
 import {
   DESKTOP_NAV_ITEMS,
+  DESKTOP_NAV_MORE_IDS,
   DESKTOP_NAV_PRIMARY_IDS,
   isNavActive,
+  navItemById,
   type CustomerNavId,
   type CustomerNavItem,
 } from '@/components/customer/navConfig';
@@ -16,7 +18,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { useMediaQuery } from '@/hooks/use-media-query';
 import { cn } from '@/lib/utils';
 
 function navLabel(id: CustomerNavId, t: ReturnType<typeof useLang>['t']): string {
@@ -56,7 +57,9 @@ function NavLinkItem({
       data-active={active ? 'true' : 'false'}
       className={cn(
         'shrink-0 whitespace-nowrap rounded-md px-2.5 py-2 text-sm font-medium transition-colors lg:px-3',
-        active ? 'bg-primary/10 text-primary' : 'text-foreground/70 hover:text-foreground'
+        active
+          ? 'text-primary shadow-[inset_0_-2px_0_0_hsl(var(--primary))]'
+          : 'text-foreground/70 hover:text-foreground'
       )}
     >
       {label}
@@ -65,27 +68,26 @@ function NavLinkItem({
 }
 
 /**
- * Desktop catalog nav.
- * Below 2xl, secondary destinations collapse into More to avoid header overflow.
- * At 2xl+, all destinations render inline with horizontal scroll as a safety net.
+ * Desktop catalog nav (G1).
+ * Primary: Home · Movies · Series · Children · Genres
+ * More: Collections · What to Watch · Dubbed · Subtitled · New Releases · Request Movie
  */
 export function DesktopNav({ className }: { className?: string }) {
   const { t, dir } = useLang();
   const location = useLocation();
-  const isWide = useMediaQuery('(min-width: 1536px)');
 
-  const items = DESKTOP_NAV_ITEMS;
-  const { visible, overflowItems } = useMemo(() => {
-    if (isWide) {
-      return { visible: items, overflowItems: [] as CustomerNavItem[] };
-    }
-    return {
-      visible: items.filter((item) => DESKTOP_NAV_PRIMARY_IDS.includes(item.id)),
-      overflowItems: items.filter((item) => !DESKTOP_NAV_PRIMARY_IDS.includes(item.id)),
-    };
-  }, [isWide, items]);
+  const { visible, moreItems } = useMemo(() => {
+    const byId = new Map(DESKTOP_NAV_ITEMS.map((item) => [item.id, item]));
+    const visibleItems = DESKTOP_NAV_PRIMARY_IDS.map((id) => byId.get(id)).filter(
+      Boolean
+    ) as CustomerNavItem[];
+    const overflow = DESKTOP_NAV_MORE_IDS.map((id) => navItemById(id)).filter(
+      Boolean
+    ) as CustomerNavItem[];
+    return { visible: visibleItems, moreItems: overflow };
+  }, []);
 
-  const overflowActive = overflowItems.some((item) => isNavActive(location.pathname, item));
+  const moreActive = moreItems.some((item) => isNavActive(location.pathname, item));
 
   return (
     <nav
@@ -105,7 +107,7 @@ export function DesktopNav({ className }: { className?: string }) {
             active={isNavActive(location.pathname, item)}
           />
         ))}
-        {overflowItems.length > 0 ? (
+        {moreItems.length > 0 ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -116,15 +118,20 @@ export function DesktopNav({ className }: { className?: string }) {
                 aria-label={t.nav.more}
                 className={cn(
                   'shrink-0 gap-1 text-sm font-medium',
-                  overflowActive ? 'bg-primary/10 text-primary' : 'text-foreground/70'
+                  moreActive
+                    ? 'text-primary shadow-[inset_0_-2px_0_0_hsl(var(--primary))]'
+                    : 'text-foreground/70'
                 )}
               >
                 {t.nav.more}
                 <ChevronDown className="h-3 w-3" aria-hidden />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align={dir === 'rtl' ? 'start' : 'end'} data-testid="desktop-nav-more-menu">
-              {overflowItems.map((item) => {
+            <DropdownMenuContent
+              align={dir === 'rtl' ? 'start' : 'end'}
+              data-testid="desktop-nav-more-menu"
+            >
+              {moreItems.map((item) => {
                 const active = isNavActive(location.pathname, item);
                 return (
                   <DropdownMenuItem key={item.id} asChild>

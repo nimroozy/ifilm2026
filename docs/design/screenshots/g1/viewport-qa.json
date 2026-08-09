@@ -1,0 +1,509 @@
+{
+  "results": [
+    {
+      "w": 1920,
+      "h": 1080,
+      "loc": "en",
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "overflowX": false,
+        "clippedTitle": false,
+        "actionsOutside": false,
+        "bottomVisible": false,
+        "footerCovered": false,
+        "mobin": false,
+        "haroon": true,
+        "autoplay": "false",
+        "ctaButtons": 4,
+        "heroH": 907,
+        "dir": "ltr",
+        "lang": "en"
+      }
+    },
+    {
+      "w": 1920,
+      "h": 1080,
+      "loc": "fa",
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "overflowX": false,
+        "clippedTitle": false,
+        "actionsOutside": false,
+        "bottomVisible": false,
+        "footerCovered": false,
+        "mobin": false,
+        "haroon": true,
+        "autoplay": "false",
+        "ctaButtons": 4,
+        "heroH": 907,
+        "dir": "rtl",
+        "lang": "fa"
+      }
+    },
+    {
+      "w": 1920,
+      "h": 1080,
+      "loc": "ps",
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "overflowX": false,
+        "clippedTitle": false,
+        "actionsOutside": false,
+        "bottomVisible": false,
+        "footerCovered": false,
+        "mobin": false,
+        "haroon": true,
+        "autoplay": "false",
+        "ctaButtons": 4,
+        "heroH": 907,
+        "dir": "rtl",
+        "lang": "ps"
+      }
+    },
+    {
+      "w": 1600,
+      "h": 900,
+      "loc": "en",
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "overflowX": false,
+        "clippedTitle": false,
+        "actionsOutside": false,
+        "bottomVisible": false,
+        "footerCovered": false,
+        "mobin": false,
+        "haroon": true,
+        "autoplay": "false",
+        "ctaButtons": 4,
+        "heroH": 756,
+        "dir": "ltr",
+        "lang": "en"
+      }
+    },
+    {
+      "w": 1600,
+      "h": 900,
+      "loc": "fa",
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "overflowX": false,
+        "clippedTitle": false,
+        "actionsOutside": false,
+        "bottomVisible": false,
+        "footerCovered": false,
+        "mobin": false,
+        "haroon": true,
+        "autoplay": "false",
+        "ctaButtons": 4,
+        "heroH": 756,
+        "dir": "rtl",
+        "lang": "fa"
+      }
+    },
+    {
+      "w": 1600,
+      "h": 900,
+      "loc": "ps",
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "overflowX": false,
+        "clippedTitle": false,
+        "actionsOutside": false,
+        "bottomVisible": false,
+        "footerCovered": false,
+        "mobin": false,
+        "haroon": true,
+        "autoplay": "false",
+        "ctaButtons": 4,
+        "heroH": 756,
+        "dir": "rtl",
+        "lang": "ps"
+      }
+    },
+    {
+      "w": 1440,
+      "h": 900,
+      "loc": "en",
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "overflowX": false,
+        "clippedTitle": false,
+        "actionsOutside": false,
+        "bottomVisible": false,
+        "footerCovered": false,
+        "mobin": false,
+        "haroon": true,
+        "autoplay": "false",
+        "ctaButtons": 4,
+        "heroH": 756,
+        "dir": "ltr",
+        "lang": "en"
+      }
+    },
+    {
+      "w": 1440,
+      "h": 900,
+      "loc": "fa",
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "overflowX": false,
+        "clippedTitle": false,
+        "actionsOutside": false,
+        "bottomVisible": false,
+        "footerCovered": false,
+        "mobin": false,
+        "haroon": true,
+        "autoplay": "false",
+        "ctaButtons": 4,
+        "heroH": 756,
+        "dir": "rtl",
+        "lang": "fa"
+      }
+    },
+    {
+      "w": 1440,
+      "h": 900,
+      "loc": "ps",
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "overflowX": false,
+        "clippedTitle": false,
+        "actionsOutside": false,
+        "bottomVisible": false,
+        "footerCovered": false,
+        "mobin": false,
+        "haroon": true,
+        "autoplay": "false",
+        "ctaButtons": 4,
+        "heroH": 756,
+        "dir": "rtl",
+        "lang": "ps"
+      }
+    },
+    {
+      "w": 1366,
+      "h": 768,
+      "loc": "en",
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "overflowX": false,
+        "clippedTitle": false,
+        "actionsOutside": false,
+        "bottomVisible": false,
+        "footerCovered": false,
+        "mobin": false,
+        "haroon": true,
+        "autoplay": "false",
+        "ctaButtons": 4,
+        "heroH": 645,
+        "dir": "ltr",
+        "lang": "en"
+      }
+    },
+    {
+      "w": 1366,
+      "h": 768,
+      "loc": "fa",
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "overflowX": false,
+        "clippedTitle": false,
+        "actionsOutside": false,
+        "bottomVisible": false,
+        "footerCovered": false,
+        "mobin": false,
+        "haroon": true,
+        "autoplay": "false",
+        "ctaButtons": 4,
+        "heroH": 645,
+        "dir": "rtl",
+        "lang": "fa"
+      }
+    },
+    {
+      "w": 1366,
+      "h": 768,
+      "loc": "ps",
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "overflowX": false,
+        "clippedTitle": false,
+        "actionsOutside": false,
+        "bottomVisible": false,
+        "footerCovered": false,
+        "mobin": false,
+        "haroon": true,
+        "autoplay": "false",
+        "ctaButtons": 4,
+        "heroH": 645,
+        "dir": "rtl",
+        "lang": "ps"
+      }
+    },
+    {
+      "w": 1024,
+      "h": 768,
+      "loc": "en",
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "overflowX": false,
+        "clippedTitle": false,
+        "actionsOutside": false,
+        "bottomVisible": false,
+        "footerCovered": false,
+        "mobin": false,
+        "haroon": true,
+        "autoplay": "false",
+        "ctaButtons": 4,
+        "heroH": 645,
+        "dir": "ltr",
+        "lang": "en"
+      }
+    },
+    {
+      "w": 1024,
+      "h": 768,
+      "loc": "fa",
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "overflowX": false,
+        "clippedTitle": false,
+        "actionsOutside": false,
+        "bottomVisible": false,
+        "footerCovered": false,
+        "mobin": false,
+        "haroon": true,
+        "autoplay": "false",
+        "ctaButtons": 4,
+        "heroH": 645,
+        "dir": "rtl",
+        "lang": "fa"
+      }
+    },
+    {
+      "w": 1024,
+      "h": 768,
+      "loc": "ps",
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "overflowX": false,
+        "clippedTitle": false,
+        "actionsOutside": false,
+        "bottomVisible": false,
+        "footerCovered": false,
+        "mobin": false,
+        "haroon": true,
+        "autoplay": "false",
+        "ctaButtons": 4,
+        "heroH": 645,
+        "dir": "rtl",
+        "lang": "ps"
+      }
+    },
+    {
+      "w": 768,
+      "h": 1024,
+      "loc": "en",
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "overflowX": false,
+        "clippedTitle": false,
+        "actionsOutside": false,
+        "bottomVisible": false,
+        "footerCovered": false,
+        "mobin": false,
+        "haroon": true,
+        "autoplay": "false",
+        "ctaButtons": 4,
+        "heroH": 819,
+        "dir": "ltr",
+        "lang": "en"
+      }
+    },
+    {
+      "w": 768,
+      "h": 1024,
+      "loc": "fa",
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "overflowX": false,
+        "clippedTitle": false,
+        "actionsOutside": false,
+        "bottomVisible": false,
+        "footerCovered": false,
+        "mobin": false,
+        "haroon": true,
+        "autoplay": "false",
+        "ctaButtons": 4,
+        "heroH": 819,
+        "dir": "rtl",
+        "lang": "fa"
+      }
+    },
+    {
+      "w": 768,
+      "h": 1024,
+      "loc": "ps",
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "overflowX": false,
+        "clippedTitle": false,
+        "actionsOutside": false,
+        "bottomVisible": false,
+        "footerCovered": false,
+        "mobin": false,
+        "haroon": true,
+        "autoplay": "false",
+        "ctaButtons": 4,
+        "heroH": 819,
+        "dir": "rtl",
+        "lang": "ps"
+      }
+    },
+    {
+      "w": 430,
+      "h": 932,
+      "loc": "en",
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "overflowX": false,
+        "clippedTitle": false,
+        "actionsOutside": false,
+        "bottomVisible": true,
+        "footerCovered": false,
+        "mobin": false,
+        "haroon": true,
+        "autoplay": "false",
+        "ctaButtons": 4,
+        "heroH": 559,
+        "dir": "ltr",
+        "lang": "en"
+      }
+    },
+    {
+      "w": 430,
+      "h": 932,
+      "loc": "fa",
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "overflowX": false,
+        "clippedTitle": false,
+        "actionsOutside": false,
+        "bottomVisible": true,
+        "footerCovered": false,
+        "mobin": false,
+        "haroon": true,
+        "autoplay": "false",
+        "ctaButtons": 4,
+        "heroH": 559,
+        "dir": "rtl",
+        "lang": "fa"
+      }
+    },
+    {
+      "w": 430,
+      "h": 932,
+      "loc": "ps",
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "overflowX": false,
+        "clippedTitle": false,
+        "actionsOutside": false,
+        "bottomVisible": true,
+        "footerCovered": false,
+        "mobin": false,
+        "haroon": true,
+        "autoplay": "false",
+        "ctaButtons": 4,
+        "heroH": 559,
+        "dir": "rtl",
+        "lang": "ps"
+      }
+    },
+    {
+      "w": 390,
+      "h": 844,
+      "loc": "en",
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "overflowX": false,
+        "clippedTitle": false,
+        "actionsOutside": false,
+        "bottomVisible": true,
+        "footerCovered": false,
+        "mobin": false,
+        "haroon": true,
+        "autoplay": "false",
+        "ctaButtons": 4,
+        "heroH": 506,
+        "dir": "ltr",
+        "lang": "en"
+      }
+    },
+    {
+      "w": 390,
+      "h": 844,
+      "loc": "fa",
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "overflowX": false,
+        "clippedTitle": false,
+        "actionsOutside": false,
+        "bottomVisible": true,
+        "footerCovered": false,
+        "mobin": false,
+        "haroon": true,
+        "autoplay": "false",
+        "ctaButtons": 4,
+        "heroH": 506,
+        "dir": "rtl",
+        "lang": "fa"
+      }
+    },
+    {
+      "w": 390,
+      "h": 844,
+      "loc": "ps",
+      "ok": true,
+      "issues": [],
+      "metrics": {
+        "overflowX": false,
+        "clippedTitle": false,
+        "actionsOutside": false,
+        "bottomVisible": true,
+        "footerCovered": false,
+        "mobin": false,
+        "haroon": true,
+        "autoplay": "false",
+        "ctaButtons": 4,
+        "heroH": 506,
+        "dir": "rtl",
+        "lang": "ps"
+      }
+    }
+  ],
+  "failed": []
+}

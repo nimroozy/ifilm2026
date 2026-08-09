@@ -6,14 +6,17 @@ import { useAuth, useLang } from '@/components/CustomerLayout';
 import { api, ApiError, tokenStore } from '@/lib/api';
 import { isMockMode } from '@/lib/dataMode';
 import { toast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 type Props = {
   movieId?: number;
   seriesId?: number;
   className?: string;
+  /** Compact icon-only control (e.g. mobile hero CTA row). */
+  iconOnly?: boolean;
 };
 
-export function WatchlistButton({ movieId, seriesId, className }: Props) {
+export function WatchlistButton({ movieId, seriesId, className, iconOnly = false }: Props) {
   const { t } = useLang();
   const { isLoggedIn } = useAuth();
   const navigate = useNavigate();
@@ -92,18 +95,22 @@ export function WatchlistButton({ movieId, seriesId, className }: Props) {
     }
   };
 
+  const label = inList ? t.profile.watchlist : t.movie.watchlist;
+
   return (
     <Button
-      size="lg"
+      size={iconOnly ? 'icon' : 'lg'}
       variant={inList ? 'secondary' : 'outline'}
-      className={className ?? 'gap-2'}
+      className={cn(iconOnly ? 'h-11 w-11 shrink-0' : 'gap-2', className)}
       disabled={busy}
       onClick={() => void onToggle()}
       data-testid="watchlist-toggle"
       aria-pressed={inList}
+      aria-label={label}
+      title={label}
     >
       {inList ? <Check className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
-      {inList ? t.profile.watchlist : t.movie.watchlist}
+      {iconOnly ? null : <span>{label}</span>}
     </Button>
   );
 }

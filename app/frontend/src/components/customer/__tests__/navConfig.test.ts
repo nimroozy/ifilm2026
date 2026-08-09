@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { isNavActive, DESKTOP_NAV_ITEMS, MOBILE_BOTTOM_NAV } from '@/components/customer/navConfig';
+import {
+  isNavActive,
+  DESKTOP_NAV_ITEMS,
+  DESKTOP_NAV_MORE_IDS,
+  DESKTOP_NAV_PRIMARY_IDS,
+  MOBILE_BOTTOM_NAV,
+  WATCHLIST_NAV_ITEM,
+} from '@/components/customer/navConfig';
 import { FOOTER_SOCIAL_LINKS } from '@/lib/siteLinks';
 import { getAppVersion } from '@/lib/appVersion';
 
@@ -29,17 +36,33 @@ describe('customer nav active matching', () => {
     expect(isNavActive('/genres', genres)).toBe(true);
   });
 
-  it('includes Phase 3 destinations plus Collections and Watchlist', () => {
+  it('keeps G1 primary destinations and More menu destinations', () => {
+    expect(DESKTOP_NAV_PRIMARY_IDS).toEqual([
+      'home',
+      'movies',
+      'series',
+      'children',
+      'genres',
+    ]);
+    expect(DESKTOP_NAV_MORE_IDS).toEqual([
+      'collections',
+      'whatToWatch',
+      'dubbed',
+      'subtitled',
+      'newReleases',
+      'requestMovie',
+    ]);
     const ids = DESKTOP_NAV_ITEMS.map((i) => i.id);
     expect(ids).toEqual(
-      expect.arrayContaining(['genres', 'collections', 'dubbed', 'subtitled', 'newReleases', 'myList'])
+      expect.arrayContaining(['genres', 'collections', 'dubbed', 'subtitled', 'newReleases'])
     );
+    expect(ids).not.toContain('myList');
   });
 
-  it('marks watchlist route active under My List', () => {
-    const myList = DESKTOP_NAV_ITEMS.find((i) => i.id === 'myList')!;
-    expect(isNavActive('/watchlist', myList)).toBe(true);
-    expect(isNavActive('/movies', myList)).toBe(false);
+  it('keeps watchlist as a dedicated nav item outside desktop chrome', () => {
+    expect(WATCHLIST_NAV_ITEM.id).toBe('myList');
+    expect(isNavActive('/watchlist', WATCHLIST_NAV_ITEM)).toBe(true);
+    expect(isNavActive('/movies', WATCHLIST_NAV_ITEM)).toBe(false);
   });
 
   it('marks collection detail routes as active under Collections', () => {
@@ -60,8 +83,9 @@ describe('customer nav active matching', () => {
     expect(MOBILE_BOTTOM_NAV.map((i) => i.id)).not.toContain('requestMovie');
   });
 
-  it('exposes Request Movie in desktop/more nav but not as a primary tab', () => {
-    expect(DESKTOP_NAV_ITEMS.map((i) => i.id)).toContain('requestMovie');
+  it('exposes Request Movie in More destinations but not as a primary tab', () => {
+    expect(DESKTOP_NAV_MORE_IDS).toContain('requestMovie');
+    expect(DESKTOP_NAV_PRIMARY_IDS).not.toContain('requestMovie');
     const item = DESKTOP_NAV_ITEMS.find((i) => i.id === 'requestMovie')!;
     expect(isNavActive('/request', item)).toBe(true);
   });
@@ -79,7 +103,6 @@ describe('footer social policy', () => {
 
 describe('app version helper', () => {
   it('returns null when unset', () => {
-    // Vitest env typically leaves VITE_APP_VERSION undefined
     const v = getAppVersion();
     expect(v === null || typeof v === 'string').toBe(true);
   });

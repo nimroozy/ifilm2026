@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth, useLang } from '@/components/CustomerLayout';
-import { ContentShelf, MediaCard } from '@/design-system';
+import { ContentShelf, MediaCard, mediaSizes } from '@/design-system';
 import { HeroCarousel } from '@/components/HeroCarousel';
 import {
   fetchHomeCatalog,
@@ -24,6 +24,7 @@ import {
 } from '@/lib/api';
 import { isMockMode } from '@/lib/dataMode';
 import { hasDemoClip, canPlayFullMovie } from '@/lib/catalogPresentation';
+import { catalogAvailabilityBadges } from '@/lib/catalogAvailability';
 import {
   localizeRecommendationExplanation,
   localizeRecommendationShelfTitle,
@@ -31,18 +32,35 @@ import {
 import { sizedArtworkUrl } from '@/lib/imageUrls';
 import { X } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 type HomeCatalog = Awaited<ReturnType<typeof fetchHomeCatalog>>;
 
 function HomeLoading() {
   return (
-    <div className="space-y-6 pt-8" data-testid="home-loading" aria-busy="true">
-      <Skeleton className="h-[70vh] w-full rounded-none" data-testid="home-hero-skeleton" />
+    <div className="space-y-8" data-testid="home-loading" aria-busy="true">
+      <Skeleton
+        className="ifilm-skeleton h-[min(62vh,640px)] w-full rounded-none md:h-[min(78vh,820px)]"
+        data-testid="home-hero-skeleton"
+      />
       <div className="space-y-4 px-4 sm:px-6 lg:px-8" data-testid="home-shelf-skeleton">
-        <Skeleton className="h-7 w-56" />
+        <Skeleton className="ifilm-skeleton h-7 w-56" />
         <div className="flex gap-4 overflow-hidden">
           {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-[260px] w-[160px] shrink-0 rounded-xl" />
+            <div key={i} className={cn('shrink-0', mediaSizes.posterMd)}>
+              <Skeleton className="ifilm-skeleton aspect-[2/3] w-full rounded-xl" />
+              <Skeleton className="ifilm-skeleton mt-2 h-4 w-3/4" />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="space-y-4 px-4 sm:px-6 lg:px-8" aria-hidden>
+        <Skeleton className="ifilm-skeleton h-7 w-40" />
+        <div className="flex gap-4 overflow-hidden">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className={cn('shrink-0', mediaSizes.posterMd)}>
+              <Skeleton className="ifilm-skeleton aspect-[2/3] w-full rounded-xl" />
+            </div>
           ))}
         </div>
       </div>
@@ -70,16 +88,29 @@ function ContentRow({
   items,
   type = 'movie',
   eagerCount = 0,
+  showAvailability = false,
 }: {
   title: string;
   items: (CatalogMovie | CatalogSeries)[];
   type?: 'movie' | 'series';
   /** First N cards load eagerly for LCP on above-the-fold shelves. */
   eagerCount?: number;
+  /** Sparse human-language availability badges (never FA/PS codes). */
+  showAvailability?: boolean;
 }) {
   const navigate = useNavigate();
+  const { t } = useLang();
+  const { isLoggedIn } = useAuth();
 
   if (!items.length) return null;
+
+  const availLabels = {
+    dubbed: t.nav.dubbed,
+    subtitled: t.nav.subtitled,
+    multiAudio: 'Multi Audio',
+    persianDubbed: t.sections.persianDubbed,
+    pashtoDubbed: t.sections.pashtoDubbed,
+  };
 
   return (
     <ContentShelf title={title}>
@@ -91,6 +122,13 @@ function ContentRow({
           'duration' in item && typeof item.duration === 'number' && item.duration > 0
             ? `${item.duration} min`
             : undefined;
+        const detailPath =
+          type === 'series' || item.type === 'series' ? `/series/${item.id}` : `/movie/${item.id}`;
+        const avail = showAvailability
+          ? catalogAvailabilityBadges(item, availLabels)
+          : { badges: [], overflow: 0 };
+        // Prefer a single dubbed badge on home shelves to avoid clutter.
+        const badges = avail.badges.filter((b) => b.key.startsWith('dub-')).slice(0, 1);
         return (
           <MediaCard
             key={`${contentType}-${item.id}`}
@@ -99,20 +137,39 @@ function ContentRow({
             year={item.year}
             rating={item.rating}
             runtime={runtime}
+            genres={'genres' in item ? item.genres : undefined}
             quality={topQuality}
             showDemo={hasDemoClip(item)}
             playable={canPlayFullMovie(item) || hasDemoClip(item)}
             priority={index < eagerCount}
+            availabilityBadges={badges}
             badge={
-              item.type === 'series' && 'newEpisode' in item && item.newEpisode
-                ? 'NEW'
-                : contentType === 'Series'
-                  ? 'Series'
-                  : undefined
+              badges.length
+                ? undefined
+                : item.type === 'series' && 'newEpisode' in item && item.newEpisode
+                  ? 'NEW'
+                  : contentType === 'Series'
+                    ? 'Series'
+                    : undefined
             }
-            onActivate={() =>
-              navigate(type === 'series' || item.type === 'series' ? `/series/${item.id}` : `/movie/${item.id}`)
-            }
+            onActivate={() => navigate(detailPath)}
+            onPlay={() => {
+              if (canPlayFullMovie(item) || hasDemoClip(item)) {
+                navigate(
+                  contentType === 'Series' ? detailPath : `/player/movie/${item.id}`,
+                  contentType === 'Series' ? undefined : { state: { autoplay: true } }
+                );
+              } else {
+                navigate(detailPath);
+              }
+            }}
+            onMyList={() => {
+              if (!isLoggedIn || !tokenStore.get()) {
+                navigate('/login');
+                return;
+              }
+              navigate('/watchlist');
+            }}
           />
         );
       })}
@@ -241,9 +298,20 @@ function ContinueWatchingRow({
   };
 
   return (
-    <ContentShelf title={t.sections.continueWatching}>
-      {items.map((item) => (
-        <div key={item.id} className="relative">
+    <ContentShelf title={t.sections.continueWatching} testId="home-continue-watching">
+      {items.map((item) => {
+        const episodeLabel =
+          'season_number' in item &&
+          item.season_number != null &&
+          item.episode_number != null
+            ? `S${item.season_number} · E${item.episode_number}`
+            : 'subtitle' in item
+              ? item.subtitle || undefined
+              : 'episode' in item
+                ? item.episode || undefined
+                : undefined;
+        return (
+        <div key={item.id} className="relative snap-start">
           <MediaCard
             variant="landscape"
             size="sm"
@@ -256,13 +324,25 @@ function ContinueWatchingRow({
             progress={
               Math.min(100, Math.max(0, 'progress_percent' in item ? item.progress_percent : item.progress))
             }
-            runtime={'subtitle' in item ? item.subtitle || undefined : item.episode || undefined}
+            status={episodeLabel}
             playable={
               'media_asset_id' in item
                 ? Boolean(item.available && item.player_path)
                 : true
             }
             onActivate={() => {
+              if ('media_asset_id' in item) {
+                if (item.available && item.player_path) {
+                  navigate(item.player_path, { state: { autoplay: true } });
+                }
+              } else {
+                navigate(
+                  item.type === 'series' ? `/series/${item.contentId}` : `/player/movie/${item.contentId}`,
+                  item.type === 'series' ? undefined : { state: { autoplay: true } }
+                );
+              }
+            }}
+            onPlay={() => {
               if ('media_asset_id' in item) {
                 if (item.available && item.player_path) {
                   navigate(item.player_path, { state: { autoplay: true } });
@@ -291,7 +371,8 @@ function ContinueWatchingRow({
             </Button>
           ) : null}
         </div>
-      ))}
+        );
+      })}
     </ContentShelf>
   );
 }
@@ -585,8 +666,16 @@ export default function HomePage() {
             <ContentRow title={t.sections.comedy} items={data.comedyMovies} />
             <ContentRow title="Animation & Family" items={animationFamily} />
             <ContentRow title={t.sections.afghanMovies} items={data.afghanMovies} />
-            <ContentRow title={t.sections.persianDubbed} items={data.persianDubbed} />
-            <ContentRow title={t.sections.pashtoDubbed} items={data.pashtoDubbed} />
+            <ContentRow
+              title={t.sections.persianDubbed}
+              items={data.persianDubbed}
+              showAvailability
+            />
+            <ContentRow
+              title={t.sections.pashtoDubbed}
+              items={data.pashtoDubbed}
+              showAvailability
+            />
           </>
         ) : (
           <div className="space-y-4 px-4 py-6 sm:px-6 lg:px-8" data-testid="home-below-fold-pending" aria-hidden>

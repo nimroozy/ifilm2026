@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Film, Tv, Search, User, Bell, Menu, Globe, ChevronDown } from 'lucide-react';
+import { Home, Film, Tv, Search, User, Menu, Globe, ChevronDown } from 'lucide-react';
 import { translations } from '@/data/translations';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -17,12 +17,16 @@ import { DesktopNav } from '@/components/customer/DesktopNav';
 import CustomerFooter from '@/components/customer/CustomerFooter';
 import {
   DESKTOP_NAV_ITEMS,
+  DESKTOP_NAV_MORE_IDS,
+  DESKTOP_NAV_PRIMARY_IDS,
   MOBILE_BOTTOM_NAV,
   FOOTER_COMPANY_PATHS,
   FOOTER_LEGAL_PATHS,
   isNavActive,
+  navItemById,
   type CustomerNavId,
 } from '@/components/customer/navConfig';
+import { surfaces } from '@/design-system';
 import { cn } from '@/lib/utils';
 
 // ============ LANGUAGE CONTEXT ============
@@ -290,8 +294,9 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 50);
-    window.addEventListener('scroll', handleScroll);
+    const handleScroll = () => setScrolled(window.scrollY > 24);
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
@@ -312,21 +317,20 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
     <div className="flex min-h-screen flex-col bg-background" data-testid="customer-shell">
       <header
         data-testid="customer-header"
+        data-scrolled={scrolled ? 'true' : 'false'}
         className={cn(
-          'fixed left-0 right-0 top-0 z-50 transition-all duration-300',
-          scrolled
-            ? 'bg-background/95 shadow-lg backdrop-blur-md'
-            : 'bg-gradient-to-b from-background/80 to-transparent'
+          'fixed inset-x-0 top-0 z-40 transition-[background-color,backdrop-filter,box-shadow,border-color] duration-normal',
+          scrolled ? surfaces.headerScrolled : surfaces.headerTop
         )}
       >
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex h-16 items-center justify-between gap-3 md:h-20">
+        <div className="mx-auto w-full max-w-[90rem] px-4 sm:px-6 lg:px-8">
+          <div className="flex h-16 items-center justify-between gap-3">
             <Link
               to="/"
               className="shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-label="iFilm"
             >
-              <span className="font-display text-2xl font-bold tracking-tight text-primary md:text-3xl">
+              <span className="font-display text-2xl font-bold tracking-tight text-primary md:text-[1.75rem]">
                 iFilm
               </span>
             </Link>
@@ -340,6 +344,7 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
                 onClick={() => navigate('/search')}
                 className="text-foreground/70 hover:text-foreground"
                 aria-label={t.nav.search}
+                data-testid="header-search"
               >
                 <Search className="h-5 w-5" />
               </Button>
@@ -351,27 +356,19 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
                     size="sm"
                     className="gap-1 text-foreground/70 hover:text-foreground"
                     aria-label={langLabel}
+                    data-testid="header-language"
                   >
                     <Globe className="h-4 w-4" />
-                    <span className="hidden text-xs sm:inline">{langLabel}</span>
+                    <span className="hidden text-xs uppercase sm:inline">{lang}</span>
                     <ChevronDown className="h-3 w-3" aria-hidden />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align={dir === 'rtl' ? 'start' : 'end'}>
+                <DropdownMenuContent align={dir === 'rtl' ? 'start' : 'end'} data-testid="header-language-menu">
                   <DropdownMenuItem onClick={() => setLang('fa')}>فارسی (Dari)</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setLang('ps')}>پښتو (Pashto)</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setLang('en')}>English</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-
-              <Button
-                variant="ghost"
-                size="icon"
-                className="hidden text-foreground/70 hover:text-foreground sm:flex"
-                aria-label={t.nav.notifications}
-              >
-                <Bell className="h-5 w-5" />
-              </Button>
 
               {isLoggedIn ? (
                 <DropdownMenu>
@@ -430,7 +427,34 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
                   <SheetTitle className="font-display text-lg text-primary">iFilm</SheetTitle>
                   <SheetDescription className="sr-only">{t.nav.menu}</SheetDescription>
                   <nav aria-label={t.nav.menu} className="mt-6 flex flex-col gap-1">
-                    {DESKTOP_NAV_ITEMS.map((item) => {
+                    {DESKTOP_NAV_PRIMARY_IDS.map((id) => {
+                      const item = DESKTOP_NAV_ITEMS.find((row) => row.id === id);
+                      if (!item) return null;
+                      const active = isNavActive(location.pathname, item);
+                      return (
+                        <Link
+                          key={item.path}
+                          to={item.path}
+                          aria-current={active ? 'page' : undefined}
+                          data-testid={`mobile-nav-${item.id}`}
+                          data-active={active ? 'true' : 'false'}
+                          className={cn(
+                            'rounded-lg px-4 py-3 text-base font-medium transition-colors',
+                            active
+                              ? 'bg-primary/10 text-primary'
+                              : 'text-foreground/70 hover:bg-muted hover:text-foreground'
+                          )}
+                        >
+                          {customerNavLabel(item.id, t)}
+                        </Link>
+                      );
+                    })}
+                    <p className="mt-4 px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {t.nav.more}
+                    </p>
+                    {DESKTOP_NAV_MORE_IDS.map((id) => {
+                      const item = navItemById(id);
+                      if (!item) return null;
                       const active = isNavActive(location.pathname, item);
                       return (
                         <Link
@@ -475,18 +499,20 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
         </div>
       </header>
 
-      <main className="flex-1 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-16 md:pb-0 md:pt-20">{children}</main>
+      <main className="flex-1 pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] pt-16 md:pb-0">
+        {children}
+      </main>
 
-      <div className="pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0">
+      <div className="pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] md:pb-0">
         <CustomerFooter />
       </div>
 
       <nav
-        className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[hsl(222_26%_8%/0.94)] pb-[env(safe-area-inset-bottom,0px)] backdrop-blur-md md:hidden"
         aria-label={t.nav.menu}
         data-testid="mobile-bottom-nav"
       >
-        <div className="flex h-16 items-center justify-around">
+        <div className="flex h-14 items-center justify-around">
           {MOBILE_BOTTOM_NAV.map((item) => {
             const Icon = bottomIcons[item.id as keyof typeof bottomIcons] || Home;
             const active = isNavActive(location.pathname, item);
@@ -498,7 +524,7 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
                 data-testid={`bottom-nav-${item.id}`}
                 data-active={active ? 'true' : 'false'}
                 className={cn(
-                  'flex min-w-[3.5rem] flex-col items-center gap-1 px-2 py-2',
+                  'flex min-h-[44px] min-w-[3.5rem] flex-col items-center justify-center gap-0.5 px-2 py-1',
                   active ? 'text-primary' : 'text-muted-foreground'
                 )}
               >
