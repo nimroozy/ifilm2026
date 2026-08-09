@@ -3,7 +3,7 @@
 **Status:** READY for human visual approval (Draft PR)  
 **PR:** https://github.com/nimroozy/ifilm2026/pull/75  
 **Branch:** `cursor/g2b-series-detail-impl-4873`  
-**Head SHA:** `1e905040877d7221fe69926ebfa8024df0a933c4`  
+**Head SHA:** `1eea55d4ff9a31a4626d596f2812ff233643b4f4`  
 **Baseline:** production `v1.16.0`  
 **Planning PR (unchanged):** #74  
 
