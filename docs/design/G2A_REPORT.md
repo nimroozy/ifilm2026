@@ -3,7 +3,8 @@
 **Status:** Ready for final human approval (Draft PR — **do not merge yet**)  
 **Baseline:** production `v1.15.0`  
 **Branch:** `cursor/customer-ui-v2-g2a-movie-detail-4873`  
-**Final head:** `f80b241c62daf36ce506e58b73546e379a54625c`  
+**Code head (CTA polish):** `f80b241c62daf36ce506e58b73546e379a54625c`  
+**Docs/screenshot head:** `c69412924723b060a7cf3d507183effa0f32a73b`  
 **Scope:** Movie Detail only — **G2b not started**
 
 Plan decisions recorded in [`G2_DETAIL_V2_PLAN.md`](./G2_DETAIL_V2_PLAN.md).
