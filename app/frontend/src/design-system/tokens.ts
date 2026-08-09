@@ -37,10 +37,10 @@ export const radii = {
 } as const;
 
 export const heroSizing = {
-  /** Tailwind classes — desktop 70–85vh, mobile ~55–65vh */
+  /** Tailwind classes — desktop 70–85vh, mobile ~55–65vh (bottom-weighted, not vertically centered). */
   section:
-    'relative -mt-16 h-[min(62vh,640px)] min-h-[380px] w-full overflow-hidden md:-mt-16 md:h-[min(78vh,820px)] md:min-h-[420px] lg:h-[min(82vh,900px)]',
-  contentPad: 'pb-16 md:pb-24',
+    'relative -mt-16 h-[min(60vh,560px)] min-h-[360px] w-full overflow-hidden md:-mt-16 md:h-[min(80vh,860px)] md:min-h-[480px] lg:h-[min(84vh,920px)]',
+  contentPad: 'pb-14 md:pb-28',
 } as const;
 
 export const zIndex = {

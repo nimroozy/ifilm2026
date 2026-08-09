@@ -189,7 +189,7 @@ describe('production metadata cleanup', () => {
     const htmlPath = path.resolve(__dirname, '../../../../index.html');
     const html = fs.readFileSync(htmlPath, 'utf8');
     expect(html).toContain('<title>iFilm</title>');
-    expect(html).toContain('content="iFilm streaming for Mobin Net subscribers"');
+    expect(html).toContain('content="iFilm by Haroon Net"');
     expect(html).toContain('href="/favicon.svg"');
     expect(html).toContain('src="/locale-bootstrap.js"');
     expect(html).toMatch(/<html[^>]*lang="en"/);

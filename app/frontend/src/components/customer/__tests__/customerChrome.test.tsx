@@ -68,7 +68,10 @@ describe('customer navigation and footer chrome', () => {
     expect(screen.getByTestId('footer-link-terms')).toBeTruthy();
     expect(screen.getByTestId('footer-link-copyright')).toBeTruthy();
     expect(screen.getByTestId('footer-credits-link')).toHaveAttribute('href', '/credits');
+    expect(screen.getByTestId('footer-haroon-net')).toHaveTextContent(/iFilm by Haroon Net/i);
+    expect(screen.getByTestId('footer-brand-byline')).toHaveTextContent(/Haroon Net/i);
     expect(screen.queryByTestId('footer-tmdb')).toBeNull();
+    expect(screen.queryByText(/Mobin Net/i)).toBeNull();
     expect(screen.getByTestId('footer-social-website')).toHaveAttribute(
       'href',
       'https://mobinnet.af/'

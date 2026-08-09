@@ -211,7 +211,7 @@ export function MediaCard({
             ) : null}
           </div>
           {metaHover ? (
-            <p className="line-clamp-2 text-[11px] font-medium leading-snug text-white/85">{metaHover}</p>
+            <p className="line-clamp-1 text-[11px] font-medium leading-snug text-white/85">{metaHover}</p>
           ) : null}
         </div>
 

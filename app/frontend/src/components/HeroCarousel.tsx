@@ -190,7 +190,7 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
           <div
             key={movie.id}
             className={cn(
-              'max-w-xl space-y-4 md:max-w-2xl md:space-y-5',
+              'max-w-[20rem] space-y-3 sm:max-w-xl md:max-w-2xl md:space-y-5',
               !reduceMotion && 'animate-fade-in'
             )}
           >
@@ -213,22 +213,33 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
               </h1>
             )}
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5 md:gap-2">
               {movie.year ? <MetaChip>{movie.year}</MetaChip> : null}
               {movie.rating ? (
                 <MetaChip className="text-primary">★ {Number(movie.rating).toFixed(1)}</MetaChip>
               ) : null}
               {runtime ? <MetaChip>{runtime}</MetaChip> : null}
-              {genres.map((g) => (
-                <MetaChip key={g}>{g}</MetaChip>
+              {genres.slice(0, 2).map((g) => (
+                <MetaChip key={g} className="hidden sm:inline-flex">
+                  {g}
+                </MetaChip>
+              ))}
+              {genres.slice(0, 1).map((g) => (
+                <MetaChip key={`m-${g}`} className="sm:hidden">
+                  {g}
+                </MetaChip>
               ))}
             </div>
 
-            <p className="max-w-xl text-sm leading-relaxed text-foreground/90 line-clamp-2 md:text-base md:line-clamp-3">
+            <p className="max-w-xl text-sm leading-relaxed text-foreground/85 line-clamp-2 md:max-w-2xl md:text-base md:leading-relaxed md:text-foreground/90 md:line-clamp-3">
               {movie.description}
             </p>
 
-            <div className="flex flex-wrap items-center gap-3 pt-1">
+            {/* Mobile: [ Play ] [ More Info ] [ + ] — Desktop: full-label actions */}
+            <div
+              className="flex flex-nowrap items-center gap-2 pt-0.5 md:flex-wrap md:gap-3 md:pt-1"
+              data-testid="hero-actions"
+            >
               {playable || demo ? (
                 <Button
                   size="xl"
@@ -236,14 +247,14 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
                   onClick={() =>
                     navigate(`/player/movie/${movie.id}`, { state: { autoplay: true } })
                   }
-                  className="h-12 gap-2 px-6"
+                  className="h-11 min-w-0 flex-1 gap-2 px-4 sm:flex-none sm:px-5 md:h-12 md:px-6"
                   aria-label={
                     demo && !playable ? `Play demo clip for ${movie.title}` : `Play ${movie.title}`
                   }
                   data-testid="hero-play"
                 >
-                  <Play className="h-5 w-5 fill-current" />
-                  {demo && !playable ? 'Play Demo Clip' : t.hero.play}
+                  <Play className="h-5 w-5 shrink-0 fill-current" />
+                  <span className="truncate">{demo && !playable ? 'Play Demo Clip' : t.hero.play}</span>
                 </Button>
               ) : (
                 <Badge variant="secondary" className="px-3 py-2 text-sm">
@@ -254,26 +265,42 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
                 size="lg"
                 variant="glass"
                 onClick={() => navigate(`/movie/${movie.id}`)}
-                className="h-12 gap-2"
+                className="h-11 min-w-0 flex-1 gap-2 px-3 sm:flex-none md:h-12 md:px-4"
                 data-testid="hero-more-info"
               >
-                <Info className="h-5 w-5" />
-                {t.hero.moreInfo}
+                <Info className="h-5 w-5 shrink-0" />
+                <span className="truncate">{t.hero.moreInfo}</span>
               </Button>
               {isLoggedIn ? (
-                <WatchlistButton movieId={movie.id} className="h-12 gap-2" />
+                <>
+                  <WatchlistButton movieId={movie.id} iconOnly className="md:hidden" />
+                  <WatchlistButton movieId={movie.id} className="hidden h-12 gap-2 md:inline-flex" />
+                </>
               ) : (
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="h-12 gap-2"
-                  onClick={onMyListAnonymous}
-                  data-testid="hero-my-list-signin"
-                  aria-label={t.nav.myList}
-                >
-                  <Plus className="h-5 w-5" />
-                  {t.nav.myList}
-                </Button>
+                <>
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    className="h-11 w-11 shrink-0 md:hidden"
+                    onClick={onMyListAnonymous}
+                    data-testid="hero-my-list-signin"
+                    aria-label={t.nav.myList}
+                    title={t.nav.myList}
+                  >
+                    <Plus className="h-5 w-5" />
+                  </Button>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="hidden h-12 gap-2 md:inline-flex"
+                    onClick={onMyListAnonymous}
+                    data-testid="hero-my-list-signin-desktop"
+                    aria-label={t.nav.myList}
+                  >
+                    <Plus className="h-5 w-5" />
+                    {t.nav.myList}
+                  </Button>
+                </>
               )}
             </div>
           </div>
@@ -287,7 +314,7 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
             aria-label="Previous featured title"
             onClick={() => go(-1)}
             data-testid="hero-prev"
-            className="absolute start-3 top-1/2 z-20 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-background/50 text-foreground backdrop-blur-md transition hover:bg-background/80 md:flex"
+            className="absolute start-3 top-[42%] z-20 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/25 bg-black/55 text-white shadow-lg backdrop-blur-md transition hover:bg-black/75 hover:border-white/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary md:flex"
           >
             <ChevronLeft className="h-5 w-5 rtl:rotate-180" />
           </button>
@@ -296,7 +323,7 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
             aria-label="Next featured title"
             onClick={() => go(1)}
             data-testid="hero-next"
-            className="absolute end-3 top-1/2 z-20 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-background/50 text-foreground backdrop-blur-md transition hover:bg-background/80 md:flex"
+            className="absolute end-3 top-[42%] z-20 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/25 bg-black/55 text-white shadow-lg backdrop-blur-md transition hover:bg-black/75 hover:border-white/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary md:flex"
           >
             <ChevronRight className="h-5 w-5 rtl:rotate-180" />
           </button>
@@ -304,7 +331,7 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
       ) : null}
 
       <div
-        className="absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 gap-2"
+        className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 gap-1.5 md:bottom-7"
         role="tablist"
         aria-label="Featured titles"
         data-testid="hero-dots"
@@ -322,8 +349,8 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
               setFadeKey((k) => k + 1);
             }}
             className={cn(
-              'h-2 rounded-full transition-all duration-normal focus-visible:ring-2 focus-visible:ring-ring',
-              index === current ? 'w-8 bg-primary' : 'w-2 bg-foreground/35 hover:bg-foreground/55'
+              'h-1.5 rounded-full transition-all duration-normal focus-visible:ring-2 focus-visible:ring-ring',
+              index === current ? 'w-6 bg-primary/90' : 'w-1.5 bg-white/35 hover:bg-white/55'
             )}
           />
         ))}

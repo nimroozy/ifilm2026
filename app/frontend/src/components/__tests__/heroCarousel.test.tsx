@@ -99,8 +99,13 @@ describe('HeroCarousel G1 manual navigation', () => {
 
   it('shows My List control (watchlist when authenticated in mock mode)', () => {
     renderHero([movie({ id: 1, title: 'Alpha' })]);
-    expect(
-      screen.queryByTestId('watchlist-toggle') || screen.queryByTestId('hero-my-list-signin')
-    ).toBeTruthy();
+    expect(screen.getAllByTestId('watchlist-toggle').length).toBeGreaterThan(0);
+  });
+
+  it('keeps hero actions on one compact row for My List icon affordance', () => {
+    renderHero([movie({ id: 1, title: 'Alpha' }), movie({ id: 2, title: 'Beta' })]);
+    expect(screen.getByTestId('hero-actions')).toBeTruthy();
+    expect(screen.getByTestId('hero-play')).toBeTruthy();
+    expect(screen.getByTestId('hero-more-info')).toBeTruthy();
   });
 });

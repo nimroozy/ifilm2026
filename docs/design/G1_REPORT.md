@@ -1,11 +1,24 @@
 # G1 Report — Customer UI V2 Foundation & Homepage
 
 **Status:** Ready for human visual approval (do not merge automatically)  
-**PR:** [#69](https://github.com/nimroozy/ifilm2026/pull/69)
-**Head SHA:** see branch tip `cursor/customer-ui-v2-g1-homepage-4873` (implementation `8585dcd`)
+**PR:** [#69](https://github.com/nimroozy/ifilm2026/pull/69)  
+**Head SHA:** see branch tip `cursor/customer-ui-v2-g1-homepage-4873`  
 **Branch:** `cursor/customer-ui-v2-g1-homepage-4873`  
 **Baseline:** production `v1.14.3`  
 **Scope:** G1 only — no G2 detail, G3 polish, T1 backend
+
+---
+
+## Polish pass (post-draft review)
+
+| Item | Result |
+|---|---|
+| Mobile CTA density | Fixed — single row `[Play] [More Info] [+]` at ≤md; desktop keeps full labels |
+| Haroon Net branding | Customer-facing Mobin Net → **iFilm by Haroon Net** (footer, legal copy, login notes, meta). Support URLs unchanged (no invented Haroon URLs) |
+| TMDB | Still Credits-only; no footer TMDB branding; `credits-tmdb` retained |
+| Viewport matrix | **24/24 green** (8 viewports × EN/FA/PS) — see `docs/design/screenshots/g1/viewport-qa.json` |
+| Hero manual | Confirmed `data-autoplay="false"`; no timer |
+| Bundle | ~309.4 KB raw · ~100.1 KB gzip (≈stable vs prior ~308 / 99.6) |
 
 ---
 
@@ -15,125 +28,116 @@
 |---|---|
 | Tokens | `design-system/tokens.ts`, `design-system/index.ts` |
 | Header / shell | `CustomerLayout.tsx`, `DesktopNav.tsx`, `navConfig.ts` |
-| Hero | `HeroCarousel.tsx` |
+| Hero | `HeroCarousel.tsx`, `WatchlistButton.tsx` (`iconOnly`) |
 | Cards / shelves | `MediaCard.tsx`, `ContentShelf.tsx`, `SectionHeader.tsx` |
 | Home | `Index.tsx` |
-| Footer / Credits | `CustomerFooter.tsx`, `LegalPages.tsx` |
-| Tests | `heroCarousel.test.tsx`, `customerChrome.test.tsx`, `navConfig.test.ts`, `designSystem.test.tsx`, `playwright.phase3.spec.ts` |
+| Footer / branding | `CustomerFooter.tsx`, `translations.ts`, `index.html`, `LegalPages.tsx` |
+| Tests | hero / chrome / nav / design system / admin meta / playwright.phase3 |
 
 ---
 
 ## Design tokens
 
-Implemented shared primitives: surfaces, typography, spacing, radii, hero sizing, media card widths (190–230px), z-index, button/icon sizes, motion. Gold reserved for logo, primary CTA, active nav, selected controls, focus/progress accents.
+Shared primitives: surfaces, typography, spacing, radii, hero sizing, card widths (190–230px), z-index, motion. Gold reserved for logo, primary CTA, active nav, selected controls, focus/progress.
 
 ---
 
 ## Hero
 
-- Cinematic full-bleed (~62vh mobile / ~78–82vh desktop)
-- Side + bottom scrims, vignette
-- Title logo when `logoUrl` present; else styled text
-- Meta: year · rating · runtime · genres
-- Actions: Play · More Info · My List (auth → watchlist API; anon → `/login`)
-- **Manual only:** `data-autoplay="false"` — no timer / auto-advance
-- Prev/next + dots; swipe; keyboard arrows (RTL-aware)
-- Perf: active LCP preload only; idle prefetch next; `heroBackdropSrcSet` (w780/w1280)
+- Cinematic full-bleed; bottom-weighted content (not vertically centered)
+- Side + bottom scrims + vignette
+- Title logo when available; text fallback
+- Mobile meta trimmed (1 genre chip); desktop shows more
+- Actions: Play · More Info · My List (auth API / anon → `/login`)
+- **Mobile CTA row:** Play + More Info + icon My List — no stacked third full button
+- **Manual only** — prev/next/dots; swipe; keyboard; idle image prefetch only
+- Arrow controls: compact, high-contrast (`bg-black/55`), focus ring, RTL chevron flip
+- Dots subtle (`h-1.5`, short active pill)
 
 ---
 
 ## MediaCard V2
 
-- Poster density tokens unchanged/premium
-- Hover/focus overlay: Play / My List / Details + compact meta
-- Scale/lift on poster only (no grid reflow)
-- No trailer autoplay
-- Progress bar for Continue Watching
-- Episode context via `status` (`S1 · E3`)
-
----
-
-## Shelves / carousels
-
-- Manual horizontal rails; snap on mobile; hidden scrollbar
-- RTL-aware prev/next via document `dir`
-- Empty shelves still omitted
-- Auth CW / My List remain authenticated-only
+- 2:3 posters; premium density
+- Hover/focus: Play / My List / Details + **one-line** compact meta (`line-clamp-1`)
+- No layout reflow; no trailer autoplay
+- CW: thin progress bar + `S·E` via `status`
 
 ---
 
 ## Mobile navigation
 
-- Tabs: Home · Movies · Series · Search · Profile
-- Safe-area padding; content/footer clearance
-- Active gold state; Request Movie not a tab
-- Notifications icon removed (no dead control)
+Home · Movies · Series · Search · Profile — safe-area, clearance verified in matrix (no footer/nav overlap).
 
 ---
 
-## More menu
+## Footer
 
-Always: Collections · What to Watch · Dubbed · Subtitled · New Releases · Request Movie  
-Primary: Home · Movies · Series · Children · Genres
-
----
-
-## RTL
-
-Verified FA/PS: header, hero, metadata, CTAs, shelves, language control, bottom nav. Player untouched (still LTR).
+- Brand byline: **iFilm by Haroon Net**
+- Mobile: accordion sections (Discover / Company / Legal) to avoid giant vertical wall
+- Credits link; no TMDB in main footer
 
 ---
 
-## Accessibility
+## Viewport matrix result
 
-- Focus rings on cards/controls
-- Hero carousel aria roles/labels; keyboard arrows
-- Card Enter/Space + overlay buttons
-- `prefers-reduced-motion` respected (hero fade / CSS global)
+Viewports: 1920×1080, 1600×900, 1440×900, 1366×768, 1024×768, 768×1024, 430×932, 390×844  
+Locales: EN / FA / PS  
 
----
+Checked: overflow-x, title clip, CTA outside hero, bottom-nav/footer overlap, Mobin branding, autoplay flag, RTL dir.
 
-## Performance before/after
+**Failed: 0 / 24**
 
-| Metric | After (local production build) | Notes |
-|---|---|---|
-| Customer entry JS (`index-*.js` main) | ~308 KB raw · ~99.6 KB gzip | No new UI libraries |
-| Homepage API | Still aggregated `catalog/home` / `me/home` | No fan-out reintroduced |
-| Hero images | Active only + idle next | Unchanged strategy |
-| Player chunk | Separate lazy `PlayerPage` | Not in customer entry |
-
-Homepage SQL / LCP field numbers require production deploy measurement — architecture unchanged from v1.14.3.
+Artifact: `/opt/cursor/artifacts/customer-ui-v2-g1/viewport-qa.json`
 
 ---
 
-## Browser QA (G1 surfaces)
+## Performance
 
-Captured: 1440×900 EN/FA, 390×844 EN/FA/PS. Additional viewports (1920, 1600, 1366, 1024, 768, 430) should be spot-checked in review.
+| Metric | Value |
+|---|---|
+| Main customer JS | ~309.4 KB raw · ~100.1 KB gzip |
+| Home API | Aggregated `catalog/home` (unchanged) |
+| Hero images | Active LCP + idle next only |
+| New libraries | None |
 
 ---
 
 ## Screenshots
 
-| | Path |
+| Shot | Path |
 |---|---|
-| Artifacts | `/opt/cursor/artifacts/customer-ui-v2-g1/{before,after}/` |
-| Repo | `docs/design/screenshots/g1/{before,after}/` |
-
-Required: Desktop EN before/after · Desktop FA after · Mobile EN before/after · Mobile FA/PS after.
-
----
-
-## Remaining visual findings
-
-1. Mobile hero stacks three CTAs — dense on 390px; acceptable for G1, polish in G3 if needed.
-2. Footer tagline still mentions Mobin Net (branding copy deferred; TMDB removed from footer → Credits).
-3. Anonymous My List is visible and routes to sign-in (per PO).
+| Desktop EN 1440 | `docs/design/screenshots/g1/after/home-desktop-en.png` |
+| Desktop FA 1440 | `docs/design/screenshots/g1/after/home-desktop-fa.png` |
+| Mobile EN 390 | `docs/design/screenshots/g1/after/home-mobile-en.png` |
+| Mobile FA 390 | `docs/design/screenshots/g1/after/home-mobile-fa.png` |
+| Mobile PS 390 | `docs/design/screenshots/g1/after/home-mobile-ps.png` |
+| Mobile EN 430 | `docs/design/screenshots/g1/after/home-mobile-430-en.png` |
+| Before (prod) | `docs/design/screenshots/g1/before/` |
+| Artifacts | `/opt/cursor/artifacts/customer-ui-v2-g1/` |
 
 ---
 
-## Deviations
+## Ready gate checklist
 
-- Did not redesign Movie/Series detail (G2).
-- Did not redesign browse/search/filters (G3).
-- Kids profiles not implemented — `/children` curated route retained.
-- Season selector N/A in G1.
+- [x] Mobile CTA density fixed
+- [x] Haroon Net customer branding fixed
+- [x] Full viewport spot-check green
+- [x] No hero clipping
+- [x] No mobile nav overlap
+- [x] No visual RTL dir problems in matrix
+- [x] Manual hero still manual
+- [x] Performance preserved
+- [x] Targeted Vitest green
+- [ ] Human visual approval (merge gate)
+- [ ] CI green on PR
+
+---
+
+## Remaining findings (non-blocking)
+
+1. Footer social hrefs still point at existing `mobinnet.af` URLs (intentional — no invented Haroon Net URLs).
+2. Desktop hero renders both icon + labeled My List in DOM (CSS-hidden); acceptable, not customer-visible.
+3. Full CI run should be confirmed on GitHub Actions after push.
+
+**Do not auto-merge. STOP after G1 Ready — no G2 until human approval.**
