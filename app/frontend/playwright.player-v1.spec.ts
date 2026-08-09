@@ -269,11 +269,14 @@ test('episode player multi-track', async ({ page }) => {
   await page.screenshot({ path: path.join(ART, 'episode-multi-track.png') });
 });
 
-test('viewport matrix EN/FA/PS smoke', async ({ page }) => {
+test('viewport matrix EN/FA/PS smoke', async ({ browser }) => {
   for (const vp of VIEWPORTS) {
     for (const locale of LOCALES) {
+      const context = await browser.newContext({
+        viewport: { width: vp.width, height: vp.height },
+      });
+      const page = await context.newPage();
       await injectAuth(page, locale);
-      await page.setViewportSize({ width: vp.width, height: vp.height });
       await page.goto(`/movie/${META.movie_a.id}`, { waitUntil: 'networkidle' });
       await expect(page.getByTestId('movie-play-button')).toBeVisible({ timeout: 20000 });
       const overflow = await page.evaluate(() => {
@@ -295,6 +298,7 @@ test('viewport matrix EN/FA/PS smoke', async ({ page }) => {
       await page.screenshot({
         path: path.join(ART, `matrix-${vp.name}-${locale}-player.png`),
       });
+      await context.close();
     }
   }
 });
