@@ -39,6 +39,7 @@ describe('design system', () => {
 
   it('uses premium poster density tokens and two-line titles', () => {
     expect(mediaSizes.posterMd).toMatch(/210px|220px/);
+    expect(mediaSizes.posterLg).toMatch(/230px/);
     expect(mediaGridClass).toContain('grid-cols-2');
     expect(mediaGridClass).toContain('xl:grid-cols-6');
     expect(mediaGridClass).not.toContain('xl:grid-cols-8');

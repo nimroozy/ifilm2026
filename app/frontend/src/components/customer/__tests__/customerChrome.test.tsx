@@ -26,7 +26,7 @@ function wrap(ui: ReactNode, path = '/') {
 describe('customer navigation and footer chrome', () => {
   beforeEach(() => {
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-      matches: String(query).includes('1536'),
+      matches: false,
       media: query,
       onchange: null,
       addListener: vi.fn(),
@@ -39,15 +39,17 @@ describe('customer navigation and footer chrome', () => {
 
   afterEach(() => cleanup());
 
-  it('renders desktop nav destinations including Phase 3 links', () => {
+  it('renders G1 primary desktop nav and More destinations', () => {
     wrap(<div>home</div>, '/');
     const nav = screen.getByTestId('desktop-nav');
     expect(within(nav).getByTestId('desktop-nav-home')).toBeTruthy();
+    expect(within(nav).getByTestId('desktop-nav-movies')).toBeTruthy();
+    expect(within(nav).getByTestId('desktop-nav-series')).toBeTruthy();
+    expect(within(nav).getByTestId('desktop-nav-children')).toBeTruthy();
     expect(within(nav).getByTestId('desktop-nav-genres')).toBeTruthy();
-    expect(within(nav).getByTestId('desktop-nav-dubbed')).toBeTruthy();
-    expect(within(nav).getByTestId('desktop-nav-subtitled')).toBeTruthy();
-    expect(within(nav).getByTestId('desktop-nav-newReleases')).toBeTruthy();
-    expect(within(nav).getByTestId('desktop-nav-collections')).toBeTruthy();
+    expect(within(nav).getByTestId('desktop-nav-more')).toBeTruthy();
+    expect(within(nav).queryByTestId('desktop-nav-dubbed')).toBeNull();
+    expect(screen.queryByLabelText(/notifications/i)).toBeNull();
   });
 
   it('marks active route for nested movie detail', () => {
@@ -56,7 +58,7 @@ describe('customer navigation and footer chrome', () => {
     expect(screen.getByTestId('desktop-nav-home')).toHaveAttribute('data-active', 'false');
   });
 
-  it('renders complete footer links, TMDB attribution, and real social only', () => {
+  it('renders footer links with Credits route instead of prominent TMDB', () => {
     wrap(<div>home</div>, '/');
     expect(screen.getByTestId('customer-footer')).toBeTruthy();
     expect(screen.getByTestId('footer-link-about')).toBeTruthy();
@@ -65,7 +67,8 @@ describe('customer navigation and footer chrome', () => {
     expect(screen.getByTestId('footer-link-privacy')).toBeTruthy();
     expect(screen.getByTestId('footer-link-terms')).toBeTruthy();
     expect(screen.getByTestId('footer-link-copyright')).toBeTruthy();
-    expect(screen.getByTestId('footer-tmdb')).toHaveTextContent(/TMDB/i);
+    expect(screen.getByTestId('footer-credits-link')).toHaveAttribute('href', '/credits');
+    expect(screen.queryByTestId('footer-tmdb')).toBeNull();
     expect(screen.getByTestId('footer-social-website')).toHaveAttribute(
       'href',
       'https://mobinnet.af/'
@@ -77,31 +80,30 @@ describe('customer navigation and footer chrome', () => {
     expect(screen.queryByText(/app store|google play/i)).toBeNull();
   });
 
-  it('opens mobile sheet with catalog and legal destinations', async () => {
+  it('opens mobile sheet with primary, More, and legal destinations', async () => {
     wrap(<div>home</div>, '/');
     fireEvent.click(screen.getByTestId('mobile-nav-trigger'));
     expect(await screen.findByTestId('mobile-nav-sheet')).toBeTruthy();
     expect(screen.getByTestId('mobile-nav-genres')).toBeTruthy();
+    expect(screen.getByTestId('mobile-nav-collections')).toBeTruthy();
+    expect(screen.getByTestId('mobile-nav-requestMovie')).toBeTruthy();
     expect(screen.getByTestId('mobile-footer-privacy')).toBeTruthy();
   });
 
-  it('collapses secondary desktop destinations into More below xl', () => {
-    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-      matches: false,
-      media: query,
-      onchange: null,
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    }));
+  it('keeps More menu for secondary destinations and marks overflow active', () => {
     wrap(<div>home</div>, '/dubbed');
     const more = screen.getByTestId('desktop-nav-more');
     expect(more).toBeTruthy();
     expect(more).toHaveAttribute('aria-haspopup', 'menu');
-    // Secondary destinations leave the inline row; More reflects active overflow route.
     expect(screen.queryByTestId('desktop-nav-dubbed')).toBeNull();
     expect(more.className).toMatch(/text-primary/);
+  });
+
+  it('renders mobile bottom nav without Request Movie tab', () => {
+    wrap(<div>home</div>, '/');
+    expect(screen.getByTestId('bottom-nav-home')).toBeTruthy();
+    expect(screen.getByTestId('bottom-nav-search')).toBeTruthy();
+    expect(screen.getByTestId('bottom-nav-profile')).toBeTruthy();
+    expect(screen.queryByTestId('bottom-nav-requestMovie')).toBeNull();
   });
 });

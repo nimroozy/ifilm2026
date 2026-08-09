@@ -46,7 +46,10 @@ export default function AboutPage() {
           <h2 id="credits-heading" className="text-xl font-semibold text-foreground">
             {t.legal.creditsTitle}
           </h2>
-          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+          <p
+            className="mt-3 text-sm leading-relaxed text-muted-foreground"
+            data-testid="credits-tmdb"
+          >
             {t.footer.tmdbAttribution}{' '}
             <a
               href={TMDB_WEBSITE}

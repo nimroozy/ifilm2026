@@ -6,10 +6,7 @@ import {
   FOOTER_LEGAL_PATHS,
 } from '@/components/customer/navConfig';
 import { getAppVersion } from '@/lib/appVersion';
-import {
-  FOOTER_SOCIAL_LINKS,
-  TMDB_WEBSITE,
-} from '@/lib/siteLinks';
+import { FOOTER_SOCIAL_LINKS } from '@/lib/siteLinks';
 
 function footerLabel(
   id: string,
@@ -122,17 +119,14 @@ export default function CustomerFooter() {
         </div>
 
         <div className="mt-10 space-y-3 border-t border-border pt-6">
-          <p className="text-xs leading-relaxed text-muted-foreground" data-testid="footer-tmdb">
-            {t.footer.tmdbAttribution}{' '}
-            <a
-              href={TMDB_WEBSITE}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary underline-offset-4 hover:underline"
-            >
-              TMDB
-            </a>
-            .
+          <p className="text-xs text-muted-foreground">
+            <Link to="/credits" className="hover:text-primary" data-testid="footer-credits-link">
+              {t.footer.credits}
+            </Link>
+            <span className="mx-2 text-border" aria-hidden>
+              ·
+            </span>
+            {t.footer.tagline}
           </p>
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
             <p data-testid="footer-rights">{rights}</p>

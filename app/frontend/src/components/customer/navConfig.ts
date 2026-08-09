@@ -23,23 +23,7 @@ export type CustomerNavItem = {
   matchPrefixes?: string[];
 };
 
-/** Primary catalog destinations, including Collections V1. */
-export const DESKTOP_NAV_ITEMS: CustomerNavItem[] = [
-  { id: 'home', path: '/' },
-  { id: 'movies', path: '/movies', matchPrefixes: ['/movie/'] },
-  { id: 'series', path: '/series', matchPrefixes: ['/series/'] },
-  { id: 'children', path: '/children' },
-  { id: 'genres', path: '/genres' },
-  { id: 'collections', path: '/collections', matchPrefixes: ['/collections/'] },
-  { id: 'dubbed', path: '/dubbed' },
-  { id: 'subtitled', path: '/subtitled' },
-  { id: 'newReleases', path: '/new-releases' },
-  { id: 'whatToWatch', path: '/what-to-watch' },
-  { id: 'requestMovie', path: '/request' },
-  { id: 'myList', path: '/watchlist' },
-];
-
-/** Always visible on md+ before overflow measurement; remainder go into More. */
+/** Always-visible desktop primary destinations (G1 Header V2). */
 export const DESKTOP_NAV_PRIMARY_IDS: CustomerNavId[] = [
   'home',
   'movies',
@@ -47,6 +31,40 @@ export const DESKTOP_NAV_PRIMARY_IDS: CustomerNavId[] = [
   'children',
   'genres',
 ];
+
+/**
+ * Desktop/mobile More menu — product-owner approved destinations only.
+ * Uses real routes; no fake links.
+ */
+export const DESKTOP_NAV_MORE_IDS: CustomerNavId[] = [
+  'collections',
+  'whatToWatch',
+  'dubbed',
+  'subtitled',
+  'newReleases',
+  'requestMovie',
+];
+
+/** Full catalog destinations for sheet/footer discovery (excludes My List — profile owns that). */
+export const DESKTOP_NAV_ITEMS: CustomerNavItem[] = [
+  { id: 'home', path: '/' },
+  { id: 'movies', path: '/movies', matchPrefixes: ['/movie/'] },
+  { id: 'series', path: '/series', matchPrefixes: ['/series/'] },
+  { id: 'children', path: '/children' },
+  { id: 'genres', path: '/genres' },
+  { id: 'collections', path: '/collections', matchPrefixes: ['/collections/'] },
+  { id: 'whatToWatch', path: '/what-to-watch' },
+  { id: 'dubbed', path: '/dubbed' },
+  { id: 'subtitled', path: '/subtitled' },
+  { id: 'newReleases', path: '/new-releases' },
+  { id: 'requestMovie', path: '/request' },
+];
+
+/** @deprecated Prefer DESKTOP_NAV_MORE_IDS — kept for tests migrating off myList-in-nav. */
+export const WATCHLIST_NAV_ITEM: CustomerNavItem = {
+  id: 'myList',
+  path: '/watchlist',
+};
 
 export const MOBILE_BOTTOM_NAV: CustomerNavItem[] = [
   { id: 'home', path: '/' },
@@ -79,6 +97,11 @@ export const FOOTER_LEGAL_PATHS = [
   { id: 'copyright' as const, path: '/copyright' },
   { id: 'credits' as const, path: '/credits' },
 ];
+
+export function navItemById(id: CustomerNavId): CustomerNavItem | undefined {
+  if (id === 'myList') return WATCHLIST_NAV_ITEM;
+  return DESKTOP_NAV_ITEMS.find((item) => item.id === id);
+}
 
 export function isNavActive(pathname: string, item: CustomerNavItem): boolean {
   if (item.path === '/') return pathname === '/';
