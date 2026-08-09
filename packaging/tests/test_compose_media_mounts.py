@@ -156,6 +156,31 @@ class ComposeMediaMountTests(unittest.TestCase):
                 )
                 self.assertIn("app.workers.media_processing", body)
 
+    def test_publishing_worker_healthcheck_overrides_api_probe(self) -> None:
+        for compose in COMPOSE_FILES:
+            with self.subTest(compose=str(compose.relative_to(ROOT))):
+                text = compose.read_text()
+                if "publishing-worker:" not in text:
+                    continue
+                body = _service_block(text, "publishing-worker")
+                self.assertIn(
+                    "healthcheck:",
+                    body,
+                    f"{compose.relative_to(ROOT)}: publishing-worker missing healthcheck",
+                )
+                self.assertIn("app.workers.publishing", body)
+                self.assertIn("--healthcheck", body)
+                self.assertNotIn(
+                    "127.0.0.1:8000",
+                    body,
+                    f"{compose.relative_to(ROOT)}: publishing-worker must not probe API :8000",
+                )
+                self.assertNotIn(
+                    "/api/health/live",
+                    body,
+                    f"{compose.relative_to(ROOT)}: publishing-worker must not use API live probe",
+                )
+
     def test_release_compose_tree_has_no_media_categories_hotfix_override(self) -> None:
         override = ROOT / "packaging/compose/docker-compose.media-categories.override.yml"
         self.assertFalse(

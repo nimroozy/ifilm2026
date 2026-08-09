@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import unquote
@@ -65,6 +66,20 @@ async def lifespan(_: FastAPI):
     install_token_redaction_logging()
     # Schema changes are applied only via Alembic migrations.
     # Demo/admin seed data is created only by the explicit seed command.
+    # Merge newly introduced Super Admin capabilities on upgrade (idempotent).
+    try:
+        from app.bootstrap import ensure_super_admin_permissions
+        from app.db.session import SessionLocal
+
+        db = SessionLocal()
+        try:
+            if ensure_super_admin_permissions(db):
+                db.commit()
+        finally:
+            db.close()
+    except Exception:
+        # Never block API boot on optional permission merge.
+        logging.getLogger(__name__).exception("Super Admin permission merge skipped")
     yield
 
 

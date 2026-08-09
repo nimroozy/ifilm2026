@@ -412,6 +412,68 @@ def test_rbac_collection_only_denied(client, db_session):
     )
 
 
+def test_rbac_role_matrix_catalog_reviewer_super(client, db_session):
+    """Catalog Manager manage, Reviewer read-only, Super Admin manage after bootstrap merge."""
+    from app.bootstrap import SUPER_PERMISSIONS, ensure_super_admin_permissions
+    from app.services.demo.constants import ADMIN_FIXTURES
+
+    _user, token = _subscriber(db_session, username="cr-rbac-matrix")
+    created = client.post(
+        "/api/me/content-requests",
+        headers=_headers(token),
+        json={"request_type": "movie", "title": "RBAC Matrix Film"},
+    ).json()["request"]["id"]
+
+    demo_by_role = {a["role_name"]: a["permissions"] for a in ADMIN_FIXTURES}
+    _cm, cm_token = _admin(
+        db_session,
+        permissions=list(demo_by_role["Catalog Manager"]),
+        username="cr-catalog-manager",
+    )
+    _rev, rev_token = _admin(
+        db_session,
+        permissions=list(demo_by_role["Reviewer"]),
+        username="cr-reviewer",
+    )
+
+    # Super Admin role repaired by startup helper
+    ensure_super_admin_permissions(db_session)
+    db_session.commit()
+    _sa, sa_token = _admin(
+        db_session, permissions=list(SUPER_PERMISSIONS), username="cr-super-admin"
+    )
+
+    assert client.get("/api/admin/content-requests", headers=_headers(cm_token)).status_code == 200
+    assert (
+        client.post(
+            f"/api/admin/content-requests/{created}/actions",
+            headers=_headers(cm_token),
+            json={"action": "review"},
+        ).status_code
+        == 200
+    )
+
+    assert client.get("/api/admin/content-requests", headers=_headers(rev_token)).status_code == 200
+    assert (
+        client.post(
+            f"/api/admin/content-requests/{created}/actions",
+            headers=_headers(rev_token),
+            json={"action": "approve"},
+        ).status_code
+        == 403
+    )
+
+    assert client.get("/api/admin/content-requests", headers=_headers(sa_token)).status_code == 200
+    assert (
+        client.post(
+            f"/api/admin/content-requests/{created}/actions",
+            headers=_headers(sa_token),
+            json={"action": "approve"},
+        ).status_code
+        == 200
+    )
+
+
 def test_url_validation_rejects_bad_hosts(client, db_session):
     _user, token = _subscriber(db_session, username="cr-url")
     bad = client.post(

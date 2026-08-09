@@ -69,6 +69,38 @@ DEFAULT_ENCODING_PROFILES = [
 ]
 
 
+REQUIRED_SUPER_ADMIN_PERMISSIONS = (
+    "content_requests.read",
+    "content_requests.manage",
+)
+
+
+def ensure_super_admin_permissions(db: Session) -> bool:
+    """Ensure Super Admin has the full SUPER_PERMISSIONS set (idempotent).
+
+    Safe for production startup:
+    - creates the Super Admin role when missing (no users / passwords touched)
+    - merges newly introduced capabilities without duplicates
+    - never removes existing permissions or renames roles
+
+    Returns True when the role row was created or permissions changed.
+    """
+    role = db.query(AdminRole).filter(AdminRole.name == "Super Admin").one_or_none()
+    if role is None:
+        role = AdminRole(name="Super Admin", permissions=list(SUPER_PERMISSIONS))
+        db.add(role)
+        db.flush()
+        return True
+    current = list(role.permissions or [])
+    merged = list(dict.fromkeys([*current, *SUPER_PERMISSIONS]))
+    if merged == current:
+        return False
+    role.permissions = merged
+    db.add(role)
+    db.flush()
+    return True
+
+
 def seed_encoding_profiles(db: Session) -> int:
     """Insert missing default encoding profiles. Returns count inserted."""
     inserted = 0
