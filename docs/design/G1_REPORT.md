@@ -2,7 +2,7 @@
 
 **Status:** Ready for human visual approval (do not merge automatically)  
 **PR:** [#69](https://github.com/nimroozy/ifilm2026/pull/69)
-**Head SHA:** `e33ac108c0ece38f28b2c79bee3e4010c21a51a0`  
+**Head SHA:** see branch tip `cursor/customer-ui-v2-g1-homepage-4873` (implementation `8585dcd`)
 **Branch:** `cursor/customer-ui-v2-g1-homepage-4873`  
 **Baseline:** production `v1.14.3`  
 **Scope:** G1 only — no G2 detail, G3 polish, T1 backend
