@@ -3,9 +3,9 @@
 **Status:** READY for human visual approval (Draft PR)  
 **PR:** https://github.com/nimroozy/ifilm2026/pull/75  
 **Branch:** `cursor/g2b-series-detail-impl-4873`  
-**Head SHA:** `8794fcc21f682a1ed85360812c9d96f5ad5c367f`  
+**Head SHA:** `74e060b4dbf1d6f39aa56ad326457c3ad9dc73b6`  
 **Baseline:** production `v1.16.0`  
-**Ready-fix commit:** `9e984ff890116db5423ae6b3ed64638b0a126dc3`  
+**Ready-fix commit:** `8794fcc21f682a1ed85360812c9d96f5ad5c367f`  
 **Planning PR (unchanged):** #74  
 
 **Do not merge or deploy** until human approval.
@@ -22,14 +22,14 @@
 | Frontend build | PASS (`vite build`) |
 | Secret build scan | PASS (`scan-build-secrets`) |
 | Customer initial JS budget | PASS (raw ~692 KB; fail budget 800 KB) |
-| Backend CI (GitHub `quality`) | Pending on tip after mypy fix (`catalog_list` assignment narrowing) |
+| Backend CI (GitHub `quality`) | PASS |
 | Backend series credit tests | PASS (`test_series_detail_credits.py`) |
 | Backend query-ceiling / list perf | PASS (`test_catalog_list_perf.py`) |
 | Episode season SQL measurement | PASS (`test_series_episode_list_query_counts.py`) — flat after batch fix |
 | G2a CastRail / Movie Detail regression | PASS (`MovieDetailHero.test.tsx` + movie 6s trailer in `catalogDemoUi.test.tsx`) |
 | BLOCKER / HIGH | None |
 
-Prior Frontend CI failure at head `0c5aa6f` was typecheck-only (`stabilize`). Re-verify GitHub Frontend CI on this tip after push.
+GitHub Frontend `stabilize` and Backend `quality` both PASS on tip `74e060b` (and Ready-fix `8794fcc`).
 
 ---
 
