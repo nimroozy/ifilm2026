@@ -22,7 +22,6 @@ from app.schemas.content import (
 from app.services.catalog import (
     apply_sort,
     ensure_unique_imdb,
-    episode_out,
     filter_catalog_query,
     get_series,
     load_genres,
@@ -34,13 +33,12 @@ from app.services.catalog import (
     soft_delete,
     utcnow,
 )
-from app.services.catalog_list import episodes_list_out
 from app.services.catalog_availability import (
     availability_for_series,
     item_has_dub,
     item_has_subtitles,
 )
-from app.services.catalog_list import series_card_out
+from app.services.catalog_list import episodes_list_out, series_card_out
 from app.services.publishing import workflow as publishing_workflow
 
 router = APIRouter(tags=["series"])

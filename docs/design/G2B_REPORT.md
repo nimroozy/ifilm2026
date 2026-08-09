@@ -3,7 +3,7 @@
 **Status:** READY for human visual approval (Draft PR)  
 **PR:** https://github.com/nimroozy/ifilm2026/pull/75  
 **Branch:** `cursor/g2b-series-detail-impl-4873`  
-**Head SHA:** `3a746ff47cbe6336b12f763d6bd996dd8c93cce2`  
+**Head SHA:** `e56b813a1ee0dedfd49ebb6a0084bf4fdd84865c`  
 **Baseline:** production `v1.16.0`  
 **Ready-fix commit:** `9e984ff890116db5423ae6b3ed64638b0a126dc3`  
 **Planning PR (unchanged):** #74  
@@ -17,12 +17,12 @@
 | Gate | Result |
 |------|--------|
 | Frontend lint | PASS (`eslint --quiet ./src`) |
-| Frontend typecheck | PASS (`tsc -b`) — prior CI failure fixed |
+| Frontend typecheck | PASS locally + GitHub `stabilize` PASS |
 | Frontend tests | PASS (246) |
 | Frontend build | PASS (`vite build`) |
 | Secret build scan | PASS (`scan-build-secrets`) |
 | Customer initial JS budget | PASS (raw ~692 KB; fail budget 800 KB) |
-| Backend CI (GitHub `quality` on prior head `0c5aa6f`) | SUCCESS |
+| Backend CI (GitHub `quality`) | Re-run after ruff import fix (prior tip failed I001/F401 on `series.py`) |
 | Backend series credit tests | PASS (`test_series_detail_credits.py`) |
 | Backend query-ceiling / list perf | PASS (`test_catalog_list_perf.py`) |
 | Episode season SQL measurement | PASS (`test_series_episode_list_query_counts.py`) — flat after batch fix |
