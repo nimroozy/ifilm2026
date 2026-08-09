@@ -14,7 +14,7 @@ MEDIA = ROOT / "media"
 ARTWORK = ROOT / "artwork"
 for p in (MEDIA, ARTWORK):
     p.mkdir(parents=True, exist_ok=True)
-for cat in ("originals", "trailers", "subtitles", "posters", "backdrops", "temp", "packages"):
+for cat in ("originals", "trailers", "subtitles", "audio", "posters", "backdrops", "temp", "packages"):
     (MEDIA / cat).mkdir(parents=True, exist_ok=True)
 
 os.environ["APP_ENV"] = "development"

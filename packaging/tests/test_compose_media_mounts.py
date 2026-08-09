@@ -13,7 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-UPLOAD_CATEGORIES = ("originals", "trailers", "subtitles", "posters", "backdrops")
+UPLOAD_CATEGORIES = ("originals", "trailers", "subtitles", "audio", "posters", "backdrops")
 
 COMPOSE_FILES = (
     ROOT / "packaging/compose/docker-compose.production.yml",

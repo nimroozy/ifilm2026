@@ -601,7 +601,7 @@ def test_upload_crosses_mid_progress_flush_boundary(client, admin_headers):
 
 def test_storage_layout_and_path_generation():
     root = ensure_media_layout()
-    for name in ("originals", "posters", "backdrops", "trailers", "subtitles", "temp"):
+    for name in ("originals", "posters", "backdrops", "trailers", "subtitles", "audio", "temp"):
         assert (root / name).is_dir()
     assert root == media_root()
     assert Path(root).is_absolute()

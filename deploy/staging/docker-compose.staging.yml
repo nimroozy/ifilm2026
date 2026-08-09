@@ -111,6 +111,7 @@ services:
       - staging_media_temp:/data/media/temp
       - staging_media_trailers:/data/media/trailers
       - staging_media_subtitles:/data/media/subtitles
+      - staging_media_audio:/data/media/audio
       - staging_media_posters:/data/media/posters
       - staging_media_backdrops:/data/media/backdrops
       - type: volume
@@ -152,6 +153,7 @@ services:
       - staging_media_originals:/data/media/originals:ro
       - staging_media_trailers:/data/media/trailers:ro
       - staging_media_subtitles:/data/media/subtitles:ro
+      - staging_media_audio:/data/media/audio:ro
       - staging_media_posters:/data/media/posters:ro
       - staging_media_backdrops:/data/media/backdrops:ro
       - staging_media_packages:/data/media/packages
@@ -253,6 +255,7 @@ volumes:
   staging_media_temp:
   staging_media_trailers:
   staging_media_subtitles:
+  staging_media_audio:
   staging_media_posters:
   staging_media_backdrops:
   staging_media_packages:

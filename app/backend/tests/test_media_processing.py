@@ -499,7 +499,7 @@ def test_worker_mount_health_ok_when_all_mounts_available(monkeypatch, tmp_path)
 
 @pytest.mark.parametrize(
     "missing_category",
-    ["originals", "trailers", "subtitles", "posters", "backdrops"],
+    ["originals", "trailers", "subtitles", "audio", "posters", "backdrops"],
 )
 def test_worker_unhealthy_when_required_mount_missing(monkeypatch, tmp_path, missing_category):
     from app.services.media_processing.mount_health import (

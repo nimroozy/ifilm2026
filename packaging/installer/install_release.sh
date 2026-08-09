@@ -75,6 +75,7 @@ create_dirs() {
     "$IFILM_VAR/media/posters" \
     "$IFILM_VAR/media/backdrops" \
     "$IFILM_VAR/media/subtitles" \
+    "$IFILM_VAR/media/audio" \
     "$IFILM_VAR/artwork" \
     "$IFILM_VAR/backups" \
     "$IFILM_HOME/agent" \

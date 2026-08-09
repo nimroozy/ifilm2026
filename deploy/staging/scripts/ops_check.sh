@@ -112,7 +112,7 @@ PY
   echo "==> Shared upload category visibility (API write ↔ worker read)"
   # Regression: trailers uploaded via API must be visible to the probe worker.
   marker="ops-check-$(date +%s)-$$"
-  for category in originals trailers subtitles posters backdrops; do
+  for category in originals trailers subtitles audio posters backdrops; do
     "${COMPOSE[@]}" exec -T backend-api sh -c \
       "mkdir -p /data/media/${category}/.ops && printf '%s' '${marker}' > /data/media/${category}/.ops/shared.txt" \
       && ok "api wrote ${category}/.ops/shared.txt" || bad "api wrote ${category}/.ops/shared.txt"
