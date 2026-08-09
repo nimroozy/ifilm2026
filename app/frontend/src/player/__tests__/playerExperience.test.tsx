@@ -77,6 +77,19 @@ describe('PlayerControls AirPlay / LTR', () => {
     expect(screen.getByTestId('audio-selector')).toBeTruthy();
     expect(screen.getByTestId('subtitle-selector')).toBeTruthy();
   });
+
+  it('hides audio selector for single track and subtitle selector when none', () => {
+    render(
+      <PlayerControls
+        {...baseProps}
+        audioTracks={[{ id: 0, name: 'English', lang: 'en' }]}
+        subtitleTracks={[]}
+        labels={{ audio: 'Audio', subtitles: 'Subtitles', off: 'Off' }}
+      />
+    );
+    expect(screen.queryByTestId('audio-selector')).toBeNull();
+    expect(screen.queryByTestId('subtitle-selector')).toBeNull();
+  });
 });
 
 describe('track label i18n', () => {
