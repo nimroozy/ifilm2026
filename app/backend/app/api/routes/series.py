@@ -34,6 +34,7 @@ from app.services.catalog import (
     soft_delete,
     utcnow,
 )
+from app.services.catalog_list import episodes_list_out
 from app.services.catalog_availability import (
     availability_for_series,
     item_has_dub,
@@ -233,7 +234,9 @@ def list_public_episodes(
     locale: str | None = Query(None, description="UI locale: en|fa|ps"),
 ) -> list[EpisodeOut]:
     series = resolve_series(db, id_or_slug, published_only=True)
-    return [episode_out(e, db, locale=locale) for e in _public_episodes(series, season)]
+    return episodes_list_out(
+        db, _public_episodes(series, season), series=series, locale=locale
+    )
 
 
 @router.get("/admin/series", response_model=Envelope[SeriesOut])

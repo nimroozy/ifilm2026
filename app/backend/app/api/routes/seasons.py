@@ -24,6 +24,7 @@ from app.services.catalog import (
     soft_delete,
     utcnow,
 )
+from app.services.catalog_list import episodes_list_out
 from app.services.publishing import workflow as publishing_workflow
 
 router = APIRouter(tags=["seasons"])
@@ -55,7 +56,7 @@ def list_public_season_episodes(season_id: int, db: DbSession) -> list[EpisodeOu
         ],
         key=lambda e: e.episode_number,
     )
-    return [episode_out(e, db) for e in episodes]
+    return episodes_list_out(db, episodes, series=season.series)
 
 
 def _get_season(db: DbSession, season_id: int) -> Season:

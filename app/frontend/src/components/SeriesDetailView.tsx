@@ -114,6 +114,7 @@ function EpisodeRow({
     subtitles: string;
     dubbed: string;
     subtitled: string;
+    multiAudio: string;
     english: string;
     persian: string;
     pashto: string;
@@ -134,6 +135,7 @@ function EpisodeRow({
   const tracks = movieDetailTrackGroups(episode as never, {
     dubbed: labels.dubbed,
     subtitled: labels.subtitled,
+    multiAudio: labels.multiAudio,
     persianDubbed: labels.persianDubbed,
     pashtoDubbed: labels.pashtoDubbed,
     english: labels.english,
@@ -343,6 +345,7 @@ export function SeriesDetailView({
     subtitles: t.movie.subtitles,
     dubbed: t.movie.dubbed,
     subtitled: t.nav.subtitled,
+    multiAudio: 'Multi Audio',
     english: t.player.english,
     persian: t.player.persian === 'Persian' ? 'فارسی' : t.player.persian,
     pashto: t.player.pashto === 'Pashto' ? 'پښتو' : t.player.pashto,

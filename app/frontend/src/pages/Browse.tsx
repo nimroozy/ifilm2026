@@ -34,7 +34,7 @@ import type { MovieWatchState } from '@/components/MovieDetailView';
 import {
   catalogAvailabilityBadges,
 } from '@/lib/catalogAvailability';
-import { hasDemoClip } from '@/lib/catalogPresentation';
+import { canPlayFullMovie, hasDemoClip } from '@/lib/catalogPresentation';
 import { MediaCard, mediaGridClass } from '@/design-system';
 import { MovieDetailView } from '@/components/MovieDetailView';
 import {

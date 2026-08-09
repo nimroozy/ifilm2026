@@ -333,7 +333,11 @@ def localized_series_fields(
 
 
 def localized_episode_fields(
-    db: Session, episode: Any, locale: Locale
+    db: Session,
+    episode: Any,
+    locale: Locale,
+    *,
+    preloaded_rows: list[ContentTranslation] | None = None,
 ) -> dict[str, Any]:
     title, title_src = resolve_text(
         db,
@@ -342,6 +346,7 @@ def localized_episode_fields(
         field_key="title",
         locale=locale,
         canonical=str(episode.title or ""),
+        preloaded_rows=preloaded_rows,
     )
     description, desc_src = resolve_text(
         db,
@@ -350,6 +355,7 @@ def localized_episode_fields(
         field_key="description",
         locale=locale,
         canonical=str(episode.description or ""),
+        preloaded_rows=preloaded_rows,
     )
     return {
         "title": title or episode.title,
