@@ -3,7 +3,7 @@
 **Status:** READY for human visual approval (Draft PR)  
 **PR:** https://github.com/nimroozy/ifilm2026/pull/75  
 **Branch:** `cursor/g2b-series-detail-impl-4873`  
-**Head SHA:** `ed71846571a7c9a15d5a4705aa538cd25336c3c5`  
+**Head SHA:** `c6d22758fed90ef5d17bb113bd5f74dbf4633a10`  
 **Baseline:** production `v1.16.0`  
 **Ready-fix commit:** `8794fcc21f682a1ed85360812c9d96f5ad5c367f`  
 **Planning PR (unchanged):** #74  
@@ -29,7 +29,7 @@
 | G2a CastRail / Movie Detail regression | PASS (`MovieDetailHero.test.tsx` + movie 6s trailer in `catalogDemoUi.test.tsx`) |
 | BLOCKER / HIGH | None |
 
-GitHub Frontend `stabilize` and Backend `quality` both PASS on Ready-fix `8794fcc` and subsequent tip.
+GitHub Frontend `stabilize` and Backend `quality` both PASS on Ready-fix `8794fcc` and tip `c6d2275`.
 
 ---
 
