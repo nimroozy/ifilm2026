@@ -1,8 +1,8 @@
 # G1 Report — Customer UI V2 Foundation & Homepage
 
 **Status:** Ready for human visual approval (do not merge automatically)  
-**PR:** pending open
-**Head SHA:** `8585dcda08a0f59088a113c8183c2274d0404992`  
+**PR:** [#69](https://github.com/nimroozy/ifilm2026/pull/69)
+**Head SHA:** `16ce7066e836950342ab5f763f76639a17dad338`  
 **Branch:** `cursor/customer-ui-v2-g1-homepage-4873`  
 **Baseline:** production `v1.14.3`  
 **Scope:** G1 only — no G2 detail, G3 polish, T1 backend
