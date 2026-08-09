@@ -159,16 +159,27 @@ test('multi-audio and subtitle selectors from live HLS', async ({ page }) => {
   const audio = page.getByTestId('audio-selector');
   await expect(audio).toBeVisible({ timeout: 20000 });
   await audio.click();
-  const audioText = await page.locator('[role="listbox"], [data-radix-select-viewport], body').innerText();
-  // Factual language identity in EN UI
-  expect(audioText).toMatch(/English|Persian|Pashto/i);
+  const audioList = page.getByRole('listbox');
+  await expect(audioList).toBeVisible();
+  const audioText = await audioList.innerText();
+  // Factual language identity in EN UI — English + dubbed FA/PS
+  expect(audioText).toMatch(/English/i);
+  expect(audioText).toMatch(/Persian/i);
+  expect(audioText).toMatch(/Pashto/i);
+  // No duplicate English entries
+  expect(audioText.match(/English/gi)?.length ?? 0).toBe(1);
   await page.keyboard.press('Escape');
 
   const subs = page.getByTestId('subtitle-selector');
   await expect(subs).toBeVisible();
   await subs.click();
-  const subText = await page.locator('body').innerText();
-  expect(subText).toMatch(/Off|English|Persian|Pashto/i);
+  const subList = page.getByRole('listbox');
+  await expect(subList).toBeVisible();
+  const subText = await subList.innerText();
+  expect(subText).toMatch(/Off/i);
+  expect(subText).toMatch(/English/i);
+  expect(subText).toMatch(/Persian/i);
+  expect(subText).toMatch(/Pashto/i);
   await page.keyboard.press('Escape');
 
   // Switch audio without restarting from 0
@@ -178,16 +189,15 @@ test('multi-audio and subtitle selectors from live HLS', async ({ page }) => {
   });
   await page.waitForTimeout(400);
   await audio.click();
-  const option = page.getByRole('option').filter({ hasText: /Persian|Pashto|فارسی|پښتو/i }).first();
-  if (await option.count()) {
-    await option.click();
-    await page.waitForTimeout(800);
-    const t = await page.evaluate(() => {
-      const video = document.querySelector('[data-testid="player-video"]') as HTMLVideoElement;
-      return video?.currentTime ?? 0;
-    });
-    expect(t).toBeGreaterThan(3);
-  }
+  const option = page.getByRole('option').filter({ hasText: /Persian/i }).first();
+  await expect(option).toBeVisible();
+  await option.click();
+  await page.waitForTimeout(800);
+  const t = await page.evaluate(() => {
+    const video = document.querySelector('[data-testid="player-video"]') as HTMLVideoElement;
+    return video?.currentTime ?? 0;
+  });
+  expect(t).toBeGreaterThan(3);
   await page.screenshot({ path: path.join(ART, 'multi-audio-selector.png') });
 });
 
