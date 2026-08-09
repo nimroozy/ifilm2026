@@ -209,9 +209,17 @@ def series_out(
     public_counts: bool = False,
     db: Session | None = None,
     locale: str | None = None,
+    include_credits: bool = False,
 ) -> SeriesOut:
-    from app.schemas.content import LocalizationSourcesOut
+    """Serialize a series.
+
+    Credits are opt-in via ``include_credits`` so browse/list/search/home callers
+    that reuse ``series_out`` do not pay for cast payload or ``series_cast_credits``
+    queries. Public detail and admin detail pass ``include_credits=True``.
+    """
+    from app.schemas.content import CastCreditOut, LocalizationSourcesOut
     from app.services.content_i18n import localized_series_fields, normalize_locale
+    from app.services.tmdb.credits import list_series_credits
 
     genres = [genre_out(g, movie_count=0, series_count=0) for g in (series.genre_links or [])]
     if public_counts:
@@ -222,6 +230,21 @@ def series_out(
         season_count = len(seasons)
         episode_count = sum(len([e for e in (s.episodes or []) if e.deleted_at is None]) for s in seasons)
     audio_av, sub_av = availability_for_series(series, db)
+    credits_out: list[CastCreditOut] = []
+    credits_synced_at = None
+    if include_credits and db is not None:
+        credits_synced_at = getattr(series, "credits_synced_at", None)
+        for row in list_series_credits(db, series.id):
+            credits_out.append(
+                CastCreditOut(
+                    person_id=row.tmdb_person_id,
+                    name=row.name,
+                    character=row.character_name or "",
+                    profile_path=row.profile_path or "",
+                    profile_url=row.profile_url or "",
+                    order=row.credit_order,
+                )
+            )
     loc = normalize_locale(locale)
     title = series.title
     description = series.description or ""
@@ -282,6 +305,8 @@ def series_out(
         dubbed=series.dubbed or [],
         audio_availability=AudioAvailabilityOut.model_validate(audio_av.model_dump()),
         subtitle_availability=SubtitleAvailabilityOut.model_validate(sub_av.model_dump()),
+        credits=credits_out,
+        credits_synced_at=credits_synced_at,
         new_episode=bool(series.new_episode),
         views=series.views or 0,
         type="series",

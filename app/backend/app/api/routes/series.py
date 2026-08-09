@@ -22,7 +22,6 @@ from app.schemas.content import (
 from app.services.catalog import (
     apply_sort,
     ensure_unique_imdb,
-    episode_out,
     filter_catalog_query,
     get_series,
     load_genres,
@@ -39,7 +38,7 @@ from app.services.catalog_availability import (
     item_has_dub,
     item_has_subtitles,
 )
-from app.services.catalog_list import series_card_out
+from app.services.catalog_list import episodes_list_out, series_card_out
 from app.services.publishing import workflow as publishing_workflow
 
 router = APIRouter(tags=["series"])
@@ -205,6 +204,7 @@ def get_public_series(
         public_counts=True,
         db=db,
         locale=locale,
+        include_credits=True,
     )
 
 
@@ -232,7 +232,9 @@ def list_public_episodes(
     locale: str | None = Query(None, description="UI locale: en|fa|ps"),
 ) -> list[EpisodeOut]:
     series = resolve_series(db, id_or_slug, published_only=True)
-    return [episode_out(e, db, locale=locale) for e in _public_episodes(series, season)]
+    return episodes_list_out(
+        db, _public_episodes(series, season), series=series, locale=locale
+    )
 
 
 @router.get("/admin/series", response_model=Envelope[SeriesOut])
@@ -282,7 +284,7 @@ def create_series(
     series.genre_links = genres
     db.add(series)
     db.commit()
-    return series_out(get_series(db, series.id), db=db)
+    return series_out(get_series(db, series.id), db=db, include_credits=True)
 
 
 @router.get("/admin/series/{series_id}", response_model=SeriesOut)
@@ -291,7 +293,7 @@ def admin_get_series(
     db: DbSession,
     _: Annotated[AdminUser, Depends(require_permissions("series.read"))],
 ) -> SeriesOut:
-    return series_out(get_series(db, series_id), db=db)
+    return series_out(get_series(db, series_id), db=db, include_credits=True)
 
 
 @router.patch("/admin/series/{series_id}", response_model=SeriesOut)
@@ -332,7 +334,7 @@ def update_series(
             "catalog_audit event=series_availability_updated details=%s",
             {"series_id": series.id, "admin_id": admin.id, "changes": changed},
         )
-    return series_out(get_series(db, series.id), db=db)
+    return series_out(get_series(db, series.id), db=db, include_credits=True)
 
 
 @router.delete("/admin/series/{series_id}", response_model=Message)

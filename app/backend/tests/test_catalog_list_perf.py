@@ -166,6 +166,8 @@ def test_series_list_card_query_ceiling(client, db_session):
     assert resp.status_code == 200
     assert len(resp.json()["data"]) == 12
     assert len(statements) <= 10, f"series browse queries too high: {len(statements)}"
+    joined = " ".join(statements).lower()
+    assert "series_cast_credits" not in joined
     for item in resp.json()["data"]:
         _assert_card_payload(item)
 

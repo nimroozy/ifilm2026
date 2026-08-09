@@ -11,8 +11,10 @@ from sqlalchemy.orm import Session
 from app.models.content import Episode, Movie, Season, Series
 from app.models.media_assets import MediaAsset
 from app.models.media_encoding import PACKAGE_TYPE_HLS_VOD, MediaPackage
+from app.models.media_tracks import MediaTrack
 from app.schemas.content import (
     AudioAvailabilityOut,
+    EpisodeOut,
     LocalizationSourcesOut,
     MovieOut,
     SeriesOut,
@@ -25,6 +27,7 @@ from app.services.catalog_availability import (
 )
 from app.services.content_i18n import (
     load_translations_for_entities,
+    localized_episode_fields,
     localized_movie_fields,
     localized_series_fields,
     normalize_locale,
@@ -79,6 +82,215 @@ def _playability_from_assets(
             return demo, False, True
         return False, False, False
     return False, False, False
+
+
+def _playability_from_episode_assets(
+    *,
+    episode: Episode,
+    series: Series | None,
+    assets: list[MediaAsset],
+    packaged_asset_ids: set[str],
+) -> tuple[bool, bool, bool]:
+    """Mirror content_playability for episodes using preloaded assets + package id set."""
+    if not assets:
+        return False, False, False
+    for asset in assets:
+        if asset.upload_status in {"failed", "cancelled", "deleted"}:
+            continue
+        if getattr(asset, "source_type", "uploaded") == "external":
+            continue
+        if getattr(asset, "deleted_at", None) is not None:
+            continue
+        if asset.id in packaged_asset_ids:
+            return True, True, False
+    for asset in assets:
+        if asset.upload_status in {"failed", "cancelled", "deleted"}:
+            continue
+        if getattr(asset, "source_type", "uploaded") != "external":
+            continue
+        if not getattr(asset, "external_is_primary", False):
+            continue
+        if asset.external_url and asset.external_validated_at:
+            demo = bool(getattr(episode, "demo_owned", False))
+            if not demo and series is not None:
+                demo = bool(getattr(series, "demo_owned", False))
+            return demo, False, True
+        return False, False, False
+    return False, False, False
+
+
+def _batch_episode_assets(db: Session, episode_ids: list[int]) -> dict[int, list[MediaAsset]]:
+    if not episode_ids:
+        return {}
+    assets = (
+        db.query(MediaAsset)
+        .filter(MediaAsset.episode_id.in_(list(dict.fromkeys(episode_ids))))
+        .order_by(MediaAsset.id.desc())
+        .all()
+    )
+    by_episode: dict[int, list[MediaAsset]] = defaultdict(list)
+    for asset in assets:
+        if asset.episode_id is not None:
+            by_episode[asset.episode_id].append(asset)
+    return by_episode
+
+
+def _batch_episode_packaged_tracks(
+    db: Session, by_episode_assets: dict[int, list[MediaAsset]]
+) -> dict[int, tuple[list[Any], list[Any]]]:
+    """Return {episode_id: (audio_tracks, subtitle_tracks)} in one MediaTrack query."""
+    if not by_episode_assets:
+        return {}
+    asset_to_episode: dict[str, int] = {}
+    asset_ids: list[str] = []
+    for episode_id, assets in by_episode_assets.items():
+        # Match _packaged_tracks_for_episode: newest 20 assets per episode.
+        for asset in assets[:20]:
+            asset_to_episode[asset.id] = episode_id
+            asset_ids.append(asset.id)
+    if not asset_ids:
+        return {eid: ([], []) for eid in by_episode_assets}
+    rows = (
+        db.query(MediaTrack)
+        .filter(MediaTrack.media_asset_id.in_(list(dict.fromkeys(asset_ids))))
+        .order_by(MediaTrack.sort_order.asc(), MediaTrack.id.asc())
+        .all()
+    )
+    out: dict[int, tuple[list[Any], list[Any]]] = {
+        eid: ([], []) for eid in by_episode_assets
+    }
+    for row in rows:
+        mapped_episode_id = asset_to_episode.get(row.media_asset_id)
+        if mapped_episode_id is None:
+            continue
+        audio, subs = out[mapped_episode_id]
+        if row.track_type == "audio":
+            audio.append(row)
+        elif row.track_type == "subtitle":
+            subs.append(row)
+    return out
+
+
+def episodes_list_out(
+    db: Session,
+    episodes: list[Episode],
+    *,
+    series: Series | None = None,
+    locale: str | None = None,
+) -> list[EpisodeOut]:
+    """Serialize season/public episode lists with batched playability/tracks/i18n."""
+    if not episodes:
+        return []
+    loc = normalize_locale(locale)
+    episode_ids = [e.id for e in episodes]
+    tr_map = load_translations_for_entities(db, entity_type="episode", entity_ids=episode_ids)
+    by_episode = _batch_episode_assets(db, episode_ids)
+    packaged = batch_active_package_asset_ids(
+        db, [a.id for rows in by_episode.values() for a in rows]
+    )
+    tracks_by_episode = _batch_episode_packaged_tracks(db, by_episode)
+
+    # Resolve series once when callers pass None (avoid per-episode db.get).
+    series_by_id: dict[int, Series] = {}
+    if series is not None:
+        series_by_id[series.id] = series
+    else:
+        missing_series_ids = sorted(
+            {
+                e.series_id
+                for e in episodes
+                if e.series_id
+                and getattr(e, "series", None) is None
+            }
+        )
+        if missing_series_ids:
+            for row in db.query(Series).filter(Series.id.in_(missing_series_ids)).all():
+                series_by_id[row.id] = row
+
+    results: list[EpisodeOut] = []
+    for episode in episodes:
+        ep_series = (
+            series
+            if series is not None and series.id == episode.series_id
+            else getattr(episode, "series", None) or series_by_id.get(episode.series_id)
+        )
+        assets = by_episode.get(episode.id, [])
+        playable, has_package, has_external = _playability_from_episode_assets(
+            episode=episode,
+            series=ep_series,
+            assets=assets,
+            packaged_asset_ids=packaged,
+        )
+        preferred = [a for a in assets if (a.category or "") == "originals"] or assets
+        probe_json = None
+        audio_count = None
+        sub_count = None
+        if preferred:
+            asset = preferred[0]
+            for candidate in preferred:
+                if candidate.probe_json or candidate.audio_stream_count is not None:
+                    asset = candidate
+                    break
+            probe_json = asset.probe_json if isinstance(asset.probe_json, dict) else None
+            audio_count = asset.audio_stream_count
+            sub_count = asset.subtitle_stream_count
+        packaged_audio, packaged_subs = tracks_by_episode.get(episode.id, ([], []))
+        audio = build_audio_availability(
+            language=getattr(ep_series, "language", None) if ep_series is not None else None,
+            spoken_languages=getattr(ep_series, "spoken_languages", None)
+            if ep_series is not None
+            else None,
+            metadata_source=getattr(ep_series, "metadata_source", None)
+            if ep_series is not None
+            else None,
+            admin_audio=getattr(ep_series, "audio", None) if ep_series is not None else None,
+            admin_dubbed=getattr(ep_series, "dubbed", None) if ep_series is not None else None,
+            probe_json=probe_json,
+            audio_stream_count=audio_count,
+            packaged_audio_tracks=packaged_audio,
+        )
+        subs = build_subtitle_availability(
+            admin_subtitles=getattr(ep_series, "subtitles", None) if ep_series is not None else None,
+            probe_json=probe_json,
+            subtitle_stream_count=sub_count,
+            packaged_subtitle_tracks=packaged_subs,
+        )
+        localized = localized_episode_fields(
+            db, episode, loc, preloaded_rows=tr_map.get(episode.id, [])
+        )
+        results.append(
+            EpisodeOut(
+                id=episode.id,
+                season_id=episode.season_id,
+                series_id=episode.series_id,
+                episode_number=episode.episode_number,
+                tmdb_id=getattr(episode, "tmdb_id", None),
+                metadata_source=getattr(episode, "metadata_source", "") or "",
+                demo_owned=bool(getattr(episode, "demo_owned", False)),
+                has_demo_clip=bool(getattr(episode, "has_demo_clip", False)),
+                title=localized["title"],
+                description=localized["description"],
+                duration_minutes=episode.duration_minutes,
+                release_date=episode.release_date,
+                thumbnail_url=episode.thumbnail_url or "",
+                status=episode.status,
+                published_at=episode.published_at,
+                scheduled_publish_at=getattr(episode, "scheduled_publish_at", None),
+                created_at=episode.created_at,
+                updated_at=episode.updated_at,
+                hls_path=episode.hls_path,
+                playable=playable,
+                has_playable_package=has_package,
+                has_external_media=has_external,
+                audio_availability=AudioAvailabilityOut.model_validate(audio.model_dump()),
+                subtitle_availability=SubtitleAvailabilityOut.model_validate(subs.model_dump()),
+                season=episode.season.season_number if episode.season else None,
+                episode=episode.episode_number,
+                duration=episode.duration_minutes,
+                thumbnail=episode.thumbnail_url or "",
+            )
+        )
+    return results
 
 
 def batch_movie_playability(db: Session, movies: list[Movie]) -> dict[int, tuple[bool, bool, bool]]:
@@ -398,6 +610,8 @@ def series_card_out(db: Session, series_items: list[Series], *, locale: str | No
                 dubbed=series.dubbed or [],
                 audio_availability=AudioAvailabilityOut.model_validate(audio.model_dump()),
                 subtitle_availability=SubtitleAvailabilityOut.model_validate(subs.model_dump()),
+                credits=[],
+                credits_synced_at=None,
                 views=series.views or 0,
                 type="series",
                 year=series.release_year,

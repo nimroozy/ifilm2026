@@ -72,6 +72,8 @@ export interface Series {
   title: string;
   originalTitle: string;
   year: number;
+  /** Optional end year when known (API `end_year`); omit for ongoing/unknown. */
+  endYear?: number | null;
   rating: number;
   ageRating: string;
   genres: string[];

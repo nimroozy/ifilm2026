@@ -261,6 +261,8 @@ export interface SeriesDto {
   new_episode?: boolean;
   views?: number;
   type?: 'series' | string;
+  credits?: CastCreditDto[];
+  credits_synced_at?: string | null;
   // Compatibility aliases
   year?: number | null;
   seasons?: number;
@@ -1945,6 +1947,7 @@ export function mapSeriesDto(dto: SeriesDto) {
     title: dto.title,
     originalTitle: dto.original_title || '',
     year,
+    endYear: dto.end_year ?? null,
     rating,
     ageRating: dto.age_rating || '',
     genres: genreNames(dto.genres),
@@ -1964,6 +1967,14 @@ export function mapSeriesDto(dto: SeriesDto) {
     dubbed: dto.dubbed ?? [],
     audioAvailability: dto.audio_availability ?? null,
     subtitleAvailability: dto.subtitle_availability ?? null,
+    credits: (dto.credits ?? []).map((credit) => ({
+      personId: credit.person_id,
+      name: credit.name,
+      character: credit.character || '',
+      profileUrl: credit.profile_url || '',
+      order: credit.order ?? 0,
+    })),
+    creditsSyncedAt: dto.credits_synced_at ?? null,
     type: 'series' as const,
     newEpisode: dto.new_episode ?? false,
     views: dto.views ?? 0,
