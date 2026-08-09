@@ -217,7 +217,8 @@ def parse_ffprobe_payload(
         if lang
     ]
 
-    if video is None and audio is None:
+    subtitle_only = any(s.get("codec_type") in {"subtitle", "text"} for s in streams)
+    if video is None and audio is None and not subtitle_only:
         raise UnsupportedMediaError("No video or audio streams detected")
 
     duration = parse_float(fmt.get("duration"))

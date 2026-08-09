@@ -108,6 +108,26 @@ def test_no_streams_unsupported():
         parse_ffprobe_payload({"format": {}, "streams": []})
 
 
+def test_subtitle_only_webvtt_supported():
+    payload = {
+        "format": {"format_name": "webvtt", "duration": "5.0"},
+        "streams": [
+            {
+                "index": 0,
+                "codec_type": "subtitle",
+                "codec_name": "webvtt",
+                "disposition": {"default": 0},
+            }
+        ],
+    }
+    meta = parse_ffprobe_payload(payload)
+    assert meta.video_codec is None
+    assert meta.audio_codec is None
+    assert meta.subtitle_stream_count == 1
+    assert meta.container_format == "webvtt"
+    assert meta.duration_seconds == 5.0
+
+
 def test_malformed_streams_type():
     with pytest.raises(ProbeParseError):
         parse_ffprobe_payload({"streams": "nope"})
