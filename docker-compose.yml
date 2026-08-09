@@ -62,6 +62,7 @@ services:
       - ifilm_media_temp:/data/media/temp
       - ifilm_media_trailers:/data/media/trailers
       - ifilm_media_subtitles:/data/media/subtitles
+      - ifilm_media_audio:/data/media/audio
       - ifilm_media_posters:/data/media/posters
       - ifilm_media_backdrops:/data/media/backdrops
       # Completed packages (+ encode workspaces under packages/work): READ-ONLY for API.
@@ -143,6 +144,7 @@ services:
       - ifilm_media_originals:/data/media/originals:ro
       - ifilm_media_trailers:/data/media/trailers:ro
       - ifilm_media_subtitles:/data/media/subtitles:ro
+      - ifilm_media_audio:/data/media/audio:ro
       - ifilm_media_posters:/data/media/posters:ro
       - ifilm_media_backdrops:/data/media/backdrops:ro
       # Packages + temporary encode workspaces under packages/work: read-write.
@@ -190,6 +192,7 @@ volumes:
   ifilm_media_temp:
   ifilm_media_trailers:
   ifilm_media_subtitles:
+  ifilm_media_audio:
   ifilm_media_posters:
   ifilm_media_backdrops:
   ifilm_media_packages:

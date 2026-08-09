@@ -8,6 +8,7 @@ mkdir -p \
   /data/media/packages \
   /data/media/trailers \
   /data/media/subtitles \
+  /data/media/audio \
   /data/media/posters \
   /data/media/backdrops \
   /data/artwork \

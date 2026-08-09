@@ -27,6 +27,7 @@ REQUIRED_MEDIA_MOUNT_CATEGORIES = (
     "originals",
     "trailers",
     "subtitles",
+    "audio",
     "posters",
     "backdrops",
 )
@@ -197,7 +198,7 @@ def format_media_mount_health_error(health: MediaMountHealth) -> str:
             "",
             "Worker will exit non-zero and will not consume jobs until mounts match "
             "backend-api upload locations "
-            "(originals, trailers, subtitles, posters, backdrops).",
+            "(originals, trailers, subtitles, audio, posters, backdrops).",
         ]
     )
     return "\n".join(lines)
