@@ -411,7 +411,7 @@ jobs:
             --version "$VERSION" \
             --channel "$CHANNEL" \
             --archive "$ARCHIVE" \
-            --migration-head 021_content_requests_v1 \
+            --migration-head 023_media_tracks_packaging_v1 \
             --minimum-version 0.1.0 \
             --database-backup-required \
             --rollback-supported \
