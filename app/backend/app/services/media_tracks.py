@@ -7,7 +7,12 @@ from sqlalchemy.orm import Session
 
 from app.models.media_assets import MediaAsset
 from app.models.media_tracks import MediaTrack, utcnow
-from app.schemas.media_tracks import MediaTrackCreate, MediaTrackListOut, MediaTrackOut, MediaTrackUpdate
+from app.schemas.media_tracks import (
+    MediaTrackCreate,
+    MediaTrackListOut,
+    MediaTrackOut,
+    MediaTrackUpdate,
+)
 
 ALLOWED_LANG = frozenset({"en", "fa", "ps", "prs", "ar", "hi", "ur", "tr", "ru", "ko", "ja", "zh"})
 

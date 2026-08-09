@@ -321,7 +321,7 @@ def test_playback_session_includes_tracks(client, db_session, monkeypatch):
         headers=_headers(token),
         json={"content_type": "movie", "content_id": movie.id},
     )
-    assert resp.status_code == 200, resp.text
+    assert resp.status_code == 201, resp.text
     data = resp.json()
     assert len(data["audio_tracks"]) == 2
     assert {t["language_code"] for t in data["audio_tracks"]} == {"en", "fa"}

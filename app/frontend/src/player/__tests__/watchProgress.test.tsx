@@ -88,6 +88,7 @@ function configureVideo(video: HTMLVideoElement, currentTime = 0) {
     writable: true,
     value: currentTime,
   });
+  video.play = vi.fn().mockResolvedValue(undefined);
 }
 
 describe('watch progress player integration', () => {

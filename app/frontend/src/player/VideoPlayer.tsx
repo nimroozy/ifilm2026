@@ -187,7 +187,14 @@ export function VideoPlayer({
   const tryPlay = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
-    void video.play().catch(() => undefined);
+    try {
+      const result = video.play();
+      if (result && typeof (result as Promise<void>).catch === 'function') {
+        void (result as Promise<void>).catch(() => undefined);
+      }
+    } catch {
+      /* browser/jsdom autoplay rejection */
+    }
   }, [videoRef]);
 
   useEffect(() => {
