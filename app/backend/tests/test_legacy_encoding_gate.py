@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import pytest
-from fastapi import HTTPException
-
 from app.core.config import Settings
 from app.services.legacy_encoding import (
     legacy_encoding_allowed,
@@ -12,6 +10,7 @@ from app.services.legacy_encoding import (
     require_legacy_encoding_allowed,
 )
 from app.services.media_processing.lifecycle import CANONICAL_STATES, canonical_media_state
+from fastapi import HTTPException
 
 
 def test_canonical_states_match_pipeline_doc():
