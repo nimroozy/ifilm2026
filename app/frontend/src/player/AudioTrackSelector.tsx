@@ -53,7 +53,9 @@ export function SubtitleSelector({
   label?: string;
   offLabel?: string;
 }) {
-  // Always show Off + available tracks so the captions control is discoverable.
+  // Hide when the package has no subtitle renditions (Off-only is not useful).
+  if (tracks.length === 0) return null;
+
   const options: SubtitleTrackInfo[] = [{ id: -1, name: offLabel }, ...tracks];
   const selected = options.some((t) => t.id === value) ? value : -1;
 

@@ -205,6 +205,7 @@ test('single-track movie hides pointless audio selector', async ({ page }) => {
   await page.waitForTimeout(2500);
   await page.getByTestId('video-player').hover();
   await expect(page.getByTestId('audio-selector')).toHaveCount(0);
+  await expect(page.getByTestId('subtitle-selector')).toHaveCount(0);
   await page.screenshot({ path: path.join(ART, 'single-track-no-audio-selector.png') });
 });
 
