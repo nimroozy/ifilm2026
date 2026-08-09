@@ -94,7 +94,10 @@ export function resolveSeriesHeroCta<T extends SeriesEpisodeLike>(opts: {
   const bySeries = (row: WatchProgressDto) =>
     row.content_type === 'episode' && row.series_id === opts.seriesId;
 
-  const active = opts.continueWatching.find((row) => bySeries(row) && !row.completed && row.episode_id);
+  // CW rails are capped; incomplete progress may only appear in history.
+  const active =
+    opts.continueWatching.find((row) => bySeries(row) && !row.completed && row.episode_id) ||
+    opts.watchHistory.find((row) => bySeries(row) && !row.completed && row.episode_id);
   if (active?.episode_id) {
     const episode =
       ordered.find((ep) => ep.id === active.episode_id) ??

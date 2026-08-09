@@ -75,6 +75,27 @@ describe('seriesDetailPlayback', () => {
     }
   });
 
+  it('resolves continue from history when CW rail omits the series', () => {
+    const catalog = [ep(20, 1, 2)];
+    const cta = resolveSeriesHeroCta({
+      seriesId: 4,
+      catalogEpisodes: catalog,
+      continueWatching: [],
+      watchHistory: [
+        progress({
+          episode_id: 20,
+          series_id: 4,
+          season_number: 1,
+          episode_number: 2,
+          completed: false,
+          progress_percent: 44,
+        }),
+      ],
+    });
+    expect(cta.kind).toBe('continue');
+    if (cta.kind === 'continue') expect(cta.code).toBe('S01E02');
+  });
+
   it('resolves next episode after completed finale', () => {
     const catalog = [ep(1, 1, 10), ep(2, 2, 1)];
     const cta = resolveSeriesHeroCta({
