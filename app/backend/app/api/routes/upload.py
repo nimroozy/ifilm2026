@@ -1,12 +1,16 @@
+from typing import Annotated
+
 import aiofiles
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
 from app.core.config import get_settings
-from app.core.deps import CurrentAdmin, DbSession
+from app.core.deps import DbSession, require_permissions
 from app.core.features import require_feature
+from app.models.admin import AdminUser
 from app.models.media import EncodingJob, UploadJob
 from app.schemas.media import UploadCreate, UploadOut
 from app.services.encoding import complete_encoding, mark_processing
+from app.services.legacy_encoding import legacy_encoding_allowed
 from app.services.storage import upload_dir
 from app.services.uploads import sanitize_upload_filename, validate_upload_content_type
 
@@ -14,9 +18,15 @@ router = APIRouter(tags=["upload"])
 
 
 @router.post("/admin/uploads", response_model=UploadOut, status_code=status.HTTP_201_CREATED)
-def create_upload(payload: UploadCreate, db: DbSession, admin: CurrentAdmin):
+def create_upload(
+    payload: UploadCreate,
+    db: DbSession,
+    admin: Annotated[AdminUser, Depends(require_permissions("upload.manage"))],
+):
+    """Legacy upload job API — quarantined; prefer /admin/media/sessions."""
     settings = get_settings()
     require_feature("enable_uploads", settings)
+    # Staging/production still allow modern uploads; legacy EncodingJob spawn is gated below.
     filename = sanitize_upload_filename(payload.filename)
     if payload.size_bytes < 0 or payload.size_bytes > settings.upload_max_bytes:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File too large")
@@ -36,7 +46,12 @@ def create_upload(payload: UploadCreate, db: DbSession, admin: CurrentAdmin):
 
 
 @router.post("/admin/uploads/{upload_id}/file", response_model=UploadOut)
-async def upload_file(upload_id: int, db: DbSession, _: CurrentAdmin, file: UploadFile = File(...)):
+async def upload_file(
+    upload_id: int,
+    db: DbSession,
+    _: Annotated[AdminUser, Depends(require_permissions("upload.manage"))],
+    file: UploadFile = File(...),
+):
     settings = get_settings()
     require_feature("enable_uploads", settings)
 
@@ -83,7 +98,8 @@ async def upload_file(upload_id: int, db: DbSession, _: CurrentAdmin, file: Uplo
     db.commit()
     db.refresh(job)
 
-    if settings.enable_encoding:
+    # Legacy EncodingJob path — hard-blocked in production/staging (PIPELINE.md).
+    if legacy_encoding_allowed(settings):
         encoding = EncodingJob(
             title=job.filename,
             source_file=str(dest),
@@ -106,6 +122,9 @@ async def upload_file(upload_id: int, db: DbSession, _: CurrentAdmin, file: Uplo
 
 
 @router.get("/admin/uploads", response_model=list[UploadOut])
-def list_uploads(db: DbSession, _: CurrentAdmin):
+def list_uploads(
+    db: DbSession,
+    _: Annotated[AdminUser, Depends(require_permissions("upload.read"))],
+):
     require_feature("enable_uploads")
     return db.query(UploadJob).order_by(UploadJob.id.desc()).limit(100).all()

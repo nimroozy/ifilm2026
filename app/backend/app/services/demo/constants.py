@@ -70,6 +70,7 @@ SETTING_DEMO_INSTALLED_AT = "DEMO_SEED_INSTALLED_AT"
 
 PROVIDER_DEMO = "demo"
 
+# Least-privilege demo roles — see docs/security/ADMIN_ROLES.md (T0).
 ADMIN_FIXTURES: tuple[AdminFixture, ...] = (
     {
         "username": "catalog_manager",
@@ -94,12 +95,33 @@ ADMIN_FIXTURES: tuple[AdminFixture, ...] = (
             "catalog.edit",
             "content_requests.read",
             "content_requests.manage",
+            # No upload / processing / streaming — Media Manager owns the pipeline.
+        ],
+    },
+    {
+        "username": "media_manager",
+        "email": "media_manager@ifilm.demo",
+        "full_name": "Demo Media Manager",
+        "role_name": "Media Manager",
+        "permissions": [
+            "dashboard",
+            # Read-only catalog context for linking media (no bare movies/series —
+            # those aliases satisfy *.manage via PERMISSION_ALIASES).
+            "movies.read",
+            "series.read",
+            "genres.read",
+            "collections.read",
+            "catalog.read",
             "upload",
             "upload.read",
             "upload.manage",
             "processing",
             "processing.read",
             "processing.manage",
+            # Dotted streaming perms only — bare "streaming" aliases to manage.
+            "streaming.read",
+            "streaming.manage",
+            "encoding",
         ],
     },
     {
@@ -121,10 +143,9 @@ ADMIN_FIXTURES: tuple[AdminFixture, ...] = (
             "catalog.review",
             "catalog.approve",
             "content_requests.read",
-            "processing",
             "processing.read",
-            "streaming",
             "streaming.read",
+            # No bare "streaming" (aliases to manage) and no streaming.manage.
         ],
     },
     {
@@ -145,11 +166,9 @@ ADMIN_FIXTURES: tuple[AdminFixture, ...] = (
             "catalog.read",
             "catalog.publish",
             "catalog.archive",
-            "processing",
             "processing.read",
-            "streaming",
             "streaming.read",
-            "streaming.manage",
+            # No bare "streaming" (aliases to manage) and no streaming.manage.
         ],
     },
 )

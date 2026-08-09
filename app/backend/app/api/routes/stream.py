@@ -223,6 +223,17 @@ def create_customer_playback_session(
 ):
     """Create a protected playback session for the customer player (or admin ops test)."""
     require_local_streaming()
+    # Admins must hold streaming.read (least privilege). Subscribers use entitlement checks.
+    if isinstance(principal, AdminUser):
+        from app.core.deps import PERMISSION_ALIASES, admin_permissions
+
+        perms = admin_permissions(principal)
+        allowed = PERMISSION_ALIASES.get("streaming.read", frozenset({"streaming.read"}))
+        if perms.isdisjoint(allowed):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions",
+            )
     if body.media_asset_id:
         asset = get_playable_asset_by_id(db, body.media_asset_id)
     else:

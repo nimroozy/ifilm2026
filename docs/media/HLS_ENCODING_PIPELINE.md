@@ -1,5 +1,7 @@
 # HLS Encoding Pipeline
 
+> **Canonical overview:** [`PIPELINE.md`](./PIPELINE.md) (Train T0 — single source of truth).
+
 ## Architecture summary
 
 Phase 6 extends the **existing media processing worker** with local **HLS VOD encoding**:

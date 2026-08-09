@@ -1,4 +1,8 @@
-"""ARQ worker tasks for upload finalization, encoding, and CDN sync."""
+"""ARQ worker tasks for upload finalization, encoding, and CDN sync.
+
+Legacy EncodingJob processing is quarantined — see docs/media/PIPELINE.md.
+Production/staging must use media-processing-worker encode_hls only.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +12,7 @@ from app.db.session import SessionLocal, get_engine
 from app.models.media import EncodingJob, UploadJob
 from app.services.cdn_sync import enqueue_sync, run_sync_job
 from app.services.encoding import complete_encoding, fail_encoding, mark_processing
+from app.services.legacy_encoding import legacy_encoding_allowed, legacy_encoding_block_reason
 from app.workers.settings import redis_settings
 
 logger = logging.getLogger(__name__)
@@ -15,6 +20,10 @@ logger = logging.getLogger(__name__)
 
 async def process_encoding_job(ctx, job_id: int):
     get_engine()
+    if not legacy_encoding_allowed():
+        reason = legacy_encoding_block_reason() or "legacy encoding blocked"
+        logger.error("Refusing legacy EncodingJob %s: %s", job_id, reason)
+        return {"ok": False, "error": "legacy_encoding_blocked", "detail": reason}
     db = SessionLocal()
     try:
         job = db.get(EncodingJob, job_id)
@@ -72,7 +81,7 @@ async def finalize_upload_job(ctx, upload_job_id: int, create_encoding: bool = T
         db.refresh(upload)
 
         encoding_id = None
-        if create_encoding and upload.stored_path:
+        if create_encoding and upload.stored_path and legacy_encoding_allowed():
             encoding = EncodingJob(
                 title=upload.filename,
                 source_file=upload.stored_path,
@@ -88,6 +97,12 @@ async def finalize_upload_job(ctx, upload_job_id: int, create_encoding: bool = T
             db.refresh(encoding)
             encoding_id = encoding.id
             await process_encoding_job(ctx, encoding.id)
+        elif create_encoding and upload.stored_path:
+            logger.warning(
+                "Skipping legacy EncodingJob for upload %s: %s",
+                upload.id,
+                legacy_encoding_block_reason(),
+            )
         return {"ok": True, "upload_id": upload.id, "encoding_id": encoding_id}
     finally:
         db.close()

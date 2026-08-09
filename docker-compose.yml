@@ -83,7 +83,14 @@ services:
       redis:
         condition: service_healthy
 
+  # Legacy ARQ EncodingJob worker — opt-in only. Not part of the canonical
+  # media pipeline (docs/media/PIPELINE.md). Start with:
+  #   docker compose --profile legacy-arq up worker
   worker:
+    profiles: ["legacy-arq"]
+    labels:
+      - "ifilm.pipeline.role=legacy"
+      - "ifilm.compose.profile=legacy-arq"
     build:
       context: ./app/backend
     command: arq app.workers.tasks.WorkerSettings
@@ -114,6 +121,10 @@ services:
         condition: service_healthy
 
   media-processing-worker:
+    # Canonical — always-on so `docker compose up` stays usable in development.
+    labels:
+      - "ifilm.pipeline.role=canonical"
+      - "ifilm.compose.profile=always-on"
     build:
       context: ./app/backend
     command: python -m app.workers.media_processing
@@ -162,6 +173,9 @@ services:
       start_period: 10s
 
   publishing-worker:
+    labels:
+      - "ifilm.pipeline.role=canonical"
+      - "ifilm.compose.profile=always-on"
     build:
       context: ./app/backend
     command: python -m app.workers.publishing

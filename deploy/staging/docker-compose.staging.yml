@@ -89,7 +89,8 @@ services:
       ENABLE_LOCAL_STREAMING: ${ENABLE_LOCAL_STREAMING:-true}
       ENABLE_RADIUS_LOGIN: ${ENABLE_RADIUS_LOGIN:-true}
       ENABLE_CDN_SYNC: ${ENABLE_CDN_SYNC:-false}
-      ENABLE_ENCODING: ${ENABLE_ENCODING:-false}
+      # Legacy ARQ EncodingJob path — keep off; hard-blocked for APP_ENV=staging.
+      ENABLE_ENCODING: "false"
       ENABLE_WATCH_HISTORY: ${ENABLE_WATCH_HISTORY:-true}
       SUBSCRIBER_IDENTITY_MODE: ${SUBSCRIBER_IDENTITY_MODE:-fixture}
       STAGING_ALLOW_FIXTURE_AUTH: ${STAGING_ALLOW_FIXTURE_AUTH:-true}
@@ -141,6 +142,10 @@ services:
       context: ../../app/backend
       dockerfile: Dockerfile.staging
     restart: unless-stopped
+    # Canonical pipeline worker — always-on (no Docker profile). See docs/media/PIPELINE.md.
+    labels:
+      - "ifilm.pipeline.role=canonical"
+      - "ifilm.compose.profile=always-on"
     command: ["python", "-m", "app.workers.media_processing"]
     env_file:
       - path: .env.staging
@@ -181,6 +186,9 @@ services:
       context: ../../app/backend
       dockerfile: Dockerfile.staging
     restart: unless-stopped
+    labels:
+      - "ifilm.pipeline.role=canonical"
+      - "ifilm.compose.profile=always-on"
     command: ["python", "-m", "app.workers.publishing"]
     env_file:
       - path: .env.staging

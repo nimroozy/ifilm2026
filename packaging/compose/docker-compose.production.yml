@@ -75,6 +75,9 @@ services:
       IFILM_VERSION_FILE: ${IFILM_VERSION_FILE:-/opt/ifilm/current/release-manifest.json}
       MAINTENANCE_MODE: ${MAINTENANCE_MODE:-false}
       ENABLE_UPLOADS: ${ENABLE_UPLOADS:-false}
+      # Canonical pipeline: media-processing-worker only (docs/media/PIPELINE.md).
+      # Legacy ARQ EncodingJob path is hard-blocked when APP_ENV=production.
+      ENABLE_ENCODING: "false"
       ENABLE_MEDIA_PROCESSING: ${ENABLE_MEDIA_PROCESSING:-true}
       ENABLE_HLS_ENCODING: ${ENABLE_HLS_ENCODING:-true}
       ENABLE_LOCAL_STREAMING: ${ENABLE_LOCAL_STREAMING:-true}
@@ -127,6 +130,10 @@ services:
     image: ${IFILM_IMAGE_BACKEND_API:?immutable GHCR digest required}
     pull_policy: always
     restart: unless-stopped
+    # Canonical pipeline worker — always-on (no Docker profile). See docs/media/PIPELINE.md.
+    labels:
+      - "ifilm.pipeline.role=canonical"
+      - "ifilm.compose.profile=always-on"
     command: ["python", "-m", "app.workers.media_processing"]
     environment:
       <<: *api_env
@@ -158,6 +165,10 @@ services:
     image: ${IFILM_IMAGE_BACKEND_API:?immutable GHCR digest required}
     pull_policy: always
     restart: unless-stopped
+    # Canonical pipeline worker — always-on (no Docker profile). See docs/media/PIPELINE.md.
+    labels:
+      - "ifilm.pipeline.role=canonical"
+      - "ifilm.compose.profile=always-on"
     command: ["python", "-m", "app.workers.publishing"]
     environment:
       <<: *api_env
