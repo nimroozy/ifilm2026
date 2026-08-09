@@ -12,7 +12,8 @@
    - Nginx access logs (`$loggable_uri` / sanitized request line)
    - Error tracker breadcrumbs that include full URLs
 2. **JWT / playback HMAC secrets** live only in server env (`JWT_SECRET`, `PLAYBACK_TOKEN_SECRET`) — never `VITE_*`.
-3. **Frontend** may expose only public config: `VITE_API_BASE_URL`, `VITE_DATA_MODE`, branding, version.
+3. **Frontend** may expose only public config. Prefer `VITE_PUBLIC_*` for new keys. Current allowlist (`app/backend/app/frontend_env_allowlist.py` + `app/frontend/src/vite-env.d.ts`): `VITE_API_BASE_URL`, `VITE_DATA_MODE`, branding, version, etc.  
+   **Forbidden in the SPA bundle:** TMDB tokens, JWT secrets, DB/Redis credentials, storage keys, playback secrets.
 4. **CI artifacts** must not upload `.env`, `runtime.env`, admin credential dumps, or raw stream URLs with tokens.
 5. **Production env** is not copied into tickets, PR descriptions, or browser QA recordings with live tokens.
 
@@ -26,7 +27,9 @@
 | Query param redaction (`token`, `expires`, …) | same filter |
 | Nginx sanitized access log | `deploy/staging/nginx/nginx.conf` + `packaging/tests/test_nginx_log_redaction.py` |
 | Frontend env surface | `tests` / packaging assertion that `VITE_*` allowlist has no secret names |
+| Frontend build scan | `app/frontend/scripts/scan-build-secrets.mjs` (Frontend CI after `pnpm build`) |
 | Legacy encoding blocked in prod/staging | `tests/test_legacy_encoding_gate.py` |
+| Compose legacy worker gate | `packaging/tests/test_compose_worker_profiles.py` |
 
 ---
 

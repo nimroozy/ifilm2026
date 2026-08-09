@@ -33,6 +33,14 @@ def test_redact_bearer_header_fragment():
     assert "[REDACTED]" in out
 
 
+def test_redact_tmdb_and_credential_assignments():
+    msg = "tmdb_api_key=super-tmdb-secret jwt_secret=abc123playback"
+    out = redact_stream_path(msg)
+    assert "super-tmdb-secret" not in out
+    assert "abc123playback" not in out
+    assert "[REDACTED]" in out
+
+
 def test_redact_secret_query_standalone():
     out = redact_secret_query("token=abc&x=1")
     assert "abc" not in out

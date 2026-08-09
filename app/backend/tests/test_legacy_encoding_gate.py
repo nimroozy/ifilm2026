@@ -118,3 +118,39 @@ async def test_arq_process_encoding_job_refuses_when_blocked(monkeypatch):
     result = await worker_tasks.process_encoding_job({}, 1)
     assert result["ok"] is False
     assert result["error"] == "legacy_encoding_blocked"
+
+
+def test_legacy_encoding_api_blocked_in_production(client, db_session, monkeypatch):
+    """legacy job submitted in production = blocked safely (HTTP 503)."""
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("ENABLE_ENCODING", "true")
+    from app.core.config import get_settings
+    from app.core.security import create_access_token, hash_password
+    from app.models.admin import AdminRole, AdminUser
+
+    get_settings.cache_clear()
+
+    role = AdminRole(name="legacy-enc-role", permissions=["processing.manage", "processing.read"])
+    db_session.add(role)
+    db_session.flush()
+    admin = AdminUser(
+        username="legacy-enc-admin",
+        email="legacy-enc@example.com",
+        full_name="Legacy Enc",
+        hashed_password=hash_password("password-123456"),
+        role_id=role.id,
+        is_active=True,
+    )
+    db_session.add(admin)
+    db_session.commit()
+    token = create_access_token(str(admin.id), {"typ": "admin", "username": admin.username})
+    headers = {"Authorization": f"Bearer {token}"}
+
+    listed = client.get("/api/admin/encoding/jobs", headers=headers)
+    assert listed.status_code == 503
+    detail = str(listed.json().get("detail", "")).lower()
+    assert "legacy" in detail or "disabled" in detail or "pipeline" in detail
+
+    retried = client.post("/api/admin/encoding/jobs/1/retry", headers=headers)
+    assert retried.status_code == 503
+    get_settings.cache_clear()

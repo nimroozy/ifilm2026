@@ -142,6 +142,10 @@ services:
       context: ../../app/backend
       dockerfile: Dockerfile.staging
     restart: unless-stopped
+    # Canonical pipeline worker — always-on (no Docker profile). See docs/media/PIPELINE.md.
+    labels:
+      - "ifilm.pipeline.role=canonical"
+      - "ifilm.compose.profile=always-on"
     command: ["python", "-m", "app.workers.media_processing"]
     env_file:
       - path: .env.staging
@@ -182,6 +186,9 @@ services:
       context: ../../app/backend
       dockerfile: Dockerfile.staging
     restart: unless-stopped
+    labels:
+      - "ifilm.pipeline.role=canonical"
+      - "ifilm.compose.profile=always-on"
     command: ["python", "-m", "app.workers.publishing"]
     env_file:
       - path: .env.staging

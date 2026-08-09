@@ -5,12 +5,18 @@ on:
     paths:
       - 'install.sh'
       - 'packaging/**'
+      - 'deploy/staging/nginx/**'
+      - 'deploy/staging/docker-compose.staging.yml'
+      - 'docker-compose.yml'
       - '.github/workflows/installer-ci.yml'
       - '.github/workflows/release.yml'
   pull_request:
     paths:
       - 'install.sh'
       - 'packaging/**'
+      - 'deploy/staging/nginx/**'
+      - 'deploy/staging/docker-compose.staging.yml'
+      - 'docker-compose.yml'
       - '.github/workflows/installer-ci.yml'
       - '.github/workflows/release.yml'
 
@@ -73,6 +79,12 @@ jobs:
 
       - name: Compose media mount contract (API ↔ probe worker)
         run: python3 packaging/tests/test_compose_media_mounts.py -v
+
+      - name: Compose worker profile safety (no legacy ARQ in prod)
+        run: python3 packaging/tests/test_compose_worker_profiles.py -v
+
+      - name: Nginx stream token log redaction contract
+        run: python3 packaging/tests/test_nginx_log_redaction.py -v
 
       - name: Signing trust anchor / revocation
         run: python3 packaging/tests/test_signing_trust_anchor.py -v

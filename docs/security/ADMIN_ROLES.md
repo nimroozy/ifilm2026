@@ -12,10 +12,11 @@ Demo seed roles live in `app/services/demo/constants.py` (`ADMIN_FIXTURES`). Pro
 | Role | Purpose |
 |------|---------|
 | **Super Admin** | Full operational control (all `SUPER_PERMISSIONS`) |
-| **Catalog Manager** | Titles, genres, collections, content requests — **not** upload/encode/stream manage |
-| **Media Manager** | Upload, probe, encode, package ops, streaming read/manage |
-| **Reviewer** | Read catalog + review/approve workflow; streaming **read** for preview; no upload/manage |
-| **Publisher** | Publish/archive; streaming **read** only (no global session manage) |
+| **Catalog Manager** | Catalog metadata only (titles, genres, collections, content requests) — **not** media upload/edit/delete/processing |
+| **Media Manager** | Media upload, edit (tracks), delete, processing — **not** users/settings/publish |
+| **Reviewer** | Review / approve only; streaming **read** for preview; no media edit |
+| **Publisher** | Publish / archive only; streaming **read**; no media delete |
+
 
 ---
 

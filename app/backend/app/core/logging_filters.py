@@ -28,10 +28,21 @@ _SECRET_QUERY_KEYS = frozenset(
         "signature",
         "sig",
         "authorization",
+        "api_key",
+        "apikey",
+        "tmdb_api_key",
+        "password",
+        "secret",
+        "client_secret",
     }
 )
 
 _BEARER_RE = re.compile(r"(?i)(authorization:\s*bearer\s+)(\S+)")
+# Common credential assignment fragments in free-text log lines.
+_CRED_ASSIGN_RE = re.compile(
+    r"(?i)\b(api[_-]?key|tmdb[_-]?api[_-]?key|jwt_secret|playback_token_secret|"
+    r"postgres_password|redis_password|client_secret)\s*[=:]\s*([^\s&,;]+)"
+)
 
 
 def redact_secret_query(url_or_qs: str) -> str:
@@ -64,6 +75,7 @@ def redact_stream_path(path: str) -> str:
     if not path:
         return path
     redacted = _BEARER_RE.sub(r"\1[REDACTED]", path)
+    redacted = _CRED_ASSIGN_RE.sub(r"\1=[REDACTED]", redacted)
     redacted = _STREAM_TOKEN_RE.sub(r"\g<prefix>[REDACTED]\g<suffix>", redacted)
     # Only treat as URL/query when clearly path- or URL-shaped (avoid mangling free text).
     if "?" in redacted or "://" in redacted or redacted.startswith("/"):

@@ -130,6 +130,10 @@ services:
     image: ${IFILM_IMAGE_BACKEND_API:?immutable GHCR digest required}
     pull_policy: always
     restart: unless-stopped
+    # Canonical pipeline worker — always-on (no Docker profile). See docs/media/PIPELINE.md.
+    labels:
+      - "ifilm.pipeline.role=canonical"
+      - "ifilm.compose.profile=always-on"
     command: ["python", "-m", "app.workers.media_processing"]
     environment:
       <<: *api_env
@@ -161,6 +165,10 @@ services:
     image: ${IFILM_IMAGE_BACKEND_API:?immutable GHCR digest required}
     pull_policy: always
     restart: unless-stopped
+    # Canonical pipeline worker — always-on (no Docker profile). See docs/media/PIPELINE.md.
+    labels:
+      - "ifilm.pipeline.role=canonical"
+      - "ifilm.compose.profile=always-on"
     command: ["python", "-m", "app.workers.publishing"]
     environment:
       <<: *api_env

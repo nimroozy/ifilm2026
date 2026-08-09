@@ -50,5 +50,8 @@ jobs:
       - name: Build
         run: pnpm run build
 
+      - name: Scan build output for secrets
+        run: pnpm run scan:build-secrets
+
       - name: Customer initial JS budget
         run: pnpm run check:bundle-budget

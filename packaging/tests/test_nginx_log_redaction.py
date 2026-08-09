@@ -36,6 +36,17 @@ class NginxLogRedactionTests(unittest.TestCase):
             re.compile(r"/api/stream/\[A-Za-z0-9_-\]\{16,128\}"),
         )
 
+    def test_simulated_uri_redaction_matches_nginx_map(self):
+        """Mirror the nginx map regex so /api/stream/{secret}/… → [REDACTED]."""
+        secret = "abcdefghijklmnopqrstuvwx"
+        uri = f"/api/stream/{secret}/master.m3u8"
+        pattern = re.compile(r"^/api/stream/[A-Za-z0-9_-]{16,128}(/.*)?$")
+        m = pattern.match(uri)
+        self.assertIsNotNone(m)
+        loggable = f"/api/stream/[REDACTED]{m.group(1) or ''}"
+        self.assertEqual(loggable, "/api/stream/[REDACTED]/master.m3u8")
+        self.assertNotIn(secret, loggable)
+
 
 if __name__ == "__main__":
     unittest.main()

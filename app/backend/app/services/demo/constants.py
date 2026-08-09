@@ -105,13 +105,11 @@ ADMIN_FIXTURES: tuple[AdminFixture, ...] = (
         "role_name": "Media Manager",
         "permissions": [
             "dashboard",
-            "movies",
+            # Read-only catalog context for linking media (no bare movies/series —
+            # those aliases satisfy *.manage via PERMISSION_ALIASES).
             "movies.read",
-            "series",
             "series.read",
-            "genres",
             "genres.read",
-            "collections",
             "collections.read",
             "catalog.read",
             "upload",

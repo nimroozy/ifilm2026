@@ -11,6 +11,7 @@
     "test:watch": "vitest",
     "preview": "vite preview",
     "check:bundle-budget": "node ./scripts/check-customer-bundle-budget.mjs",
+    "scan:build-secrets": "node ./scripts/scan-build-secrets.mjs",
     "postinstall": "echo 'Dependencies installed successfully'"
   },
   "dependencies": {
