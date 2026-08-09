@@ -167,7 +167,12 @@ services:
         condition: service_healthy
     healthcheck:
       # Override image API live-probe. Publishing worker has no HTTP server.
-      test: ["CMD", "python", "-m", "app.workers.publishing", "--healthcheck"]
+      # Source runtime.env so DATABASE_URL is available (same pattern as backend-api).
+      test:
+        [
+          "CMD-SHELL",
+          "set -a; . /run/ifilm/runtime.env; set +a; python -m app.workers.publishing --healthcheck",
+        ]
       interval: 30s
       timeout: 10s
       retries: 3

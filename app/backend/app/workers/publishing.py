@@ -32,9 +32,37 @@ def _handle_signal(signum: int, _frame: FrameType | None) -> None:
     _shutdown = True
 
 
+def _load_runtime_env_file() -> None:
+    """Load /run/ifilm/runtime.env into the process when present.
+
+    Production containers keep DATABASE_URL / REDIS_URL in this file (written by
+    the entrypoint). Docker HEALTHCHECK starts a fresh process without that
+    environment unless compose sources the file or we load it here.
+    Never logs secret values.
+    """
+    path = "/run/ifilm/runtime.env"
+    try:
+        with open(path, encoding="utf-8") as fh:
+            lines = fh.readlines()
+    except OSError:
+        return
+    import os
+
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        if not key or key in os.environ:
+            continue
+        os.environ[key] = value.strip().strip("'\"")
+
+
 def _required_dependencies_ok() -> None:
     """Raise if worker process cannot load required runtime dependencies."""
     # Import-time / settings failures surface as unhealthy without leaking secrets.
+    _load_runtime_env_file()
     get_settings.cache_clear()
     settings = get_settings()
     if not (settings.database_url or "").strip():
