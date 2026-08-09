@@ -475,7 +475,10 @@ export function MovieDetailView({
         {(hasCatalogTracks(movie.audio) ||
           hasCatalogTracks(movie.subtitles) ||
           hasCatalogTracks(movie.dubbed) ||
-          movie.qualities?.length) && (
+          movie.qualities?.length ||
+          (audioAv.languages?.length ?? 0) > 0 ||
+          (audioAv.dubbed_languages?.length ?? 0) > 0 ||
+          (subAv.languages?.length ?? 0) > 0) && (
           <section className="container mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
             <div
               className="rounded-2xl border border-white/8 bg-card/60 p-5 shadow-lg backdrop-blur-sm"

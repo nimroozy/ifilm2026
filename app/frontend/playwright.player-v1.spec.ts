@@ -50,8 +50,6 @@ async function setLocale(page: Page, locale: string) {
   await page.reload({ waitUntil: 'networkidle' });
 }
 
-test.describe.configure({ mode: 'serial' });
-
 test('catalog dubbed localization EN/FA/PS', async ({ browser }) => {
   for (const locale of LOCALES) {
     const context = await browser.newContext();

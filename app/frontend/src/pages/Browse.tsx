@@ -34,6 +34,8 @@ import {
   catalogAvailabilityChips,
   formatCatalogTracks,
   hasCatalogTracks,
+  resolveAudioAvailability,
+  resolveSubtitleAvailability,
 } from '@/lib/catalogAvailability';
 import { canPlayFullMovie, hasDemoClip, isDemoCatalogItem } from '@/lib/catalogPresentation';
 import { trailerEmbedUrl } from '@/lib/trailers';
@@ -552,12 +554,17 @@ export function SeriesDetailsPage() {
     audio: t.movie.audio,
   };
   const availabilityChips = catalogAvailabilityChips(show, availabilityLabels);
+  const seriesAudioAv = resolveAudioAvailability(show);
+  const seriesSubAv = resolveSubtitleAvailability(show);
   const hasTechnical =
     hasCatalogTracks(show.audio) ||
     hasCatalogTracks(show.subtitles) ||
     hasCatalogTracks(show.dubbed) ||
     Boolean(show.country) ||
-    Boolean(show.language);
+    Boolean(show.language) ||
+    (seriesAudioAv.languages?.length ?? 0) > 0 ||
+    (seriesAudioAv.dubbed_languages?.length ?? 0) > 0 ||
+    (seriesSubAv.languages?.length ?? 0) > 0;
 
   return (
     <div className="min-h-screen" data-testid="series-detail">
@@ -693,9 +700,26 @@ export function SeriesDetailsPage() {
             </h2>
             <dl className="space-y-3 text-sm">
               {[
-                [t.movie.audio, formatCatalogTracks(show.audio)],
-                [t.movie.dubbed, formatCatalogTracks(show.dubbed)],
-                [t.movie.subtitles, formatCatalogTracks(show.subtitles)],
+                [
+                  t.movie.audio,
+                  formatCatalogTracks(
+                    seriesAudioAv.languages?.length ? seriesAudioAv.languages : show.audio
+                  ),
+                ],
+                [
+                  t.movie.dubbed,
+                  formatCatalogTracks(
+                    seriesAudioAv.dubbed_languages?.length
+                      ? seriesAudioAv.dubbed_languages
+                      : show.dubbed
+                  ),
+                ],
+                [
+                  t.movie.subtitles,
+                  formatCatalogTracks(
+                    seriesSubAv.languages?.length ? seriesSubAv.languages : show.subtitles
+                  ),
+                ],
                 ['Country', show.country],
                 ['Language', show.language],
               ]
