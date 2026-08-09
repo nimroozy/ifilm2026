@@ -174,8 +174,9 @@ describe('demo catalog movie UI', () => {
 
     renderMovieDetails();
 
-    expect(await screen.findByTestId('movie-language-badges')).toHaveTextContent(/FA Dub/i);
-    expect(screen.getByTestId('movie-language-badges')).toHaveTextContent(/EN Audio|EN Subtitle/i);
+    expect(await screen.findByTestId('movie-language-badges')).toHaveTextContent(/Persian Dubbed/i);
+    expect(screen.getByTestId('movie-language-badges')).not.toHaveTextContent(/\bFA Dub\b/i);
+    expect(screen.getByTestId('movie-language-badges')).toHaveTextContent(/English Audio|English Subtitles/i);
     expect(screen.getByTestId('movie-cast')).toHaveTextContent('Actor One');
     expect(screen.getByTestId('movie-cast')).toHaveTextContent('Hero');
     expect(screen.getByTestId('watchlist-toggle')).toBeInTheDocument();

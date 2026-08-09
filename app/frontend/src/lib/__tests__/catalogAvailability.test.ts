@@ -11,7 +11,13 @@ import {
 } from '../catalogAvailability';
 
 const labels = { dubbed: 'Dubbed', subtitled: 'Subtitled', audio: 'Audio', original: 'Original' };
-const badgeLabels = { dubbed: 'Dubbed', subtitled: 'Subtitled', multiAudio: 'Multi Audio' };
+const badgeLabels = {
+  dubbed: 'Dubbed',
+  subtitled: 'Subtitled',
+  multiAudio: 'Multi Audio',
+  persianDubbed: 'Persian Dubbed',
+  pashtoDubbed: 'Pashto Dubbed',
+};
 
 describe('catalogAvailability', () => {
   it('normalizes aliases without merging Dari and Persian', () => {
@@ -84,7 +90,9 @@ describe('catalogAvailability', () => {
     );
     expect(badges.length).toBe(2);
     expect(overflow).toBeGreaterThan(0);
-    expect(badges[0].label).toMatch(/Dub/);
+    expect(badges[0].label).toBe('Persian Dubbed');
+    expect(badges[1].label).toBe('Pashto Dubbed');
+    expect(badges.map((b) => b.label).join(' ')).not.toMatch(/\bFA\b|\bPS\b/);
   });
 
   it('returns availability chips including original', () => {

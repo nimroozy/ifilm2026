@@ -156,6 +156,8 @@ export function MoviesPage({ audience = 'all' }: { audience?: 'all' | 'children'
     dubbed: t.nav.dubbed,
     subtitled: t.nav.subtitled,
     multiAudio: 'Multi',
+    persianDubbed: t.player.persianDub,
+    pashtoDubbed: t.player.pashtoDub,
   };
 
   useEffect(() => {
@@ -359,6 +361,8 @@ export function SeriesPage() {
     dubbed: t.nav.dubbed,
     subtitled: t.nav.subtitled,
     multiAudio: 'Multi',
+    persianDubbed: t.player.persianDub,
+    pashtoDubbed: t.player.pashtoDub,
   };
 
   const load = useCallback(async () => {

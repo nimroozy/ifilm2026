@@ -162,10 +162,11 @@ test('multi-audio and subtitle selectors from live HLS', async ({ page }) => {
   const audioList = page.getByRole('listbox');
   await expect(audioList).toBeVisible();
   const audioText = await audioList.innerText();
-  // Factual language identity in EN UI — English + dubbed FA/PS
+  // Language-native track identity (not FA/PS codes)
   expect(audioText).toMatch(/English/i);
-  expect(audioText).toMatch(/Persian/i);
-  expect(audioText).toMatch(/Pashto/i);
+  expect(audioText).toContain('فارسی');
+  expect(audioText).toContain('پښتو');
+  expect(audioText).not.toMatch(/\bFA\b|\bPS\b/);
   // No duplicate English entries
   expect(audioText.match(/English/gi)?.length ?? 0).toBe(1);
   await page.keyboard.press('Escape');
@@ -178,8 +179,8 @@ test('multi-audio and subtitle selectors from live HLS', async ({ page }) => {
   const subText = await subList.innerText();
   expect(subText).toMatch(/Off/i);
   expect(subText).toMatch(/English/i);
-  expect(subText).toMatch(/Persian/i);
-  expect(subText).toMatch(/Pashto/i);
+  expect(subText).toContain('فارسی');
+  expect(subText).toContain('پښتو');
   await page.keyboard.press('Escape');
 
   // Switch audio without restarting from 0
@@ -189,7 +190,7 @@ test('multi-audio and subtitle selectors from live HLS', async ({ page }) => {
   });
   await page.waitForTimeout(400);
   await audio.click();
-  const option = page.getByRole('option').filter({ hasText: /Persian/i }).first();
+  const option = page.getByRole('option').filter({ hasText: 'فارسی' }).first();
   await expect(option).toBeVisible();
   await option.click();
   await page.waitForTimeout(800);

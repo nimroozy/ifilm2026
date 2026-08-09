@@ -17,16 +17,19 @@ KIND_WEBP = "webp"
 KIND_WEBVTT = "webvtt"
 KIND_SRT = "srt"
 KIND_ASS = "ass"
+KIND_MP3 = "mp3"
 KIND_EXECUTABLE = "executable"
 KIND_UNKNOWN = "unknown"
 
 EXTENSION_KINDS: dict[str, frozenset[str]] = {
     ".mp4": frozenset({KIND_MP4}),
     ".m4v": frozenset({KIND_MP4}),
+    ".m4a": frozenset({KIND_MP4}),
     ".mov": frozenset({KIND_MP4}),
     ".qt": frozenset({KIND_MP4}),
     ".mkv": frozenset({KIND_MATROSKA}),
     ".webm": frozenset({KIND_MATROSKA}),
+    ".mp3": frozenset({KIND_MP3}),
     ".jpg": frozenset({KIND_JPEG}),
     ".jpeg": frozenset({KIND_JPEG}),
     ".png": frozenset({KIND_PNG}),
@@ -39,6 +42,10 @@ EXTENSION_KINDS: dict[str, frozenset[str]] = {
 
 MIME_KINDS: dict[str, frozenset[str]] = {
     "video/mp4": frozenset({KIND_MP4}),
+    "audio/mp4": frozenset({KIND_MP4}),
+    "audio/x-m4a": frozenset({KIND_MP4}),
+    "audio/mpeg": frozenset({KIND_MP3}),
+    "audio/mp3": frozenset({KIND_MP3}),
     "video/quicktime": frozenset({KIND_MP4}),
     "video/x-m4v": frozenset({KIND_MP4}),
     "video/x-matroska": frozenset({KIND_MATROSKA}),
@@ -74,9 +81,12 @@ def detect_content_kind(prefix: bytes) -> ContentProbe:
     if data.startswith(b"%PDF"):
         return ContentProbe(KIND_EXECUTABLE, "PDF (not an allowed media type)")
 
-    # ISO BMFF (MP4/MOV): ....ftyp (box type alone is enough for a bounded probe)
+    # ISO BMFF (MP4/MOV/M4A): ....ftyp (box type alone is enough for a bounded probe)
     if len(data) >= 8 and data[4:8] == b"ftyp":
         return ContentProbe(KIND_MP4, "ISO BMFF (MP4/MOV)")
+    # MP3: ID3 tag or MPEG frame sync
+    if data.startswith(b"ID3") or (len(data) >= 2 and data[0] == 0xFF and (data[1] & 0xE0) == 0xE0):
+        return ContentProbe(KIND_MP3, "MP3 audio")
 
     # Matroska / WebM EBML header
     if data.startswith(b"\x1a\x45\xdf\xa3"):

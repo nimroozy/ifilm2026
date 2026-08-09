@@ -160,6 +160,8 @@ class Settings(BaseSettings):
     hls_segment_duration_seconds: int = 6
     hls_max_height: int = 1080
     hls_x264_preset: str = "veryfast"
+    # Absolute floor for audio/primary duration skew before packaging is blocked.
+    hls_audio_duration_tolerance_seconds: float = 2.0
 
     cdn_http_timeout_seconds: int = 10
 

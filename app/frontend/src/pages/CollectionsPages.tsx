@@ -168,6 +168,8 @@ export function CollectionDetailPage() {
     dubbed: t.movie.dubbed,
     subtitled: t.nav.subtitled,
     multiAudio: 'Multi Audio',
+    persianDubbed: t.player.persianDub,
+    pashtoDubbed: t.player.pashtoDub,
   };
 
   return (

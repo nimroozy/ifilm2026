@@ -20,6 +20,8 @@ class MediaTrackOut(BaseModel):
     label_key: str | None = None
     is_default: bool = False
     is_dubbed: bool = False
+    source_media_asset_id: str | None = None
+    source_stream_index: int | None = None
     hls_group_id: str | None = None
     hls_name: str | None = None
     sort_order: int = 0
@@ -33,6 +35,8 @@ class MediaTrackCreate(BaseModel):
     label_key: str | None = Field(default=None, max_length=64)
     is_default: bool = False
     is_dubbed: bool = False
+    source_media_asset_id: str | None = Field(default=None, max_length=36)
+    source_stream_index: int | None = Field(default=None, ge=0, le=64)
     hls_group_id: str | None = Field(default=None, max_length=64)
     hls_name: str | None = Field(default=None, max_length=128)
     sort_order: int = 0
@@ -43,6 +47,8 @@ class MediaTrackUpdate(BaseModel):
     label_key: str | None = Field(default=None, max_length=64)
     is_default: bool | None = None
     is_dubbed: bool | None = None
+    source_media_asset_id: str | None = Field(default=None, max_length=36)
+    source_stream_index: int | None = Field(default=None, ge=0, le=64)
     hls_group_id: str | None = Field(default=None, max_length=64)
     hls_name: str | None = Field(default=None, max_length=128)
     sort_order: int | None = None

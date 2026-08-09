@@ -93,19 +93,22 @@ describe('PlayerControls AirPlay / LTR', () => {
 });
 
 describe('track label i18n', () => {
-  it('localizes dubbed audio without storing UI text in DB shape', () => {
+  it('uses language-native dubbed labels regardless of UI locale', () => {
     expect(localizeAudioTrackName('fa', translations.en.player, { isDubbed: true })).toBe(
-      'Persian Dub'
+      'فارسی دوبله'
     );
     expect(localizeAudioTrackName('fa', translations.fa.player, { isDubbed: true })).toBe(
-      'دوبله فارسی'
+      'فارسی دوبله'
     );
     expect(localizeAudioTrackName('ps', translations.ps.player, { isDubbed: true })).toBe(
-      'پښتو ژباړه'
+      'پښتو دوبله'
+    );
+    expect(localizeAudioTrackName('en', translations.en.player, { isDubbed: false })).toBe(
+      'English'
     );
   });
 
-  it('localizes subtitle languages', () => {
+  it('uses language-native subtitle labels', () => {
     expect(localizeSubtitleTrackName('en', translations.en.player)).toBe('English');
     expect(localizeSubtitleTrackName('fa', translations.fa.player)).toBe('فارسی');
     expect(localizeSubtitleTrackName('ps', translations.ps.player)).toBe('پښتو');

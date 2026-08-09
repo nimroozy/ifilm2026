@@ -15,7 +15,11 @@ from app.services.media_processing.errors import (
     PermanentProcessingError,
 )
 from app.services.media_processing.ffmpeg import resolve_binary, run_process_with_progress
-from app.services.media_processing.playlists import VariantRef, write_master_playlist
+from app.services.media_processing.playlists import (
+    MediaGroupRef,
+    VariantRef,
+    write_master_playlist,
+)
 from app.services.media_processing.profiles import even_width_for_height
 
 
@@ -28,6 +32,7 @@ class EncodedRendition:
     bandwidth: int
     playlist_rel: str
     segment_pattern: str
+    kind: str = "video"  # video | audio | subtitle
 
 
 def file_sha256(path: Path) -> str:
@@ -59,9 +64,11 @@ def build_hls_rendition_argv(
     gop: int,
     preset: str,
     has_audio: bool,
+    video_only: bool = False,
 ) -> list[str]:
     """Build argv for one HLS VOD rendition. Never uses shell."""
     playlist_path.parent.mkdir(parents=True, exist_ok=True)
+    mux_audio = bool(has_audio) and not video_only
     argv: list[str] = [
         ffmpeg_binary,
         "-y",
@@ -70,7 +77,7 @@ def build_hls_rendition_argv(
         "-map",
         "0:v:0",
     ]
-    if has_audio:
+    if mux_audio:
         argv.extend(["-map", "0:a:0"])
     argv.extend(
         [
@@ -100,7 +107,7 @@ def build_hls_rendition_argv(
             f"scale={target_width}:{target_height}",
         ]
     )
-    if has_audio:
+    if mux_audio:
         argv.extend(
             [
                 "-c:a",
@@ -147,6 +154,8 @@ def encode_hls_renditions(
     frame_rate: float | None,
     duration_seconds: float | None,
     has_audio: bool,
+    video_only: bool = False,
+    media_groups: list[MediaGroupRef] | None = None,
     cancel_check: Callable[[], bool] | None = None,
     on_rendition_progress: Callable[[int, int, dict[str, str]], None] | None = None,
 ) -> list[EncodedRendition]:
@@ -164,6 +173,7 @@ def encode_hls_renditions(
     if duration_seconds and duration_seconds > 0:
         timeout = max(timeout, float(duration_seconds) * 20.0 * len(profiles) + 60.0)
 
+    mux_audio = bool(has_audio) and not video_only
     encoded: list[EncodedRendition] = []
     total = len(profiles)
     for index, profile in enumerate(profiles):
@@ -193,6 +203,7 @@ def encode_hls_renditions(
             gop=gop,
             preset=preset,
             has_audio=has_audio,
+            video_only=video_only,
         )
 
         def _progress(snapshot: dict[str, str], *, _i: int = index) -> None:
@@ -212,7 +223,10 @@ def encode_hls_renditions(
         if not playlist_path.is_file():
             raise EncodeFailedError(f"Missing playlist after encode for {label}")
 
-        bandwidth = int(profile.video_bitrate) + (int(profile.audio_bitrate) if has_audio else 0)
+        bandwidth = int(profile.video_bitrate) + (int(profile.audio_bitrate) if mux_audio else 0)
+        # When video-only with alternate audio, still advertise AAC in CODECS via master groups.
+        if video_only and media_groups:
+            bandwidth = int(profile.video_bitrate) + 128_000
         encoded.append(
             EncodedRendition(
                 profile=profile,
@@ -222,8 +236,17 @@ def encode_hls_renditions(
                 bandwidth=bandwidth,
                 playlist_rel=f"{label}/index.m3u8",
                 segment_pattern=str(segment_pattern),
+                kind="video",
             )
         )
+
+    audio_group = None
+    subs_group = None
+    if media_groups:
+        if any(g.media_type == "AUDIO" for g in media_groups):
+            audio_group = "audio"
+        if any(g.media_type == "SUBTITLES" for g in media_groups):
+            subs_group = "subs"
 
     write_master_playlist(
         work_dir / "master.m3u8",
@@ -234,8 +257,16 @@ def encode_hls_renditions(
                 width=item.width,
                 height=item.height,
                 playlist_rel=item.playlist_rel,
+                codecs=(
+                    "avc1.4d401f,mp4a.40.2"
+                    if mux_audio or audio_group
+                    else "avc1.4d401f"
+                ),
+                audio_group=audio_group,
+                subtitles_group=subs_group,
             )
             for item in encoded
         ],
+        media_groups=media_groups,
     )
     return encoded

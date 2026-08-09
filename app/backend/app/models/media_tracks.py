@@ -37,6 +37,11 @@ class MediaTrack(Base):
     label_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_dubbed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Sidecar asset (audio/subtitle upload) or embedded stream on the primary asset.
+    source_media_asset_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("media_assets.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    source_stream_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
     hls_group_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     hls_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

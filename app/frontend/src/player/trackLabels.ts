@@ -12,20 +12,23 @@ export type SessionTrackMeta = {
   is_default?: boolean;
 };
 
-function languageName(code: string | null, t: PlayerI18n): string {
-  switch (code) {
-    case 'en':
-      return t.english;
-    case 'fa':
-      return t.persian;
-    case 'ps':
-      return t.pashto;
-    case 'prs':
-      return t.dari;
-    default:
-      return code || '';
-  }
-}
+/**
+ * Language-native track identity for the player menu.
+ * Remains understandable regardless of page locale (EN/FA/PS UI).
+ */
+const NATIVE_AUDIO: Record<string, { base: string; dubbed: string }> = {
+  en: { base: 'English', dubbed: 'English Dubbed' },
+  fa: { base: 'فارسی', dubbed: 'فارسی دوبله' },
+  ps: { base: 'پښتو', dubbed: 'پښتو دوبله' },
+  prs: { base: 'دری', dubbed: 'دری دوبله' },
+};
+
+const NATIVE_SUB: Record<string, string> = {
+  en: 'English',
+  fa: 'فارسی',
+  ps: 'پښتو',
+  prs: 'دری',
+};
 
 export function localizeAudioTrackName(
   lang: string | null | undefined,
@@ -33,12 +36,13 @@ export function localizeAudioTrackName(
   opts?: { isDubbed?: boolean; fallback?: string }
 ): string {
   const code = normalizeLanguageCode(lang);
-  if (opts?.isDubbed && code === 'fa') return t.persianDub;
-  if (opts?.isDubbed && code === 'ps') return t.pashtoDub;
-  if (opts?.isDubbed && code) {
-    return `${languageName(code, t)} ${t.dubbed}`;
+  if (code && NATIVE_AUDIO[code]) {
+    return opts?.isDubbed ? NATIVE_AUDIO[code].dubbed : NATIVE_AUDIO[code].base;
   }
-  if (code) return languageName(code, t);
+  if (opts?.isDubbed && code) {
+    return `${code.toUpperCase()} ${t.dubbed}`;
+  }
+  if (code) return code.toUpperCase();
   return opts?.fallback?.trim() || t.audio;
 }
 
@@ -48,7 +52,8 @@ export function localizeSubtitleTrackName(
   opts?: { fallback?: string }
 ): string {
   const code = normalizeLanguageCode(lang);
-  if (code) return languageName(code, t);
+  if (code && NATIVE_SUB[code]) return NATIVE_SUB[code];
+  if (code) return code.toUpperCase();
   return opts?.fallback?.trim() || t.subtitles;
 }
 

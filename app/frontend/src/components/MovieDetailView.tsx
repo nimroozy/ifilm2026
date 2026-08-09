@@ -141,7 +141,15 @@ export function MovieDetailView({
   const runtimeLabel = movie.duration ? `${movie.duration} ${t.common.min}` : '';
   const imdbLabel = movie.rating ? `IMDb ${Number(movie.rating).toFixed(1)}` : '';
   const credits = resolveCredits(movie);
-  const languageBadges = movieDetailLanguageBadges(movie);
+  const languageBadges = movieDetailLanguageBadges(movie, {
+    dubbed: t.movie.dubbed,
+    subtitled: t.nav.subtitled,
+    multiAudio: 'Multi Audio',
+    persianDubbed: t.player.persianDub,
+    pashtoDubbed: t.player.pashtoDub,
+    audio: t.movie.audio,
+    subtitles: t.movie.subtitles,
+  });
   const audioAv = resolveAudioAvailability(movie);
   const subAv = resolveSubtitleAvailability(movie);
   const heroBackdrop = heroBackdropSrcSet(movie.backdrop);

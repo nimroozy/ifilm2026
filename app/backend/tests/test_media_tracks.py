@@ -52,6 +52,31 @@ def _asset(db_session, *, movie_id: int | None = None) -> MediaAsset:
         storage_path=f"originals/{new_uuid()}/clip.mp4",
         movie_id=movie_id,
         duration_seconds=600.0,
+        audio_stream_count=1,
+        probed_at=utcnow(),
+    )
+    db_session.add(asset)
+    db_session.commit()
+    db_session.refresh(asset)
+    return asset
+
+
+def _subtitle_asset(db_session) -> MediaAsset:
+    ensure_media_layout()
+    asset = MediaAsset(
+        id=new_uuid(),
+        original_filename="subs.vtt",
+        stored_filename="subs.vtt",
+        mime_type="text/vtt",
+        extension="vtt",
+        size_bytes=32,
+        category="subtitles",
+        upload_status="completed",
+        processing_status="completed",
+        storage_backend="local",
+        storage_path=f"subtitles/{new_uuid()}/subs.vtt",
+        duration_seconds=600.0,
+        audio_stream_count=0,
         probed_at=utcnow(),
     )
     db_session.add(asset)
@@ -93,22 +118,29 @@ def test_track_crud_and_permissions(client, db_session):
             "is_dubbed": True,
             "label_key": "audio.persian_dub",
             "hls_group_id": "audio",
+            "source_stream_index": 0,
             "sort_order": 1,
         },
     )
-    assert created.status_code == 200
+    assert created.status_code == 200, created.text
     body = created.json()
     assert body["language_code"] == "fa"
     assert body["is_dubbed"] is True
     assert body["label_key"] == "audio.persian_dub"
     assert "دوبله" not in (body.get("label_key") or "")
 
+    sub_source = _subtitle_asset(db_session)
     sub = client.post(
         f"/api/admin/media/assets/{asset.id}/tracks",
         headers=_headers(manager),
-        json={"track_type": "subtitle", "language_code": "ps", "is_default": True},
+        json={
+            "track_type": "subtitle",
+            "language_code": "ps",
+            "is_default": True,
+            "source_media_asset_id": sub_source.id,
+        },
     )
-    assert sub.status_code == 200
+    assert sub.status_code == 200, sub.text
     assert sub.json()["is_dubbed"] is False
 
     listed2 = client.get(f"/api/admin/media/assets/{asset.id}/tracks", headers=_headers(reader))
