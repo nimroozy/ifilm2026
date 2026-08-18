@@ -5,7 +5,7 @@
 **Baseline:** production `v1.17.0` (unchanged — do not deploy from this PR alone without ops enablement)  
 **Draft PR:** https://github.com/nimroozy/ifilm2026/pull/76  
 **Branch:** `cursor/a1-portal-subscriber-auth-4873`  
-**Head SHA:** *(updated after push)*
+**Head SHA:** `f3ccd8726c90f7078c731fa6c9a70097686bd313`
 
 **Do not merge/deploy automatically. Do not start G3/T1/player redesign.**
 
