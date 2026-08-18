@@ -34,7 +34,7 @@ Forbidden: iFilm configured with `MOBIN_PORTAL_AI_TOKEN`.
 ## 2. iFilm responsibilities
 
 1. Render Sign In: Service Location + Internet Username + Password (EN/FA/PS).
-2. `GET /api/auth/isp/locations` → portal locations from `/agent/config` (or later `/service-locations`), cached ~5 min.
+2. `GET /api/auth/isp/locations` → portal `GET /api/voice-ai/v1/service-locations` (not `/agent/config`), cached ~5 min.
 3. `POST /api/auth/isp/login` (or extend existing subscriber login with `branch`) → S2S `POST /customers/lookup`.
 4. On success: link local subscriber via `portal_mns` + stable `external_subject`; issue existing iFilm JWT/refresh.
 5. Snapshot entitlement from mapped portal fields. Recheck before new playback if snapshot older than TTL.
@@ -105,7 +105,7 @@ PORTAL_BASE_URL=https://portal.mns.af
 PORTAL_VOICE_AI_PREFIX=/api/voice-ai/v1
 PORTAL_IFILM_CLIENT=ifilm
 PORTAL_IFILM_TOKEN=...          # IFILM_PORTAL_TOKEN — never MOBIN_PORTAL_AI_TOKEN
-PORTAL_REQUEST_SOURCE=ifilm     # only after portal accepts it
+PORTAL_REQUEST_SOURCE=          # do not default to ifilm; set only after portal accepts it
 PORTAL_LOCATION_CACHE_TTL_SECONDS=300
 PORTAL_CONNECT_TIMEOUT_SECONDS=3
 PORTAL_READ_TIMEOUT_SECONDS=5
@@ -151,4 +151,4 @@ Release rollback to `v1.17.0` remains valid until A1 ships.
 
 ## 10. Current stop reason
 
-S2S API **exists**. Implementation waits for a dedicated iFilm token, a successful QA lookup (real schema/enums), and a locations payload from `/agent/config` (or a small `/service-locations` add). Passwordless status is the only other portal extension to consider.
+S2S API **exists**. `/agent/config` is voice-agent prompt/config, not locations. Implementation waits on: dedicated iFilm credential (verify/extend multi-token middleware), `GET /service-locations`, one QA lookup (nested `customer` shape), confirmed identity/status/`request_source`, and passwordless `/customers/status` **or** explicit TTL/re-login.

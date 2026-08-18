@@ -25,10 +25,11 @@ iFilm still **must not** talk to SAS DBs. Portal remains the broker.
 A1 implementation is **not** blocked on “missing S2S API.”  
 It **is** blocked on:
 
-1. A **dedicated iFilm** service token (do not reuse the 3CX token)
-2. Live success QA of `POST /customers/lookup` with a dedicated QA subscriber
-3. Confirming whether `GET /agent/config` returns service locations
-4. A passwordless current-status method (missing today) **or** an explicit TTL/fail-closed policy
+1. A **dedicated iFilm** service credential (do not reuse the 3CX token). Multi-client tokens are **not proven** — middleware may need a small change if only one global bearer exists.
+2. A JSON service-locations endpoint (or another real dynamic source). **`GET /agent/config` is not that source.**
+3. Live success QA of `POST /customers/lookup` with a dedicated QA subscriber (nested `customer` object; enums unconfirmed)
+4. Confirmed `customer_number` semantics, status enums, and iFilm `request_source`
+5. Passwordless `POST /customers/status` **or** an explicit TTL + re-login policy
 
 ---
 
@@ -65,16 +66,20 @@ Missing/invalid token → `401`
 `X-Mobin-Client` is CORS-allowed and is the existing client-identity header.  
 `X-Client-Id` is **not** the portal convention.
 
-iFilm desired identity: `X-Mobin-Client: ifilm` + its **own** bearer.  
-Portal must issue that credential. This workspace has **no** iFilm portal token and must not be given the 3CX token.
+Desired end state: `X-Mobin-Client: ifilm` + a **separate** bearer.  
+PRIOR_3CX proves a service token exists. It does **not** prove portal already supports multiple client-specific tokens. If middleware accepts only one global secret, a small portal auth-middleware change is required.
+
+This workspace has **no** iFilm portal token and must not be given the 3CX token.
 
 ### 3.2 Endpoints
 
 | Method | Path | Role for A1 |
 |--------|------|-------------|
-| `GET` | `/api/voice-ai/v1/agent/config` | **First** location/config source to inspect with an iFilm token |
+| `GET` | `/api/voice-ai/v1/agent/config` | **Voice-agent prompt/config only** (`success` / `version` / `instructions`). **Not** a location source. Do not use for the iFilm dropdown. |
 | `POST` | `/api/voice-ai/v1/customers/lookup` | **Reuse** for branch + username + password verify |
 | `POST` | `/api/voice-ai/v1/packages/search` | Exists; **not required** for A1 |
+| `GET` | `/api/voice-ai/v1/service-locations` | **Missing (404).** Minimal portal add for dynamic locations |
+| `POST` | `/api/voice-ai/v1/customers/status` | **Missing (404).** Passwordless recheck (optional if TTL + re-login accepted) |
 
 ### 3.3 Not present (do not rebuild the whole auth API)
 
@@ -108,21 +113,21 @@ HTML branches (not a JSON API):
 | 5 | Helmand |
 | 6 | Buldak |
 
-Operator-normalized voice-ai `branch` strings use the **same names**.  
-Do not hard-code this list in iFilm as the long-term source.
+PRIOR_3CX + HTML use the same six **names**.  
+Do **not** hard-code this list in iFilm as the long-term source. Portal should add `GET /api/voice-ai/v1/service-locations`.
 
 ---
 
 ## 5. What we could not observe without an iFilm token
 
-- Exact `/customers/lookup` success JSON (operator field **names** only)
-- Exact `account_status` / `internet_status` enums
+- Live `/customers/lookup` success payload (PRIOR_3CX nested shape documented; enums unconfirmed)
+- Exact `account_status` / `internet_status` values
 - How expired vs suspended is represented
-- Whether `customer_number` is globally unique
+- Whether `customer.customer_number` is globally unique
 - Whether username collides across branches
 - Whether `branch` accepts IDs (`1`) as well as `"Kabul"`
-- Allowed `request_source` values
-- `/agent/config` body (branches or not)
+- Any `request_source` other than confirmed `"3cx_voice"`
+- Whether portal accepts more than one service token
 - Authenticated rate-limit policy / token scopes
 - Successful QA lookup
 
@@ -160,11 +165,13 @@ Production default: identity mode **disabled**. Live Radius is **not** the A1 pa
 |----------|--------|
 | Does portal already have an S2S customer API? | **Yes** — `/api/voice-ai/v1` |
 | Should A1 create `/api/integrations/ifilm/*`? | **No** |
-| Should iFilm reuse `/customers/lookup`? | **Yes, after iFilm token + QA** |
+| Should iFilm reuse `/customers/lookup`? | **Yes** (nested `customer` object; after iFilm credential + QA) |
 | May iFilm reuse the 3CX bearer? | **No** |
-| Locations JSON confirmed? | **Not yet** — inspect `/agent/config` first |
+| Multi-client tokens already supported? | **UNKNOWN** — verify / possibly extend middleware |
+| Is `/agent/config` a location source? | **No** — voice-agent prompt/config |
+| Locations JSON confirmed? | **No** — add `GET /service-locations` |
 | Passwordless validate exists? | **No** |
 | Can A1 enable production portal login now? | **No** |
 | May iFilm talk to SAS DBs? | **No** |
 
-**Status: CORRECTED AUDIT COMPLETE — IMPLEMENTATION WAITING ON IFILM TOKEN + QA LOOKUP**
+**Status: 3CX-EVIDENCE CORRECTION COMPLETE — NO IFILM LOGIN IMPLEMENTATION**

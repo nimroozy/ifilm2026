@@ -8,8 +8,8 @@
 | Class | Meaning |
 |-------|---------|
 | **LIVE** | Observed against production portal in this pass (no valid service token used) |
-| **OPERATOR** | Provided by the portal/3CX operators; not independently confirmed in this pass |
-| **UNKNOWN** | Requires a dedicated iFilm token and/or QA subscriber |
+| **PRIOR_3CX** | Shape/behavior from the original 3CX portal integration (not re-fetched with a live token this pass) |
+| **UNKNOWN** | Requires a dedicated iFilm credential and/or QA subscriber |
 
 No real 3CX bearer token, no customer password, and no service secret appears in this document.
 
@@ -21,7 +21,7 @@ No real 3CX bearer token, no customer password, and no service secret appears in
 
 | Method | Path | LIVE result |
 |--------|------|-------------|
-| `GET` | `/agent/config` | **Exists.** Unauthenticated → `401` JSON `unauthorized` |
+| `GET` | `/agent/config` | **Exists.** Unauthenticated → `401` JSON `unauthorized`. **PRIOR_3CX:** remote voice-agent prompt/config — **not** a location source |
 | `POST` | `/customers/lookup` | **Exists.** `GET`/`PUT` → `405` “Supported methods: POST.” Unauthenticated POST → `401` `unauthorized` |
 | `POST` | `/packages/search` | **Exists.** Unauthenticated POST → `401` `unauthorized` |
 | `GET` | `/service-locations` | **404** — not present |
@@ -45,17 +45,18 @@ Accept: application/json
 Content-Type: application/json   # POST only
 ```
 
-Operator-documented client header (CORS preflight **LIVE** allows it):
+PRIOR_3CX client header (CORS preflight **LIVE** allows it):
 
 ```http
 X-Mobin-Client: 3cx-voice-agent
+Authorization: Bearer <3CX service token>
 ```
 
-Desired iFilm client (not issued in this environment):
+Desired iFilm end state (capability **not proven**; may need a small portal middleware change):
 
 ```http
 X-Mobin-Client: ifilm
-Authorization: Bearer <IFILM_PORTAL_TOKEN>
+Authorization: Bearer <separate IFILM_PORTAL_TOKEN>
 ```
 
 ### LIVE unauthorized body
@@ -77,13 +78,17 @@ Observed for:
 - fake bearer + `X-Client-Id: ifilm` (this header is **not** a substitute)
 - `X-Mobin-Client` alone (no bearer)
 
-**Implication:** the client header does not bypass the token. A separate iFilm identity is plausible (`X-Mobin-Client` is a first-class CORS-allowed header) but **cannot be self-issued**. There is no public `/token` or `/clients` endpoint.
+**Implication:** a service bearer exists and is mandatory. The client header does not bypass it.
 
-**Do not configure iFilm with the 3CX `MOBIN_PORTAL_AI_TOKEN`.** Issue a distinct `IFILM_PORTAL_TOKEN` on portal.
+**Token-model uncertainty:** PRIOR_3CX proves **one** working service token. It does **not** prove portal already supports multiple client-specific tokens. Middleware may currently accept a single global secret. Independent iFilm credentials are still **required**; portal must **verify** multi-client support and **extend** auth middleware if only one global token is accepted.
+
+There is no public `/token` or `/clients` endpoint (**LIVE** 404).
+
+**Do not configure iFilm with the 3CX `MOBIN_PORTAL_AI_TOKEN`.**
 
 ### Token scopes (UNKNOWN)
 
-No scope document or introspect endpoint is public. Whether `ifilm` can be limited to lookup+config (and denied `packages/search`) is a portal-admin question.
+No scope document or introspect endpoint is public. Whether an iFilm credential can be limited to lookup + locations (and denied `packages/search` / `agent/config`) is a portal-admin question.
 
 ---
 
@@ -118,23 +123,52 @@ This matches Laravel’s default 60/min throttle. Per-client, per-username, or a
 
 ---
 
-## 5. `GET /agent/config` — location source candidate
+## 5. `GET /agent/config` — remote voice-agent configuration (NOT locations)
 
-**LIVE:** route exists; body not observed (token required).
+**LIVE:** route exists; body not observed this pass (token required).
 
-**OPERATOR:** this is the 3CX agent configuration endpoint. It **may** include branches / provinces / supported location names. That is the first place iFilm must look for dynamic locations.
+**PRIOR_3CX:** this is a **remote AI-agent prompt/config** endpoint. Expected success shape (approximate):
+
+```json
+{
+  "success": true,
+  "version": "...",
+  "instructions": "..."
+}
+```
+
+**Do not assume `/agent/config` supplies service locations.** It is not a confirmed location source. iFilm should not call it for the login location dropdown.
 
 **LIVE 404:** no dedicated `/service-locations`, `/branches`, `/locations`, or `/provinces` under `/voice-ai/v1`.
 
-Until `/agent/config` is read with an iFilm token:
+Known customer-facing branch **names** from portal HTML + PRIOR_3CX (bootstrap evidence only — **do not hard-code** as iFilm’s long-term source):
 
-- Do **not** treat HTML `/login` options as the long-term locations API.
-- HTML branches (Kabul, Nimruz, Kandahar, Ghazni, Helmand, Buldak) remain **bootstrap evidence only**.
+- Kabul
+- Kandahar
+- Ghazni
+- Nimruz
+- Buldak
+- Helmand
 
-If `/agent/config` does **not** list customer-facing locations, the **only** recommended portal addition is:
+Because no existing JSON locations endpoint has been found, the **minimal portal addition** is:
 
 ```http
 GET /api/voice-ai/v1/service-locations
+```
+
+Preferred shape (use actual portal fields when implemented; never include SAS hosts/secrets):
+
+```json
+{
+  "success": true,
+  "locations": [
+    {
+      "id": "1",
+      "name": "Kabul",
+      "active": true
+    }
+  ]
+}
 ```
 
 Do **not** invent `/api/integrations/ifilm/*`.
@@ -145,16 +179,16 @@ Do **not** invent `/api/integrations/ifilm/*`.
 
 **LIVE:** route exists; POST-only; token required before body validation.
 
-Therefore these are **UNKNOWN** until an iFilm token exists:
+Still **UNKNOWN** until a dedicated iFilm credential + QA lookup:
 
-- allowed `request_source` values (`ifilm` vs `3cx_voice` vs free text)
+- whether portal accepts any `request_source` other than `3cx_voice`
 - whether `branch` accepts names only, or also numeric `branch_id` (`1`)
-- success HTTP status and JSON schema
-- failure codes for bad password vs inactive service
+- exact `account_status` / `internet_status` enum values
 - username case normalization
 - username collision across branches
+- `customer_number` global uniqueness
 
-### OPERATOR request shape (3CX)
+### PRIOR_3CX request shape
 
 ```json
 {
@@ -165,52 +199,61 @@ Therefore these are **UNKNOWN** until an iFilm token exists:
 }
 ```
 
-### Conceptual iFilm request (do not invent `request_source` if portal enumerates it)
+**Confirmed `request_source`:** `"3cx_voice"` only.
+
+**iFilm `request_source` remains UNKNOWN.** Do **not** assume `"ifilm"` until portal accepts or documents it.
+
+### PRIOR_3CX success shape (nested — do not flatten)
+
+Envelope: `success`, `verified`.  
+Subscriber/service fields live under `customer`.  
+`current_package` is an **object**, not a string.
 
 ```json
 {
-  "branch": "Kabul",
-  "username": "1210000",
-  "password": "<transient>",
-  "request_source": "ifilm"
+  "success": true,
+  "verified": true,
+  "customer": {
+    "display_name": "...",
+    "customer_number": "...",
+    "branch": "Kabul",
+    "account_status": "...",
+    "internet_status": "...",
+    "current_package": {
+      "name": "...",
+      "download_speed": "...",
+      "upload_speed": "..."
+    },
+    "expiry_date": "...",
+    "days_remaining": 10
+  }
 }
 ```
 
-Use the exact `request_source` portal accepts. Confirm with a token; do not guess if lookup 422s.
+Do **not** build frontend/backend DTOs from a flattened `{ display_name, customer_number, ... }` payload.
 
-### OPERATOR known branch names
+Exact string values/enums still require a real QA lookup.
 
-- Kabul
-- Nimruz
-- Kandahar
-- Ghazni
-- Helmand
-- Buldak
+### PRIOR_3CX validation errors (do not show to iFilm customers)
 
-These match the HTML `/login` labels. Prefer names from `/agent/config` when confirmed.
+The 3CX client handled HTTP **400/422**-style validation failures including:
 
-### OPERATOR success fields (names only — values/enums not live-verified)
+| Code | Meaning (portal/3CX) |
+|------|----------------------|
+| `invalid_branch` | Branch not accepted |
+| `branch_rejected` | Branch rejected |
+| `username_rejected` | Username rejected |
+| `password_rejected` | Password rejected |
 
-| Field | Notes |
-|-------|--------|
-| `success` | Envelope |
-| `verified` | Password/account verification flag — **do not treat HTTP 200 alone as entitlement** |
-| `display_name` | Customer display name |
-| `customer_number` | Candidate stable id — uniqueness **UNKNOWN** |
-| `branch` | Location name used for lookup |
-| `account_status` | Exact enum **UNKNOWN** |
-| `internet_status` | Exact enum **UNKNOWN** |
-| `current_package` | Package label |
-| `expiry_date` | Service expiry; format **UNKNOWN** |
-| `days_remaining` | Convenience field; do not prefer over `expiry_date` |
+iFilm must **not** surface these distinctions. Customer-facing credential failures stay generic (invalid location / username / password). Logs may store the portal `code` only.
 
 ### Proposed iFilm mapping (UNVERIFIED — confirm with QA)
 
 Login / playback entitlement should require:
 
-1. `verified` is true (boolean or portal-equivalent)
-2. Internet service is usable — derive from **actual** `internet_status` / `account_status` / `expiry_date` after a successful QA lookup
-3. Fail closed if any of those fields are missing or unrecognized
+1. Envelope `success == true` and `verified == true`
+2. Internet service is usable — derive from **actual** `customer.internet_status` / `customer.account_status` / `customer.expiry_date` after a successful QA lookup
+3. Fail closed if those fields are missing or unrecognized
 
 Likely denied (names only, not confirmed):
 
@@ -255,7 +298,7 @@ Searched existing `/voice-ai/v1` surface for:
 
 `/customers/lookup` requires `password` in the 3CX request concept. There is no safe existing method for iFilm to re-check “still active” without the Internet password.
 
-This is the **only** portal API extension A1 should consider, for example:
+Recommended **minimal** portal addition (optional for v1 only if product accepts bounded entitlement TTL + forced re-login):
 
 ```http
 POST /api/voice-ai/v1/customers/status
@@ -287,10 +330,11 @@ Until that exists, iFilm may use a **bounded local entitlement TTL** and fail cl
 | Is this a real S2S JSON API (not CSRF/session)? | **Yes (LIVE)** |
 | Can iFilm reuse `/customers/lookup` for password verify? | **Likely yes (OPERATOR + LIVE route)** — confirm with iFilm token + QA |
 | Does it require 3CX-specific signaling? | **No evidence** it is more than HTTP JSON + bearer |
-| Can iFilm share the 3CX token? | **No** — independent rotation/revocation/logging required |
-| Locations API confirmed? | **Not yet** — `/agent/config` unread |
+| Can iFilm share the 3CX token? | **No** |
+| Does portal already support multiple client tokens? | **UNKNOWN** — PRIOR_3CX proves one bearer; middleware may be global |
+| Locations API confirmed? | **No** — `/agent/config` is voice-agent prompt/config, not locations |
 | Passwordless status API? | **No (LIVE 404)** |
-| Safe for production iFilm enablement today? | **No** — missing iFilm token, live success schema, location payload, status enums |
+| Safe for production iFilm enablement today? | **No** — see §12 blockers |
 
 ---
 
@@ -302,4 +346,30 @@ Until that exists, iFilm may use a **bounded local entitlement TTL** and fail cl
 - Never send password to OpenAI or put it in stream tokens
 - Never connect iFilm to SAS DBs
 - Never reuse `MOBIN_PORTAL_AI_TOKEN`
-- Logs may include: `client=ifilm`, branch, success/failure, stable customer id
+- Logs may include: `client=ifilm`, branch, success/failure, stable customer id, portal validation `code`
+- Never show `invalid_branch` / `username_rejected` / `password_rejected` to customers
+
+---
+
+## 12. Portal additions now required (small; reuse lookup)
+
+Do **not** build another authenticate endpoint.
+
+| # | Change | Required for A1 impl? |
+|---|--------|------------------------|
+| A | Dedicated iFilm service credential (`X-Mobin-Client: ifilm` + separate bearer). Extend middleware if only one global token exists today. | **Yes** |
+| B | `GET /api/voice-ai/v1/service-locations` | **Yes** (no existing JSON location source) |
+| C | `POST /api/voice-ai/v1/customers/status` (branch + `customer_number`, no password) | Optional if product accepts TTL + re-login |
+
+Reuse existing: `POST /api/voice-ai/v1/customers/lookup`.
+
+### A1 implementation blockers (before iFilm login code)
+
+1. Dedicated iFilm portal credential
+2. Service-locations JSON endpoint (or another **real** dynamic source — not `/agent/config`, not a hard-coded list)
+3. One successful QA `POST /customers/lookup`
+4. Confirmed `customer_number` identity semantics
+5. Confirmed `account_status` / `internet_status` values
+6. Confirmed `request_source` accepted for iFilm
+
+Passwordless status may be deferred only with an explicit TTL/re-login policy.

@@ -31,14 +31,14 @@ Accept: application/json
 Content-Type: application/json
 ```
 
-Portal should distinguish clients:
+**Desired** client distinction (verify / possibly extend portal middleware):
 
 | `X-Mobin-Client` | Token |
 |------------------|--------|
 | `3cx-voice-agent` | existing 3CX secret (leave it on 3CX) |
-| `ifilm` | **new** iFilm secret |
+| `ifilm` | **separate** iFilm secret |
 
-Independent rotation, revocation, logging, and (if supported) rate limits.
+PRIOR_3CX proves a bearer exists. It does **not** prove multi-client tokens already work. If only one global token is accepted, a small auth-middleware change is required. Independent rotation/revocation/logging remain required.
 
 TLS required. Certificate validation enabled.
 
@@ -52,26 +52,29 @@ Unauthenticated LIVE response:
 
 ## 2. Service locations
 
-### Inspect first (existing)
+`GET /api/voice-ai/v1/agent/config` is **voice-agent prompt/config** (`success`, `version`, `instructions`). It is **not** a location source.
 
-```http
-GET /api/voice-ai/v1/agent/config
-```
-
-If this already returns customer-facing branches / provinces / location names, **reuse that list**. Cache on iFilm (~5 minutes). Never persist SAS hosts.
-
-### Only if `/agent/config` has no locations
-
-Small additive endpoint on the **same** API (portal change):
+No JSON locations route exists today (**LIVE** 404). Portal should add:
 
 ```http
 GET /api/voice-ai/v1/service-locations
 ```
 
-Preferred items: `id` or stable name, `name`, `active`. Omit SAS secrets.
+Preferred:
 
-Do **not** hard-code Kabul/Nimruz/… in iFilm as the long-term source.  
-HTML `/login` options are bootstrap evidence only.
+```json
+{
+  "success": true,
+  "locations": [
+    { "id": "1", "name": "Kabul", "active": true }
+  ]
+}
+```
+
+Use actual portal fields when implemented. Omit SAS hosts/secrets.
+
+Known names (HTML + PRIOR_3CX) are bootstrap evidence only: Kabul, Kandahar, Ghazni, Nimruz, Buldak, Helmand.  
+Do **not** hard-code them in iFilm as the long-term source. Cache the portal list on iFilm (~5 minutes).
 
 ---
 
@@ -81,54 +84,66 @@ HTML `/login` options are bootstrap evidence only.
 POST /api/voice-ai/v1/customers/lookup
 ```
 
-### Request (operator shape)
+### Request (PRIOR_3CX confirmed `request_source`)
 
 ```json
 {
   "branch": "Kabul",
   "username": "customer123",
   "password": "customer-password",
-  "request_source": "ifilm"
+  "request_source": "3cx_voice"
 }
 ```
 
-`request_source` must be whatever portal already allows. Confirm after the iFilm token exists. Do not invent an enum if portal validates a list (`3cx_voice` is the known 3CX value).
+**Confirmed `request_source`:** `"3cx_voice"`.  
+**iFilm value:** UNKNOWN — do **not** assume `"ifilm"` until portal accepts/documents it.
 
-`branch` is a **name** in the 3CX integration (`Kabul`, …). Confirm whether numeric `branch_id` is also accepted; iFilm should send the canonical value portal returns from config.
+`branch` is a **name** in the 3CX integration (`Kabul`, …). Confirm whether numeric `branch_id` is also accepted; iFilm should send the canonical value from `/service-locations`.
 
-### Success fields (operator names — live values not yet captured)
+### PRIOR_3CX success shape (nested — do not flatten)
 
 ```json
 {
   "success": true,
   "verified": true,
-  "display_name": "...",
-  "customer_number": "...",
-  "branch": "Kabul",
-  "account_status": "...",
-  "internet_status": "...",
-  "current_package": "...",
-  "expiry_date": "...",
-  "days_remaining": 0
+  "customer": {
+    "display_name": "...",
+    "customer_number": "...",
+    "branch": "Kabul",
+    "account_status": "...",
+    "internet_status": "...",
+    "current_package": {
+      "name": "...",
+      "download_speed": "...",
+      "upload_speed": "..."
+    },
+    "expiry_date": "...",
+    "days_remaining": 10
+  }
 }
 ```
 
-Exact enums and extra fields: **confirm with QA lookup**. iFilm must not invent additional portal fields.
+Exact enums: **confirm with QA lookup**. Do not invent additional portal fields. Do not build DTOs from a flattened payload.
+
+### PRIOR_3CX validation errors
+
+HTTP 400/422 codes seen by 3CX: `invalid_branch`, `branch_rejected`, `username_rejected`, `password_rejected`.
+
+iFilm customers must see a **generic** credential failure. Do not expose these codes in the UI.
 
 ### iFilm acceptance (after QA confirms enums)
 
 Provisional:
 
 ```text
-verified == true
+success == true
+AND verified == true
 AND internet service is usable
-  (from actual internet_status / account_status / expiry_date)
+  (from customer.internet_status / customer.account_status / customer.expiry_date)
 ```
 
 Then iFilm may issue its own subscriber JWT.  
 Inactive/suspended/expired → deny playback; do not classify as “wrong password” if portal distinguishes them.
-
-Invalid location / username / password → generic customer error.
 
 ---
 
@@ -200,17 +215,14 @@ iFilm should still apply its own subscriber-login rate limit.
 
 ## 9. Acceptance checklist (portal + QA)
 
-- [ ] Dedicated `X-Mobin-Client: ifilm` token issued (not the 3CX token)
-- [ ] `GET /agent/config` inspected; locations source decided
-- [ ] Additive `/service-locations` only if config has no locations
-- [ ] `POST /customers/lookup` succeeds for QA subscriber in location A
-- [ ] Wrong password → generic failure
-- [ ] Wrong location → generic / denied (no enumeration)
+- [ ] Dedicated iFilm credential issued (not the 3CX token); multi-client support verified or middleware extended
+- [ ] `GET /service-locations` live (authoritative active locations; no SAS secrets)
+- [ ] `POST /customers/lookup` succeeds for QA subscriber (nested `customer` object)
+- [ ] Wrong password / branch / username → generic customer failure (`invalid_branch` etc. not shown)
 - [ ] Suspended/expired QA → not treated as bad password
 - [ ] Same username in two locations does not collide in iFilm
 - [ ] `customer_number` uniqueness documented
-- [ ] `account_status` / `internet_status` enums documented from real payloads
-- [ ] `request_source` value for iFilm confirmed
-- [ ] Passwordless `/customers/status` **or** accepted TTL/fail-closed policy
-- [ ] No SAS secrets in responses
-- [ ] iFilm token scoped away from unnecessary voice-agent package tools if possible
+- [ ] `account_status` / `internet_status` values documented from real payloads
+- [ ] `request_source` value for iFilm confirmed (do not assume `ifilm`)
+- [ ] Passwordless `/customers/status` **or** accepted TTL/re-login policy
+- [ ] iFilm credential scoped away from `agent/config` / `packages/search` if possible

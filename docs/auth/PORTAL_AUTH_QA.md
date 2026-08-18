@@ -17,7 +17,7 @@ Do not configure iFilm with `MOBIN_PORTAL_AI_TOKEN`.
   - Location A wrong-password control
   - Location B active (same username if possible)
   - Inactive/suspended/expired if available
-- [ ] `/agent/config` readable with the iFilm token
+- [ ] `GET /api/voice-ai/v1/service-locations` live (do not treat `/agent/config` as locations)
 
 ---
 
@@ -26,15 +26,15 @@ Do not configure iFilm with `MOBIN_PORTAL_AI_TOKEN`.
 | # | Case | Expected |
 |---|------|----------|
 | P0 | Lookup/config **without** token | `401` `unauthorized` (LIVE — done) |
-| P1 | `GET /agent/config` with iFilm token | 200; record whether locations are present |
-| P2 | Config with 3CX token from iFilm | Must not be used |
-| P3 | `POST /customers/lookup` valid QA A | `verified` + status fields; no secrets |
-| P4 | Wrong password | generic failure |
-| P5 | Wrong location | generic / denied |
+| P1 | `GET /service-locations` with iFilm credential | 200; active locations only; no SAS secrets |
+| P2 | `GET /agent/config` | Voice-agent `version`/`instructions` — **not** used for locations |
+| P3 | 3CX token from iFilm | Must not be used |
+| P4 | `POST /customers/lookup` valid QA A | nested `customer`; `success`+`verified`; no secrets |
+| P5 | Wrong password / branch / username | portal may return `password_rejected` etc.; iFilm UI stays generic |
 | P6 | Inactive/expired/suspended | distinguishable from bad password if portal supports it |
-| P7 | Duplicate username A vs B | distinct iFilm subjects unless same `customer_number` globally |
+| P7 | Duplicate username A vs B | distinct subjects unless same `customer_number` globally |
 | P8 | Passwordless status | **missing today** — skip or test new `/customers/status` |
-| P9 | `request_source=ifilm` | accepted or documented allowed value |
+| P9 | `request_source` | `3cx_voice` confirmed; iFilm value UNKNOWN — do not assume `ifilm` |
 | P10 | Rate limit | document authenticated headers; iFilm still rate-limits login |
 
 ---

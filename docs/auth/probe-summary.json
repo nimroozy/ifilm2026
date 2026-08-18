@@ -1,6 +1,21 @@
 {
   "date": "2026-08-18",
-  "correction": "Previous pass missed /api/voice-ai/v1. That namespace is the existing S2S API.",
+  "correction": "Previous pass missed /api/voice-ai/v1. 3CX evidence: /agent/config is voice-agent prompt/config, not locations. Lookup success is nested under customer.",
+  "prior_3cx": {
+    "agent_config_purpose": "remote_voice_agent_prompt_config",
+    "agent_config_not_location_source": true,
+    "lookup_envelope": ["success", "verified"],
+    "lookup_customer_object": true,
+    "request_source_confirmed": "3cx_voice",
+    "request_source_ifilm": "unknown",
+    "validation_codes": [
+      "invalid_branch",
+      "branch_rejected",
+      "username_rejected",
+      "password_rejected"
+    ],
+    "multi_client_tokens_proven": false
+  },
   "voice_ai_base": "https://portal.mns.af/api/voice-ai/v1",
   "token_used": false,
   "real_3cx_token_used": false,
