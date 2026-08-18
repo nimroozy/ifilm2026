@@ -5,7 +5,7 @@
 **Baseline:** production `v1.17.0`  
 **Draft PR:** https://github.com/nimroozy/ifilm2026/pull/76  
 **Branch:** `cursor/a1-portal-subscriber-auth-4873`  
-**Head SHA:** *(updated after push)*
+**Head SHA:** `c26a068e11a6af2a19885d19ca48a11356c5b81c`
 
 **Do not merge as an auth implementation. Do not deploy. Do not start G3/T1/player redesign.**
 
