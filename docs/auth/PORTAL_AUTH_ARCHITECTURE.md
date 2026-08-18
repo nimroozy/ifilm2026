@@ -77,7 +77,7 @@ After lookup success + usable internet service:
 
 Subsequent API calls do **not** hit portal each time.
 
-Playback session create: if snapshot older than TTL, call portal status (no password) **or** deny if that API does not exist yet.
+Playback session create: if snapshot older than **15 minutes**, call portal `/customers/status` (no password) when that API exists; if status is deferred for v1, **deny new** protected playback (customer must log in again). Do not retroactively recall already-issued playback unless the current player/token architecture already supports that. Password is never stored.
 
 ---
 
@@ -109,7 +109,7 @@ PORTAL_REQUEST_SOURCE=          # do not default to ifilm; set only after portal
 PORTAL_LOCATION_CACHE_TTL_SECONDS=300
 PORTAL_CONNECT_TIMEOUT_SECONDS=3
 PORTAL_READ_TIMEOUT_SECONDS=5
-PORTAL_ENTITLEMENT_CACHE_TTL_SECONDS=900
+PORTAL_ENTITLEMENT_CACHE_TTL_SECONDS=900   # 15 minutes — v1 if /customers/status is deferred
 SUBSCRIBER_IDENTITY_MODE=portal
 ALLOW_LOCAL_CUSTOMER_LOGIN=false
 ```

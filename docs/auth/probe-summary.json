@@ -95,5 +95,18 @@
     { "id": 3, "name": "Kandahar" },
     { "id": 2, "name": "Nimruz" }
   ],
-  "qa_lookup_success": "not_run"
+  "qa_lookup_success": "not_run",
+  "lookup_evidence_classes": {
+    "existing_authentication_capability": "PASS — PRIOR_3CX",
+    "route_api_existence": "PASS — LIVE",
+    "reusable_for_ifilm": "PROVISIONAL — pending dedicated iFilm token + successful QA lookup",
+    "production_ifilm_authentication": "NOT VERIFIED"
+  },
+  "deferred_status_v1_policy": {
+    "entitlement_snapshot_ttl_seconds": 900,
+    "new_protected_playback_after_ttl": "denied",
+    "relogin_required": true,
+    "password_stored": false,
+    "retroactive_recall_of_issued_playback": "no unless current player/token architecture already supports it"
+  }
 }

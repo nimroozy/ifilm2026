@@ -1,13 +1,13 @@
 # A1 — Portal/SAS Subscriber Authentication Report
 
-**Status:** 3CX-EVIDENCE CORRECTION — docs only; iFilm login **not** implemented  
+**Status:** A1 CONTRACT / AUDIT COMPLETE — A1 IMPLEMENTATION BLOCKED ON PORTAL CREDENTIAL + QA  
 **Train:** A1 (prioritized ahead of G3 / T1 / player)  
 **Baseline:** production `v1.17.0`  
 **Draft PR:** https://github.com/nimroozy/ifilm2026/pull/76  
 **Branch:** `cursor/a1-portal-subscriber-auth-4873`  
-**Head SHA:** `334088f8479a0e2df933ad811382f200409285ce`
+**Head SHA:** *(updated after push)*
 
-**Do not merge as an auth implementation. Do not deploy. Do not start G3/T1/player redesign.**
+**Do not merge as an authentication implementation. Do not deploy. Do not start G3/T1/player redesign.**
 
 ---
 
@@ -15,7 +15,9 @@
 
 Portal already has a partner JSON API at `https://portal.mns.af/api/voice-ai/v1` (3CX voice agent).
 
-A1 must **reuse** `POST /customers/lookup`. Do **not** invent `/api/integrations/ifilm/*` authenticate.
+A1 must **reuse** `POST /customers/lookup` when iFilm-client QA succeeds. Do **not** invent `/api/integrations/ifilm/*` authenticate.
+
+Do **not** call the whole lookup integration LIVE-verified for iFilm yet.
 
 `GET /agent/config` is **remote voice-agent prompt/config**, not a location source.
 
@@ -173,18 +175,9 @@ Do **not** build another authenticate endpoint.
 
 ---
 
-## 9. Revised A1 blockers (before iFilm implementation)
+## 9. Revised A1 blockers
 
-Required:
-
-1. Dedicated iFilm portal credential  
-2. Service-locations JSON (or another **real** dynamic source — not `/agent/config`, not a hard-coded list)  
-3. One successful QA `/customers/lookup`  
-4. Confirmed `customer_number` identity semantics  
-5. Confirmed `account_status` / `internet_status` values  
-6. Confirmed `request_source` accepted for iFilm  
-
-Passwordless status may be deferred only with an explicit TTL/re-login policy.
+See **Frozen portal requirements** below. Capability is PRIOR_3CX; route is LIVE; iFilm reuse is PROVISIONAL; production iFilm auth is NOT VERIFIED.
 
 **This PR:** docs only. No application code, no migration, no login UI, no deploy.
 
@@ -202,22 +195,56 @@ Passwordless status may be deferred only with an explicit TTL/re-login policy.
 
 ---
 
-## Ready gate
+## Ready gate (evidence classes)
 
-| Gate | Status |
-|------|--------|
-| S2S API exists | **PASS** (`/api/voice-ai/v1`) |
-| Lookup reusable for auth | **PASS** (reuse; nested shape documented) |
-| `/agent/config` as locations | **N/A — not a location source** |
-| Dynamic locations API | FAIL (add `/service-locations`) |
-| Dedicated iFilm credential | FAIL (and multi-token support UNKNOWN) |
-| Real lookup success QA | FAIL (not run) |
-| Never connect to SAS DB | PASS |
+| Gate | Classification |
+|------|----------------|
+| Existing `/customers/lookup` authentication capability | **PASS — PRIOR_3CX** |
+| Route/API existence (`/api/voice-ai/v1`, including lookup) | **PASS — LIVE** |
+| Reusable for iFilm | **PROVISIONAL** — pending dedicated iFilm token + successful QA lookup |
+| Production iFilm authentication | **NOT VERIFIED** |
+| `/agent/config` as locations | **N/A** — not a location source |
+| Dynamic locations API | **FAIL** — add `/service-locations` (or another real JSON source) |
+| Dedicated iFilm credential | **FAIL** (multi-token support UNKNOWN) |
+| Never connect to SAS DB | **PASS** |
 
-**A1 Ready: NO**
+The lookup route is LIVE. The 3CX auth *capability* is PRIOR_3CX. The integration is **not** LIVE-verified for iFilm.
+
+**A1 Ready: NO** — contract/audit complete; implementation blocked on portal credential + QA.
+
+---
+
+## Frozen portal requirements (before iFilm implementation)
+
+**Existing and reused:** `POST /api/voice-ai/v1/customers/lookup`
+
+Required:
+
+1. Dedicated iFilm portal bearer
+2. `X-Mobin-Client: ifilm` accepted
+3. Confirmed `request_source` for iFilm
+4. `GET /api/voice-ai/v1/service-locations` **or** another real dynamic JSON location source
+5. One successful QA lookup
+6. `customer_number` identity semantics
+7. `account_status` enum
+8. `internet_status` enum
+
+**Preferred:** `POST /api/voice-ai/v1/customers/status` (passwordless current-service validation).
+
+### If `/customers/status` is deferred for v1
+
+Exact policy:
+
+- Entitlement snapshot TTL = **15 minutes**
+- After TTL expires, **new** protected playback is denied
+- Customer must log in again
+- Password is never stored
+- Existing playback already issued is **not** retroactively recalled unless the current player/token architecture already supports that
 
 ---
 
 ## Stop
 
-3CX-evidence correction complete. **No merge. No deploy. No iFilm login implementation.**
+**A1 CONTRACT / AUDIT COMPLETE.**  
+**A1 IMPLEMENTATION BLOCKED ON PORTAL CREDENTIAL + QA.**  
+No merge as authentication implementation. No deploy.

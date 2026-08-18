@@ -165,7 +165,10 @@ Production default: identity mode **disabled**. Live Radius is **not** the A1 pa
 |----------|--------|
 | Does portal already have an S2S customer API? | **Yes** — `/api/voice-ai/v1` |
 | Should A1 create `/api/integrations/ifilm/*`? | **No** |
-| Should iFilm reuse `/customers/lookup`? | **Yes** (nested `customer` object; after iFilm credential + QA) |
+| Existing `/customers/lookup` auth capability | **PASS — PRIOR_3CX** |
+| Lookup route existence | **PASS — LIVE** |
+| Reusable for iFilm | **PROVISIONAL** — pending dedicated iFilm token + QA lookup |
+| Production iFilm authentication | **NOT VERIFIED** |
 | May iFilm reuse the 3CX bearer? | **No** |
 | Multi-client tokens already supported? | **UNKNOWN** — verify / possibly extend middleware |
 | Is `/agent/config` a location source? | **No** — voice-agent prompt/config |
@@ -174,4 +177,4 @@ Production default: identity mode **disabled**. Live Radius is **not** the A1 pa
 | Can A1 enable production portal login now? | **No** |
 | May iFilm talk to SAS DBs? | **No** |
 
-**Status: 3CX-EVIDENCE CORRECTION COMPLETE — NO IFILM LOGIN IMPLEMENTATION**
+**Status: A1 CONTRACT / AUDIT COMPLETE — IMPLEMENTATION BLOCKED ON PORTAL CREDENTIAL + QA**

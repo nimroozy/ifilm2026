@@ -313,7 +313,13 @@ POST /api/voice-ai/v1/customers/status
 
 No password. No assertion store on iFilm. Portal re-queries current SAS/service state.
 
-Until that exists, iFilm may use a **bounded local entitlement TTL** and fail closed on new protected playback after expiry (re-login required). Do not persist the password to fake validate.
+If `/customers/status` is deferred for v1, the exact policy is:
+
+- Entitlement snapshot TTL = **15 minutes**
+- After TTL expires, **new** protected playback is denied
+- Customer must log in again
+- Password is never stored
+- Existing playback already issued is **not** retroactively recalled unless the current player/token architecture already supports that
 
 ---
 
@@ -328,7 +334,10 @@ Until that exists, iFilm may use a **bounded local entitlement TTL** and fail cl
 | Question | Answer |
 |----------|--------|
 | Is this a real S2S JSON API (not CSRF/session)? | **Yes (LIVE)** |
-| Can iFilm reuse `/customers/lookup` for password verify? | **Likely yes (OPERATOR + LIVE route)** — confirm with iFilm token + QA |
+| Existing `/customers/lookup` authentication capability | **PASS — PRIOR_3CX** |
+| Lookup route/API existence | **PASS — LIVE** |
+| Reusable for iFilm | **PROVISIONAL** — pending dedicated iFilm token + successful QA lookup |
+| Production iFilm authentication | **NOT VERIFIED** |
 | Does it require 3CX-specific signaling? | **No evidence** it is more than HTTP JSON + bearer |
 | Can iFilm share the 3CX token? | **No** |
 | Does portal already support multiple client tokens? | **UNKNOWN** — PRIOR_3CX proves one bearer; middleware may be global |
@@ -361,15 +370,18 @@ Do **not** build another authenticate endpoint.
 | B | `GET /api/voice-ai/v1/service-locations` | **Yes** (no existing JSON location source) |
 | C | `POST /api/voice-ai/v1/customers/status` (branch + `customer_number`, no password) | Optional if product accepts TTL + re-login |
 
-Reuse existing: `POST /api/voice-ai/v1/customers/lookup`.
+**Existing and reused:** `POST /api/voice-ai/v1/customers/lookup`  
+(capability **PASS — PRIOR_3CX**; route **PASS — LIVE**; iFilm reuse **PROVISIONAL**; production iFilm auth **NOT VERIFIED**)
 
-### A1 implementation blockers (before iFilm login code)
+### Frozen requirements before iFilm implementation
 
-1. Dedicated iFilm portal credential
-2. Service-locations JSON endpoint (or another **real** dynamic source — not `/agent/config`, not a hard-coded list)
-3. One successful QA `POST /customers/lookup`
-4. Confirmed `customer_number` identity semantics
-5. Confirmed `account_status` / `internet_status` values
-6. Confirmed `request_source` accepted for iFilm
+1. Dedicated iFilm portal bearer
+2. `X-Mobin-Client: ifilm` accepted
+3. Confirmed `request_source` for iFilm
+4. `GET /api/voice-ai/v1/service-locations` **or** another real dynamic JSON location source
+5. One successful QA lookup
+6. `customer_number` identity semantics
+7. `account_status` enum
+8. `internet_status` enum
 
-Passwordless status may be deferred only with an explicit TTL/re-login policy.
+Preferred: `POST /api/voice-ai/v1/customers/status`. If deferred, apply the 15-minute TTL policy in §8.

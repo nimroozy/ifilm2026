@@ -182,7 +182,13 @@ POST /api/voice-ai/v1/customers/status
 
 Portal re-queries **current** SAS/service state. No password.
 
-Until then, iFilm uses a bounded entitlement cache TTL and **fails closed** on new protected playback when the cache expires (customer signs in again).
+If `/customers/status` is deferred for v1, the exact policy is:
+
+- Entitlement snapshot TTL = **15 minutes**
+- After TTL expires, **new** protected playback is denied
+- Customer must log in again
+- Password is never stored
+- Existing playback already issued is **not** retroactively recalled unless the current player/token architecture already supports that
 
 Do **not** rebuild authenticate/locations just because validate is missing.
 

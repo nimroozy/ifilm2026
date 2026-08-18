@@ -1,6 +1,6 @@
 # A1 Portal Auth QA Plan
 
-**Status:** Corrected — reuse `/api/voice-ai/v1`; live **success** lookup not yet run  
+**Status:** A1 CONTRACT / AUDIT COMPLETE — implementation blocked on portal credential + QA  
 **Production site:** https://ifilm.af  
 **Portal:** https://portal.mns.af
 
