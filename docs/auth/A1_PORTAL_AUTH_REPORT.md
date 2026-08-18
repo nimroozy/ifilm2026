@@ -3,9 +3,9 @@
 **Status:** STOPPED AT CONTRACT BOUNDARY — awaiting portal integration API  
 **Train:** A1 (prioritized ahead of G3 / T1 / player)  
 **Baseline:** production `v1.17.0`  
-**Draft PR:** (filled after open)  
+**Draft PR:** https://github.com/nimroozy/ifilm2026/pull/76  
 **Branch:** `cursor/a1-portal-subscriber-auth-4873`  
-**Head SHA:** `871a1de9b07e3ff541d85cc62f19acb793d243f1`
+**Head SHA:** `312d144b354ab13276c8c7e34de368b63fa60c17`
 
 **Do not merge. Do not deploy. Do not start G3/T1/player redesign.**
 
