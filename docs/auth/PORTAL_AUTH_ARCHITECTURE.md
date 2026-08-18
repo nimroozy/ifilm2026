@@ -151,4 +151,6 @@ Release rollback to `v1.17.0` remains valid until A1 ships.
 
 ## 10. Current stop reason
 
-S2S API **exists**. `/agent/config` is voice-agent prompt/config, not locations. Implementation waits on: dedicated iFilm credential (verify/extend multi-token middleware), `GET /service-locations`, one QA lookup (nested `customer` shape), confirmed identity/status/`request_source`, and passwordless `/customers/status` **or** explicit TTL/re-login.
+**A1 CONTRACT / AUDIT COMPLETE. A1 IMPLEMENTATION BLOCKED ON PORTAL CREDENTIAL + QA.**
+
+Lookup capability is **PASS — PRIOR_3CX**; route existence is **PASS — LIVE**; reusable for iFilm is **PROVISIONAL**; production iFilm auth is **NOT VERIFIED**. `/agent/config` is not a location source. If `/customers/status` is deferred: 15-minute entitlement TTL, deny new protected playback after expiry, never store password, do not retroactively recall already-issued playback unless the current architecture already supports that.
