@@ -1,11 +1,11 @@
 # A1 — Portal/SAS Subscriber Authentication Report
 
-**Status:** A1 CONTRACT / AUDIT COMPLETE — A1 IMPLEMENTATION BLOCKED ON PORTAL CREDENTIAL + QA  
+**Status:** A1 CONTRACT / AUDIT COMPLETE — PORTAL-SIDE IMPLEMENTATION BLOCKED (NO PORTAL SOURCE IN THIS AGENT)  
 **Train:** A1 (prioritized ahead of G3 / T1 / player)  
 **Baseline:** production `v1.17.0`  
-**Draft PR:** https://github.com/nimroozy/ifilm2026/pull/76  
+**Draft PR (iFilm docs):** https://github.com/nimroozy/ifilm2026/pull/76  
 **Branch:** `cursor/a1-portal-subscriber-auth-4873`  
-**Head SHA:** `d9665a323d4d89994961d463554bb9c666234a32`
+**Head SHA:** *(updated after push)*
 
 **Do not merge as an authentication implementation. Do not deploy. Do not start G3/T1/player redesign.**
 
@@ -21,15 +21,36 @@ Do **not** call the whole lookup integration LIVE-verified for iFilm yet.
 
 `GET /agent/config` is **remote voice-agent prompt/config**, not a location source.
 
-Required portal additions are small:
+### Portal-side implementation attempt (blocked)
+
+A human requested portal implementation of:
+
+1. Dedicated iFilm bearer + `X-Mobin-Client: ifilm`
+2. `request_source=ifilm` on `/customers/lookup`
+3. `GET /api/voice-ai/v1/service-locations`
+4. `POST /api/voice-ai/v1/customers/status`
+5. Portal tests + `docs/integrations/IFILM.md` + Draft PR on the **portal** project
+
+**This Cursor agent environment only has `github.com/nimroozy/ifilm2026`.**  
+The Laravel source that deploys `portal.mns.af` is **not** cloned, not linked, and not accessible via GitHub from this run (no `portal` / `mns-portal` / `customer-portal` repo resolvable).
+
+Therefore:
+
+- No portal Draft PR could be opened
+- Multi-client middleware could not be audited or extended
+- `/service-locations` and `/customers/status` were not implemented
+- Live QA with an iFilm bearer was not run (no iFilm secret in this environment; 3CX token not used)
+- Inventing a parallel portal codebase inside iFilm is **forbidden**
+
+**Unblock:** attach the real portal Laravel repository to a Cursor Cloud Agent (or open the agent in that workspace) with GitHub write access, then re-run the portal implementation prompt.
+
+Required portal additions (unchanged):
 
 | ID | Addition |
 |----|----------|
 | A | Dedicated iFilm service credential (verify/extend middleware if only one global token exists) |
 | B | `GET /api/voice-ai/v1/service-locations` |
-| C | `POST /api/voice-ai/v1/customers/status` (optional if TTL + re-login is accepted) |
-
-iFilm login code waits on the blockers in §9.
+| C | `POST /api/voice-ai/v1/customers/status` (preferred; else 15-minute TTL policy) |
 
 ---
 
@@ -210,7 +231,7 @@ See **Frozen portal requirements** below. Capability is PRIOR_3CX; route is LIVE
 
 The lookup route is LIVE. The 3CX auth *capability* is PRIOR_3CX. The integration is **not** LIVE-verified for iFilm.
 
-**A1 Ready: NO** — contract/audit complete; implementation blocked on portal credential + QA.
+**A1 Ready: NO** — contract/audit complete; portal-side code blocked (no portal Laravel repo in this agent); iFilm auth blocked on portal credential + QA.
 
 ---
 
