@@ -1,62 +1,164 @@
 # A1 — Portal/SAS Subscriber Authentication Report
 
-**Status:** STOPPED AT CONTRACT BOUNDARY — awaiting portal integration API  
+**Status:** CORRECTED AUDIT — reuse `/api/voice-ai/v1`; implementation not started  
 **Train:** A1 (prioritized ahead of G3 / T1 / player)  
 **Baseline:** production `v1.17.0`  
 **Draft PR:** https://github.com/nimroozy/ifilm2026/pull/76  
 **Branch:** `cursor/a1-portal-subscriber-auth-4873`  
-**Head SHA:** `312d144b354ab13276c8c7e34de368b63fa60c17`
+**Head SHA:** *(updated after push)*
 
-**Do not merge. Do not deploy. Do not start G3/T1/player redesign.**
-
----
-
-## Verdict
-
-Portal customer login UX already matches the business requirement (Service Location + Internet Username + Password).
-
-iFilm **must not** talk to SAS DBs directly.
-
-A dedicated **server-to-server iFilm integration API on portal.mns.af was not found**.
-
-Therefore A1 implementation is **blocked** until portal delivers the contract in `PORTAL_IFILM_INTEGRATION_CONTRACT.md`.
+**Do not merge as an auth implementation. Do not deploy. Do not start G3/T1/player redesign.**
 
 ---
 
-## Portal API contract discovered
+## Verdict (corrected)
 
-### Exists (live)
+The first A1 pass searched the **wrong namespace** (`/api/integrations/ifilm/*`) and concluded portal had no server-to-server API.
 
-| Endpoint | Result |
-|----------|--------|
-| `GET /login` | HTML login; branches embedded as `<option value="{branch_id}">` |
-| `POST /api/customer/login` | Requires `branch_id`, `username`, `password`; invalid → `401` generic message |
-| `GET /api/customer/service` | Exists; `401 Unauthenticated` without session |
-| `GET /api/customer/invoices` | Exists; `401 Unauthenticated` without session |
+**That conclusion is wrong.**
 
-### Missing (live)
+Portal already has a partner JSON API:
 
-| Preferred endpoint | Status |
-|--------------------|--------|
-| `GET /api/integrations/ifilm/service-locations` | **404** |
-| `POST /api/integrations/ifilm/authenticate` | **404** |
-| `POST /api/integrations/ifilm/validate` | **404** |
-| Partner/service credential auth for iFilm | **Not discovered** |
-| Public JSON locations API | **Not discovered** |
-| Passwordless entitlement validate | **Not discovered** |
-| Documented success schema / stable subscriber id | **Unknown** |
+```text
+https://portal.mns.af/api/voice-ai/v1
+```
 
-### Location API result
+Originally built for the **3CX voice agent**.
 
-- **Not available as JSON API.**
-- HTML-embedded branches observed: Kabul(1), Nimruz(2), Kandahar(3), Ghazni(4), Helmand(5), Buldak(6).
-- Must not be hard-coded into iFilm as the long-term source.
+A1 must **reuse** this API. Do **not** create duplicate `/api/integrations/ifilm/*` authenticate endpoints.
 
-### Auth API result
+iFilm still **must not** talk to SAS DBs.
 
-- Browser-oriented `POST /api/customer/login` validates required fields and returns generic invalid-credential errors.
-- Success response / entitlement fields: **not observed** (no QA subscriber credentials used; S2S contract missing).
-- Not accepted as production iFilm S2S integration without portal changes (CSRF/session model).
+A1 code (portal client, location dropdown, identity, entitlement mapping) waits on:
+
+1. A **dedicated iFilm** portal token (`X-Mobin-Client: ifilm`) — **not** `MOBIN_PORTAL_AI_TOKEN`
+2. A successful QA `POST /customers/lookup` (real schema + status enums)
+3. Reading `GET /agent/config` for locations
+4. Passwordless status (missing) **or** an accepted TTL/fail-closed policy
+
+---
+
+## 1. Exact `/voice-ai/v1` contract
+
+See `docs/auth/VOICE_AI_V1_LIVE_CONTRACT.md`.
+
+| Method | Path | LIVE |
+|--------|------|------|
+| `GET` | `/api/voice-ai/v1/agent/config` | Exists; 401 without token |
+| `POST` | `/api/voice-ai/v1/customers/lookup` | Exists; POST-only; 401 without token |
+| `POST` | `/api/voice-ai/v1/packages/search` | Exists; not needed for A1 |
+
+Partner auth (LIVE + operator):
+
+```http
+Authorization: Bearer <service token>
+X-Mobin-Client: 3cx-voice-agent | ifilm
+Accept: application/json
+```
+
+Missing/invalid token:
+
+```json
+{"success":false,"code":"unauthorized","message":"Invalid or missing service token."}
+```
+
+CORS: `Access-Control-Allow-Origin: *` and allows `authorization`, `x-mobin-client`. Keep the token on the iFilm backend only.
+
+Rate limit (LIVE unauthenticated): `X-RateLimit-Limit: 60`. Authenticated policy unknown.
+
+---
+
+## 2. Successful QA lookup
+
+**Not run.**
+
+This environment has no dedicated iFilm portal token and must not use the 3CX bearer. No QA subscriber secret is available here.
+
+Operator-reported success **field names** (values/enums unverified):
+
+`success`, `verified`, `display_name`, `customer_number`, `branch`, `account_status`, `internet_status`, `current_package`, `expiry_date`, `days_remaining`
+
+---
+
+## 3. Location source
+
+| Source | Status |
+|--------|--------|
+| `GET /api/voice-ai/v1/agent/config` | **First to reuse** — body unread (token required) |
+| Dedicated `/voice-ai/v1/service-locations` | **404** |
+| HTML `/login` options | Same six names; **not** the long-term API |
+| Hard-coded iFilm list | **Forbidden** as the long-term solution |
+
+If `/agent/config` has no locations, portal should add **only** `GET /api/voice-ai/v1/service-locations`.
+
+---
+
+## 4. Stable identity field
+
+**Candidate:** `customer_number` (`provider=portal_mns`).
+
+**Uniqueness:** UNKNOWN until QA compares two branches (and a duplicate username if available).
+
+If not globally unique: `external_subject = {branch}:{customer_number}`.
+
+Never username alone. Existing iFilm upsert-by-username must be fixed in the implementation pass.
+
+---
+
+## 5. Active / inactive mapping
+
+**Not live-verified.** After QA, map the **real** `verified` + `account_status` + `internet_status` + `expiry_date`.
+
+Provisional (must not ship as fact):
+
+- Sign-in / iFilm entitlement only when `verified` is true **and** internet service is usable
+- Suspended / expired / disabled → deny playback; not “wrong password” if portal distinguishes them
+- Missing/unknown enums → fail closed
+
+---
+
+## 6. Passwordless validation
+
+**Does not exist** on `/voice-ai/v1` (404 for status/validate/assertion/token).
+
+This is the **only** portal extension A1 should consider: `POST /api/voice-ai/v1/customers/status` with branch + `customer_number`, no password.
+
+Interim: bounded local entitlement TTL, fail closed on new playback after expiry (re-login). Never store the Internet password.
+
+---
+
+## 7. Remaining portal gap
+
+| Gap | Owner | Notes |
+|-----|--------|--------|
+| Issue `IFILM_PORTAL_TOKEN` + `X-Mobin-Client: ifilm` | Portal admin | Independent of 3CX |
+| Confirm `/agent/config` locations (or add `/service-locations`) | Portal + iFilm QA | One small add at most |
+| Confirm lookup success schema + status enums | QA with dedicated accounts | Required before mapping |
+| Confirm `request_source` for iFilm | Portal | Do not invent if enumerated |
+| Confirm `customer_number` uniqueness | QA | Composite subject if scoped |
+| Passwordless current-status | Portal (optional for v1) | Only additive endpoint if TTL is unacceptable |
+| Token scopes / authenticated rate limits | Portal | Document; prefer deny `packages/search` to iFilm |
+| CORS `*` on partner API | Portal (debt) | iFilm still never puts token in JS |
+
+**Not a gap:** inventing `/api/integrations/ifilm/authenticate`.
+
+---
+
+## 8. Revised A1 implementation plan
+
+When the iFilm token and one successful QA lookup exist:
+
+1. Backend portal HTTP client for `/api/voice-ai/v1` only (`PORTAL_IFILM_TOKEN`, `X-Mobin-Client: ifilm`).
+2. Locations from `/agent/config` (or new `/service-locations`).
+3. Identity mode `portal`; persist `portal_mns` + stable subject; **no** migration 024 unless extra columns are required.
+4. Extend login to pass **branch**; stop username-only upsert collisions.
+5. Map real lookup fields → entitlement snapshot; `ifilm_allowed` iff internet service usable (unless a real product rule appears).
+6. `/login` UI: Service Location + Internet Username + Password; browser never calls portal.
+7. Tests: mocked LIVE 401/405/404 shapes + mocked success from the QA payload; customer login regression; admin login unchanged.
+8. Feature flag default **false**. Do not enable production until staging QA.
+9. Passwordless status client only if portal adds it; otherwise TTL/fail-closed.
+
+**This PR does not implement that yet.** Live success QA has not proven the lookup payload.
 
 ---
 
@@ -64,66 +166,40 @@ Therefore A1 implementation is **blocked** until portal delivers the contract in
 
 | Item | Status |
 |------|--------|
-| Existing attach point | `SubscriberIdentityProvider` + `subscribers` + entitlement snapshots |
-| New `external_subscriber_identities` migration | **Not created** (blocked) |
-| Alembic head remains | `023_media_tracks_packaging_v1` |
-| Password persistence | N/A this pass — design forbids storage |
-| Admin auth changes | None |
+| Attach point | `SubscriberIdentityProvider` + `subscribers` + entitlement snapshots |
+| Migration `024_…` | **Not created** (not required until identity extras need it) |
+| Alembic head | `023_media_tracks_packaging_v1` |
+| Password persistence | Forbidden; none added |
+| Admin auth | Unchanged |
+| Portal client / login UI | **Not implemented** this pass |
 
 ---
 
-## Real portal/SAS QA
-
-| Case | Class | Result |
-|------|-------|--------|
-| Portal login page UX | REAL | Pass (screenshots) |
-| Invalid JSON login probe | REAL | `401 Invalid username or password.` |
-| Valid active subscriber login via S2S | — | **Blocked / not run** |
-| Wrong password / wrong location / inactive | — | **Blocked / not run** (need contract + QA accounts) |
-| Duplicate username across locations | — | **Blocked / not run** |
-
----
-
-## Security results (this pass)
+## Security results
 
 | Check | Result |
 |-------|--------|
-| No SAS DB connection from iFilm | Pass (not implemented; forbidden) |
-| No portal secrets in frontend | Pass (none exist) |
-| No real customer passwords in repo/report | Pass |
-| Invalid login enumeration message on portal | Generic 401 message observed |
-| Rate limiting / entitlement validate / bundle scan | N/A until implementation |
+| No SAS DB from iFilm | Pass |
+| No 3CX token in repo/report/logs | Pass |
+| No customer passwords in repo/report | Pass |
+| Voice-ai exists and is token-gated | Pass (LIVE) |
+| Separate iFilm credential | **Not issued** |
+| Frontend portal secret | None |
 
 ---
 
-## Screenshots
-
-- `docs/auth/screenshots/a1/portal-login-desktop.png`
-- `docs/auth/screenshots/a1/portal-login-mobile.png`
-
----
-
-## Documentation delivered
+## Documentation
 
 | Doc | Purpose |
 |-----|---------|
-| `docs/auth/PORTAL_AUTH_AUDIT.md` | Live probe findings |
-| `docs/auth/PORTAL_IFILM_INTEGRATION_CONTRACT.md` | Exact API portal must provide |
+| `docs/auth/VOICE_AI_V1_LIVE_CONTRACT.md` | Exact live + operator contract |
+| `docs/auth/PORTAL_AUTH_AUDIT.md` | Corrected probe findings |
+| `docs/auth/PORTAL_IFILM_INTEGRATION_CONTRACT.md` | Reuse-first contract |
 | `docs/auth/PORTAL_AUTH_ARCHITECTURE.md` | Target iFilm design |
-| `docs/auth/PORTAL_AUTH_QA.md` | QA plan when unblocked |
+| `docs/auth/PORTAL_AUTH_QA.md` | QA plan |
 | `docs/auth/A1_PORTAL_AUTH_REPORT.md` | This report |
 
----
-
-## Remaining findings
-
-| Level | Finding |
-|-------|---------|
-| **BLOCKER (external)** | Portal missing iFilm S2S locations/authenticate/validate + partner auth |
-| INFO | Existing `/api/customer/login` proves internal capability but is browser/CSRF oriented |
-| INFO | Branch list currently HTML-embedded only |
-
-No iFilm code HIGH/BLOCKER from partial implementation — implementation intentionally not started past the boundary.
+Screenshots (browser login UX): `docs/auth/screenshots/a1/portal-login-desktop.png`, `portal-login-mobile.png`.
 
 ---
 
@@ -131,11 +207,13 @@ No iFilm code HIGH/BLOCKER from partial implementation — implementation intent
 
 | Gate | Status |
 |------|--------|
-| Locations from portal dynamically | FAIL (no API) |
-| No hardcoded locations | PASS (not implemented) |
+| S2S API exists | **PASS** (`/api/voice-ai/v1`) |
+| iFilm-specific token | FAIL |
+| Locations from portal dynamically | FAIL (config unread) |
+| Real lookup success QA | FAIL (not run) |
+| Passwordless or accepted TTL policy | Partial (policy documented; API missing) |
 | Never connect to SAS DB | PASS |
-| Real portal/SAS auth success | FAIL (blocked) |
-| CI / ENFA/PS / migration / feature regression | N/A — stopped |
+| Implementation + CI | N/A — not started |
 
 **A1 Ready: NO**
 
@@ -143,13 +221,13 @@ No iFilm code HIGH/BLOCKER from partial implementation — implementation intent
 
 ## Next human actions
 
-1. Portal team implements `PORTAL_IFILM_INTEGRATION_CONTRACT.md`.
-2. Issue partner credentials to iFilm secrets.
-3. Provide dedicated QA subscribers (never production customer passwords in reports).
-4. Resume A1 implementation Draft PR (client + identity migration + login UI + tests).
+1. Portal: issue `IFILM_PORTAL_TOKEN` for `X-Mobin-Client: ifilm` (do not paste it into chat).
+2. Provide dedicated QA subscriber secrets to the next implementation agent.
+3. With that token: dump redacted `/agent/config` + one QA lookup (redact PII as needed) and resume A1 code.
+4. Decide passwordless `/customers/status` vs TTL/fail-closed for v1.
 
 ---
 
 ## Stop
 
-Awaiting portal contract. **No merge. No deploy. No G3/T1/player work.**
+Corrected audit complete. **No merge. No deploy. No G3/T1/player work.**

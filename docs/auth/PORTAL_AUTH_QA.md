@@ -1,22 +1,23 @@
 # A1 Portal Auth QA Plan
 
-**Status:** Planned — blocked on portal integration contract  
+**Status:** Corrected — reuse `/api/voice-ai/v1`; live **success** lookup not yet run  
 **Production site:** https://ifilm.af  
 **Portal:** https://portal.mns.af
 
-Do not use real customer passwords in screenshots or committed reports.
+Do not use real customer passwords or the 3CX bearer in screenshots or committed reports.  
+Do not configure iFilm with `MOBIN_PORTAL_AI_TOKEN`.
 
 ---
 
 ## 1. Preconditions
 
-- [ ] Portal integration endpoints live per `PORTAL_IFILM_INTEGRATION_CONTRACT.md`
-- [ ] Partner credential issued to iFilm staging/prod secrets
-- [ ] Dedicated QA subscribers:
+- [ ] Dedicated iFilm portal token (`X-Mobin-Client: ifilm`)
+- [ ] Dedicated QA subscribers (secrets store only):
   - Location A active
   - Location A wrong-password control
   - Location B active (same username if possible)
-  - Inactive/suspended account if available
+  - Inactive/suspended/expired if available
+- [ ] `/agent/config` readable with the iFilm token
 
 ---
 
@@ -24,32 +25,31 @@ Do not use real customer passwords in screenshots or committed reports.
 
 | # | Case | Expected |
 |---|------|----------|
-| P1 | Locations with partner auth | 200, active locations only, no secrets |
-| P2 | Locations without partner auth | 401/403 |
-| P3 | Authenticate valid QA A | authenticated + active + ifilm_allowed |
-| P4 | Wrong password | generic invalid credentials |
-| P5 | Wrong location | generic invalid / denied (no enumeration) |
-| P6 | Inactive account | service inactive |
-| P7 | Duplicate username A vs B | distinct subjects unless portal stable id says same |
-| P8 | Validate with assertion | success without password |
-| P9 | Validate expired assertion | deny |
-| P10 | Portal timeout simulation | iFilm fails closed |
+| P0 | Lookup/config **without** token | `401` `unauthorized` (LIVE — done) |
+| P1 | `GET /agent/config` with iFilm token | 200; record whether locations are present |
+| P2 | Config with 3CX token from iFilm | Must not be used |
+| P3 | `POST /customers/lookup` valid QA A | `verified` + status fields; no secrets |
+| P4 | Wrong password | generic failure |
+| P5 | Wrong location | generic / denied |
+| P6 | Inactive/expired/suspended | distinguishable from bad password if portal supports it |
+| P7 | Duplicate username A vs B | distinct iFilm subjects unless same `customer_number` globally |
+| P8 | Passwordless status | **missing today** — skip or test new `/customers/status` |
+| P9 | `request_source=ifilm` | accepted or documented allowed value |
+| P10 | Rate limit | document authenticated headers; iFilm still rate-limits login |
 
 ---
 
-## 3. iFilm login QA
+## 3. iFilm login QA (implementation pass)
 
 | # | Case | Expected |
 |---|------|----------|
-| I1 | Locations load via `/api/auth/isp/locations` | dynamic from portal |
+| I1 | Locations via `/api/auth/isp/locations` | dynamic from portal |
 | I2 | Valid login | iFilm session issued |
 | I3 | Relogin | same local subscriber id |
-| I4 | Watchlist survives | yes |
-| I5 | Continue Watching survives | yes |
-| I6 | Progress survives | yes |
-| I7 | Protected playback | requires entitlement |
+| I4–I6 | Watchlist / CW / progress | survive |
+| I7 | Protected playback | requires mapped entitlement |
 | I8 | Rate limit | 429 after threshold |
-| I9 | Portal outage | locations retry + login deny |
+| I9 | Portal outage | login deny |
 | I10 | Admin login | unchanged |
 | I11 | Password absent from DB/logs/localStorage | verified |
 | I12 | Secret absent from frontend bundle | scan clean |
@@ -65,15 +65,18 @@ Checks: location dropdown, keyboard, touch, RTL, errors, loading, disabled submi
 
 ---
 
-## 5. Audit probes already completed (2026-08-18)
+## 5. Probes completed (2026-08-18)
 
 | Probe | Result |
 |-------|--------|
 | Portal login page UX | Location + Internet Username + Password present |
-| Branches in HTML | Kabul, Nimruz, Kandahar, Ghazni, Helmand, Buldak |
+| HTML branches | Kabul, Nimruz, Kandahar, Ghazni, Helmand, Buldak |
 | `POST /api/customer/login` invalid user | 401 generic message |
-| Integration endpoints | **404 / missing** |
+| `GET /api/voice-ai/v1/agent/config` no token | **401** `unauthorized` (route exists) |
+| `POST /api/voice-ai/v1/customers/lookup` no token | **401** `unauthorized` (route exists) |
+| `POST /api/voice-ai/v1/packages/search` no token | **401** `unauthorized` |
+| Passwordless `/customers/status` or `/validate` | **404** |
+| `/api/integrations/ifilm/*` | 404 (not the integration surface) |
+| Successful QA lookup | **NOT RUN** (no iFilm token / QA secret) |
 
 Screenshots: `docs/auth/screenshots/a1/portal-login-desktop.png`, `portal-login-mobile.png`.
-
-Real portal→SAS success QA: **NOT RUN** (no QA subscriber credentials in this pass; S2S contract missing).

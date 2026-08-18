@@ -1,62 +1,106 @@
 # Portal Auth Audit — portal.mns.af × iFilm A1
 
-**Date:** 2026-08-18  
+**Date:** 2026-08-18 (corrected)  
 **Baseline:** iFilm production `v1.17.0`  
-**Portal:** `https://portal.mns.af` (Mobin Net Customer Portal — Laravel)  
+**Portal:** `https://portal.mns.af` (Mobin Net ICT Customer Portal — Laravel)  
 **Portal source in Cursor workspace:** **NOT available**  
-**Decision:** **STOP at contract boundary** — do not invent S2S endpoints; do not connect iFilm directly to SAS DBs.
+**Correction:** The first pass searched `/api/integrations/ifilm/*` and wrongly concluded portal had no S2S API.
+
+**Authoritative live contract:** `docs/auth/VOICE_AI_V1_LIVE_CONTRACT.md`
 
 ---
 
-## 1. Executive finding
+## 1. Executive finding (corrected)
 
-`portal.mns.af` is a live **customer self-service web portal** (Laravel + cookie sessions + CSRF).
+`portal.mns.af` already has **two** customer-auth surfaces:
 
-It already authenticates Internet subscribers with:
+1. **Browser / CSRF session** — HTML `/login` + `POST /api/customer/login`  
+2. **Server-to-server partner API** — `https://portal.mns.af/api/voice-ai/v1`  
+   originally built for the **3CX voice agent**
 
-- Service Location (`branch_id`)
-- Internet Username
-- Password
+A1 must **reuse** `/api/voice-ai/v1`, not invent `/api/integrations/ifilm/*`.
 
-That matches the **business UX** iFilm needs.
+iFilm still **must not** talk to SAS DBs. Portal remains the broker.
 
-However, the **integration surface required for iFilm server-to-server auth is not present**.
+A1 implementation is **not** blocked on “missing S2S API.”  
+It **is** blocked on:
 
-What exists today is a **browser/session customer API**, not an authenticated partner/integration API.
-
-Therefore A1 cannot be completed end-to-end until portal adds (or exposes) a dedicated iFilm integration contract.
-
----
-
-## 2. Probe method
-
-Performed against live `https://portal.mns.af` (read-only / invalid-credential probes only):
-
-- HTTP discovery of common OpenAPI/Swagger/health/integration paths
-- HTML inspection of `/login`
-- JSON probes of `/api/customer/*`
-- Invalid login POST to `/api/customer/login` with **nonexistent** username (no real customer password used)
-- Artifact capture under `/opt/cursor/artifacts/a1-portal-audit/` and `docs/auth/screenshots/a1/`
-
-No SAS DB credentials were used. No direct SAS connections were attempted.
+1. A **dedicated iFilm** service token (do not reuse the 3CX token)
+2. Live success QA of `POST /customers/lookup` with a dedicated QA subscriber
+3. Confirming whether `GET /agent/config` returns service locations
+4. A passwordless current-status method (missing today) **or** an explicit TTL/fail-closed policy
 
 ---
 
-## 3. Discovered portal surface (actual)
+## 2. Probe method (this correction)
 
-### 3.1 Customer login HTML (`GET /login`)
+Against live `https://portal.mns.af`:
 
-- App name: **Mobin Net Customer Portal**
-- Session cookie: `mobin_net_ict_customer_portal_session` (HttpOnly)
-- CSRF: `XSRF-TOKEN` + form `_token`
-- Form `POST https://portal.mns.af/login` fields:
-  - `branch_id` (required select)
-  - `username` (label: Internet Username)
-  - `password`
-- Branches are **embedded in HTML options** (not loaded from a JSON locations API):
+- Re-probed `/api/voice-ai/v1/*` existence via GET/POST/OPTIONS/405/404
+- Invalid/missing bearer only — **no real 3CX token used or logged**
+- Fake `X-Mobin-Client: ifilm` and `3cx-voice-agent` (token still rejected)
+- CORS preflight from `https://ifilm.af` and an arbitrary origin
+- Reconfirmed HTML `/login` branches (unchanged)
+- No SAS DB connections
+- No customer passwords (dummy body fields only, never logged as secrets)
 
-| branch_id | Display name |
-|----------:|--------------|
+---
+
+## 3. Existing S2S API (LIVE)
+
+### 3.1 Partner auth
+
+```http
+Authorization: Bearer <service token>
+X-Mobin-Client: <client id>
+Accept: application/json
+```
+
+Missing/invalid token → `401`
+
+```json
+{"success":false,"code":"unauthorized","message":"Invalid or missing service token."}
+```
+
+`X-Mobin-Client` is CORS-allowed and is the existing client-identity header.  
+`X-Client-Id` is **not** the portal convention.
+
+iFilm desired identity: `X-Mobin-Client: ifilm` + its **own** bearer.  
+Portal must issue that credential. This workspace has **no** iFilm portal token and must not be given the 3CX token.
+
+### 3.2 Endpoints
+
+| Method | Path | Role for A1 |
+|--------|------|-------------|
+| `GET` | `/api/voice-ai/v1/agent/config` | **First** location/config source to inspect with an iFilm token |
+| `POST` | `/api/voice-ai/v1/customers/lookup` | **Reuse** for branch + username + password verify |
+| `POST` | `/api/voice-ai/v1/packages/search` | Exists; **not required** for A1 |
+
+### 3.3 Not present (do not rebuild the whole auth API)
+
+| Path | Result |
+|------|--------|
+| `/api/voice-ai/v1/service-locations` | 404 |
+| `/api/voice-ai/v1/customers/validate` | 404 |
+| `/api/voice-ai/v1/customers/status` | 404 |
+| `/api/integrations/ifilm/*` | 404 (irrelevant now) |
+
+---
+
+## 4. Browser customer portal (unchanged, still useful)
+
+| Method | Path | Notes |
+|--------|------|-------|
+| `GET` | `/login` | Service Location + Internet Username + Password |
+| `POST` | `/api/customer/login` | CSRF/session; `branch_id` + username + password |
+| `GET` | `/api/customer/service` | Session required |
+| `GET` | `/api/customer/invoices` | Session required |
+| `GET` | `/up` | Laravel up (title: Mobin Net ICT Customer Portal) |
+
+HTML branches (not a JSON API):
+
+| branch_id | Name |
+|----------:|------|
 | 1 | Kabul |
 | 2 | Nimruz |
 | 3 | Kandahar |
@@ -64,147 +108,49 @@ No SAS DB credentials were used. No direct SAS connections were attempted.
 | 5 | Helmand |
 | 6 | Buldak |
 
-Evidence: `docs/auth/branches-from-login-html.json`, screenshots in `docs/auth/screenshots/a1/`.
-
-### 3.2 Customer JSON API (partial)
-
-| Method | Path | Observed |
-|--------|------|----------|
-| `POST` | `/api/customer/login` | **Exists.** Requires `branch_id`, `username`, `password`. Empty body → `422` validation. Fake user → `401` `{"message":"Invalid username or password."}` |
-| `GET` | `/api/customer/service` | **Exists.** Unauthenticated → `401` `{"message":"Unauthenticated."}` |
-| `GET` | `/api/customer/invoices` | **Exists.** Unauthenticated → `401` |
-| `GET` | `/up` | Laravel up check (HTML) |
-
-### 3.3 Explicitly missing (404)
-
-Preferred / equivalent integration endpoints **not found**:
-
-- `GET /api/integrations/ifilm/service-locations`
-- `POST /api/integrations/ifilm/authenticate`
-- `POST /api/integrations/ifilm/validate`
-- Any `/api/integrations/*`, `/api/partner/*`, `/api/ifilm/*`, `/api/external/*`
-- Public JSON branches/locations endpoint
-- OpenAPI / Swagger docs
-- OAuth/token endpoint for service clients
-- Passwordless entitlement validate endpoint
-
-### 3.4 Authentication mechanism between iFilm and portal
-
-**Not discovered.**
-
-Observed portal auth is:
-
-1. Browser fetches `/login` → receives CSRF + session cookies
-2. Browser/API client posts credentials with CSRF headers
-3. Response for failure is generic JSON message
-4. Success schema is **unknown** (no QA subscriber credentials used in this audit)
-
-This is a **session/CSRF browser model**, not a documented service-credential S2S model.
-
-No evidence of:
-
-- `PORTAL_IFILM_CLIENT_ID` / client secret support
-- HMAC signed requests
-- mTLS partner auth
-- scoped integration tokens
-
-### 3.5 Service-location identifier
-
-Actual field name on portal login: **`branch_id`** (integer).
-
-Observed IDs: `1..6` with display names above.
-
-No JSON schema for `code`, `active`, `sort_order` was found via API.
-
-### 3.6 Subscriber identifier / status fields
-
-**Unknown from public probes.**
-
-`/api/customer/service` exists but requires authentication; success payload not observed.
-
-No public documentation of:
-
-- stable portal subscriber id
-- package name
-- expiry
-- account/service status enums
-- `ifilm_allowed` entitlement flag
-
-### 3.7 Timeout / error behavior (observed)
-
-| Case | HTTP | Body |
-|------|-----:|------|
-| Missing fields | 422 | Laravel validation errors naming `branch_id`, `username`, `password` |
-| Invalid credentials | 401 | `{"message":"Invalid username or password."}` |
-| Unauthenticated resource | 401 | `{"message":"Unauthenticated."}` |
-| Missing route | 404 | Laravel JSON route-not-found |
-
-Connect/read latency was normal for public HTTPS; no special timeout contract documented.
-
-### 3.8 Can portal issue an auth/session assertion for iFilm?
-
-**Not evidenced.**
-
-Current `/api/customer/login` appears oriented to establishing a **portal customer session**, not returning a signed short-lived assertion for a third party (iFilm).
+Operator-normalized voice-ai `branch` strings use the **same names**.  
+Do not hard-code this list in iFilm as the long-term source.
 
 ---
 
-## 4. Why existing `/api/customer/login` is not sufficient for A1
+## 5. What we could not observe without an iFilm token
 
-Even though it validates `branch_id + username + password`, it is unsuitable as the production iFilm integration without portal changes:
+- Exact `/customers/lookup` success JSON (operator field **names** only)
+- Exact `account_status` / `internet_status` enums
+- How expired vs suspended is represented
+- Whether `customer_number` is globally unique
+- Whether username collides across branches
+- Whether `branch` accepts IDs (`1`) as well as `"Kabul"`
+- Allowed `request_source` values
+- `/agent/config` body (branches or not)
+- Authenticated rate-limit policy / token scopes
+- Successful QA lookup
 
-1. **CSRF/session coupling** — designed for browser cookie auth, not headless S2S.
-2. **No service credential / scoped partner auth** discovered.
-3. **No locations API** — scraping HTML for branches is brittle and forbidden by A1 (“portal response is authoritative” via API).
-4. **Success/entitlement schema unknown** — cannot assert `service.active` + `ifilm_allowed` safely.
-5. **No passwordless revalidation** endpoint for entitlement TTL refresh.
-6. Using it as-is would risk treating HTTP 200/session as entitlement (explicitly disallowed).
-
-**Do not hardcode the HTML branch list into iFilm as a permanent locations source.**
+**Successful QA lookup: NOT RUN** — no dedicated iFilm token and no QA subscriber secret in this environment. Do not use the 3CX token to force a success payload.
 
 ---
 
-## 5. iFilm current auth attach points (relevant)
-
-iFilm already has a pluggable subscriber identity layer:
+## 6. iFilm attach points (unchanged)
 
 - `SubscriberIdentityProvider` (`fixture` / `radius` / `demo` / `disabled`)
-- Local `subscribers` table with `identity_provider` + `external_subject`
-- JWT `typ=subscriber` + refresh tokens
-- Entitlement snapshots gating playback session create
-- Login rate limit on subscriber login
+- Local `subscribers` (`identity_provider` + `external_subject`)
+- JWT `typ=subscriber` + entitlement snapshots
+- Current `/login` UI: username + password only (no location dropdown yet)
+- `authenticate(username, password)` has **no branch argument** today
+- `upsert_subscriber_from_identity` can collide on username across locations
 
-Production default: identity mode **disabled**; live Radius **unverified** and **not** the A1 path.
-
-A1 must add a **portal HTTP provider**, not wire iFilm to SAS DBs and not treat UDP Radius as the portal replacement.
-
----
-
-## 6. Required portal API (contract gap)
-
-Until portal implements an iFilm integration API, A1 implementation must stop here.
-
-See:
-
-- `docs/auth/PORTAL_IFILM_INTEGRATION_CONTRACT.md` — exact required endpoints/schemas
-- `docs/auth/PORTAL_AUTH_ARCHITECTURE.md` — target iFilm design once contract exists
-
-Minimum portal deliverables for A1 to resume:
-
-1. Service-authenticated locations JSON API
-2. Service-authenticated authenticate API returning stable subject + service/entitlement
-3. Passwordless validate API (or signed short-lived assertion) for entitlement recheck
-4. Partner credential restricted to those scopes only
+Production default: identity mode **disabled**. Live Radius is **not** the A1 path.
 
 ---
 
-## 7. Security notes from audit
+## 7. Security notes
 
-- Invalid login message is already generic (good against enumeration)
-- Portal copy states password is not stored on portal servers (claimed; not independently verified here)
-- iFilm must still never store portal/SAS passwords
-- iFilm browser must never call portal directly (CORS/secrets)
-- No portal client secret exists in iFilm today (confirmed by codebase search)
+- Unauthorized voice-ai errors do not echo the token (good)
+- `Cache-Control: no-store` on unauthorized JSON
+- Unauthenticated throttle header: `X-RateLimit-Limit: 60`
+- CORS `Access-Control-Allow-Origin: *` — keep iFilm token server-side
+- Portal `/api/customer/login` invalid message remains generic
+- iFilm still must never store Internet passwords
 
 ---
 
@@ -212,10 +158,13 @@ Minimum portal deliverables for A1 to resume:
 
 | Question | Answer |
 |----------|--------|
-| Does portal already do location + username + password login for customers? | **Yes** (HTML + `/api/customer/login`) |
-| Does portal expose an iFilm S2S integration contract? | **No** |
-| Can A1 ship production portal auth now? | **No — blocked on portal contract** |
-| May iFilm bypass portal and talk to SAS DBs? | **No** |
-| Next step | Portal team implements integration contract; then iFilm implements A1 client + login UI |
+| Does portal already have an S2S customer API? | **Yes** — `/api/voice-ai/v1` |
+| Should A1 create `/api/integrations/ifilm/*`? | **No** |
+| Should iFilm reuse `/customers/lookup`? | **Yes, after iFilm token + QA** |
+| May iFilm reuse the 3CX bearer? | **No** |
+| Locations JSON confirmed? | **Not yet** — inspect `/agent/config` first |
+| Passwordless validate exists? | **No** |
+| Can A1 enable production portal login now? | **No** |
+| May iFilm talk to SAS DBs? | **No** |
 
-**Status: CONTRACT AUDIT COMPLETE — IMPLEMENTATION STOPPED AT BOUNDARY**
+**Status: CORRECTED AUDIT COMPLETE — IMPLEMENTATION WAITING ON IFILM TOKEN + QA LOOKUP**
