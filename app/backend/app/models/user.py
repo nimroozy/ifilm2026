@@ -23,7 +23,7 @@ class Subscriber(Base):
     __tablename__ = "subscribers"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    username: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
+    username: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
     # Local password hashes only (Argon2). Never store Radius credentials.
     hashed_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
     name: Mapped[str] = mapped_column(String(255), default="")
@@ -34,6 +34,8 @@ class Subscriber(Base):
     last_activity: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     viewing_time: Mapped[int] = mapped_column(Integer, default=0)
     radius_synced: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Not globally unique: portal usernames can collide across branches.
+    # Uniqueness for portal is (identity_provider, external_subject).
     identity_provider: Mapped[str] = mapped_column(String(32), default="local", index=True)
     external_subject: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     max_devices: Mapped[int] = mapped_column(Integer, default=3)

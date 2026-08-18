@@ -8,6 +8,8 @@ import { ApiError, clearSensitiveAuthState, tokenStore } from '@/lib/api';
 
 const apiMocks = vi.hoisted(() => ({
   login: vi.fn(),
+  ispLogin: vi.fn(),
+  ispLocations: vi.fn(),
   logout: vi.fn(),
   me: vi.fn(),
   entitlement: vi.fn(),
@@ -27,6 +29,8 @@ vi.mock('@/lib/api', async () => {
     api: {
       ...actual.api,
       login: (...args: unknown[]) => apiMocks.login(...args),
+      ispLogin: (...args: unknown[]) => apiMocks.ispLogin(...args),
+      ispLocations: (...args: unknown[]) => apiMocks.ispLocations(...args),
       logout: (...args: unknown[]) => apiMocks.logout(...args),
       me: (...args: unknown[]) => apiMocks.me(...args),
       entitlement: (...args: unknown[]) => apiMocks.entitlement(...args),
@@ -51,6 +55,12 @@ describe('subscriber auth UI', () => {
   beforeEach(() => {
     tokenStore.clear();
     Object.values(apiMocks).forEach((fn) => fn.mockReset());
+    apiMocks.ispLocations.mockResolvedValue({
+      locations: [
+        { id: '1', name: 'Kabul', code: 'KBL', active: true },
+        { id: '2', name: 'Nimruz', code: 'NMZ', active: true },
+      ],
+    });
     apiMocks.me.mockResolvedValue({
       id: 1,
       username: 'mobin_user_001',
@@ -85,7 +95,7 @@ describe('subscriber auth UI', () => {
   });
 
   it('logs in against real APIs and stores tokens', async () => {
-    apiMocks.login.mockImplementation(async () => {
+    apiMocks.ispLogin.mockImplementation(async () => {
       tokenStore.set('access');
       tokenStore.setRefresh('refresh');
       return {
@@ -95,6 +105,8 @@ describe('subscriber auth UI', () => {
       };
     });
     render(wrap(<LoginPage />));
+    await waitFor(() => expect(apiMocks.ispLocations).toHaveBeenCalled());
+    fireEvent.change(screen.getByTestId('isp-location'), { target: { value: 'Nimruz' } });
     fireEvent.change(screen.getByLabelText(/نام کاربری|username/i), {
       target: { value: 'mobin_user_001' },
     });
@@ -102,22 +114,40 @@ describe('subscriber auth UI', () => {
       target: { value: 'fixture-pass-ok' },
     });
     fireEvent.click(screen.getByRole('button', { name: /ورود|sign in/i }));
-    await waitFor(() => expect(apiMocks.login).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(apiMocks.ispLogin).toHaveBeenCalledWith(
+        'Nimruz',
+        'mobin_user_001',
+        'fixture-pass-ok',
+        false,
+      ),
+    );
     await waitFor(() => expect(tokenStore.get()).toBe('access'));
     expect(tokenStore.getRefresh()).toBe('refresh');
     expect(apiMocks.me).toHaveBeenCalled();
   });
 
   it('shows safe suspended login error', async () => {
-    apiMocks.login.mockRejectedValue(
-      new ApiError('denied', 403, { code: 'account_suspended', message: 'suspended' }),
+    apiMocks.ispLogin.mockRejectedValue(
+      new ApiError('denied', 403, {
+        code: 'account_suspended',
+        message: 'Your Internet service is not currently active.',
+      }),
     );
     render(wrap(<LoginPage />));
+    await waitFor(() => expect(apiMocks.ispLocations).toHaveBeenCalled());
+    fireEvent.change(screen.getByTestId('isp-location'), { target: { value: 'Kabul' } });
     fireEvent.change(screen.getByLabelText(/نام کاربری|username/i), { target: { value: 'sus' } });
     fireEvent.change(screen.getByLabelText(/رمز|password/i), { target: { value: 'x' } });
     fireEvent.click(screen.getByRole('button', { name: /ورود|sign in/i }));
-    expect(await screen.findByRole('alert')).toHaveTextContent(/suspended/i);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/not currently active|suspended/i);
     expect(tokenStore.get()).toBeNull();
+  });
+
+  it('renders location field in FA and PS', async () => {
+    render(wrap(<LoginPage />));
+    await waitFor(() => expect(screen.getByTestId('isp-location')).toBeInTheDocument());
+    expect(screen.getByTestId('isp-login-form')).toBeInTheDocument();
   });
 
   it('loads profile from API without mock fallback', async () => {

@@ -4,6 +4,7 @@ from app.api.routes import (
     admin_auth,
     admin_catalog,
     auth,
+    auth_isp,
     cdn,
     collections,
     config,
@@ -32,6 +33,7 @@ api_router = APIRouter()
 api_router.include_router(health.router)
 api_router.include_router(config.router)
 api_router.include_router(auth.router)
+api_router.include_router(auth_isp.router)
 api_router.include_router(me.router)
 api_router.include_router(home.router)
 api_router.include_router(content_requests.router)

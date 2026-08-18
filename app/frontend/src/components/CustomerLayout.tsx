@@ -88,7 +88,12 @@ type AuthUser = {
 
 interface AuthContextType {
   isLoggedIn: boolean;
-  login: (username?: string, password?: string, rememberDevice?: boolean) => Promise<void>;
+  login: (
+    username?: string,
+    password?: string,
+    rememberDevice?: boolean,
+    branch?: string,
+  ) => Promise<void>;
   logout: () => Promise<void>;
   user: AuthUser | null;
   refreshProfile: () => Promise<void>;
@@ -222,7 +227,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [mockMode]);
 
-  const login = async (username?: string, password?: string, rememberDevice = false) => {
+  const login = async (
+    username?: string,
+    password?: string,
+    rememberDevice = false,
+    branch?: string,
+  ) => {
     if (mockMode) {
       if (username && password && !(username === 'mobin_user_001' && password === 'password')) {
         throw new Error('Invalid username or password');
@@ -234,7 +244,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (!username || !password) throw new Error('Username and password are required');
     try {
-      await api.login(username, password, rememberDevice);
+      if (branch) {
+        await api.ispLogin(branch, username, password, rememberDevice);
+      } else {
+        await api.login(username, password, rememberDevice);
+      }
       await refreshProfile();
     } catch (error) {
       tokenStore.clear();

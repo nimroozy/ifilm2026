@@ -123,6 +123,17 @@ def collect_runtime_errors(settings: Settings) -> list[str]:
     if settings.subscriber_identity_mode == "fixture" and not settings.radius_mock_users:
         errors.append("SUBSCRIBER_IDENTITY_MODE=fixture requires RADIUS_MOCK_USERS")
 
+    if settings.subscriber_identity_mode == "portal" or settings.portal_auth_enabled:
+        if settings.portal_auth_enabled and not (settings.portal_voice_ai_token or "").strip():
+            if is_prod_like(settings.app_env):
+                errors.append(
+                    "PORTAL_AUTH_ENABLED requires PORTAL_VOICE_AI_TOKEN in staging/production"
+                )
+        if settings.subscriber_identity_mode == "portal" and not settings.portal_auth_enabled:
+            errors.append(
+                "SUBSCRIBER_IDENTITY_MODE=portal requires PORTAL_AUTH_ENABLED=true"
+            )
+
     radius_identity_active = settings.subscriber_identity_mode == "radius" or (
         settings.enable_radius_login and settings.radius_mode == "live"
     )

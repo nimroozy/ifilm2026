@@ -1,271 +1,59 @@
 # A1 — Portal/SAS Subscriber Authentication Report
 
-**Status:** A1 CONTRACT / AUDIT COMPLETE — PORTAL-SIDE IMPLEMENTATION BLOCKED (NO PORTAL SOURCE IN THIS AGENT)  
-**Train:** A1 (prioritized ahead of G3 / T1 / player)  
-**Baseline:** production `v1.17.0`  
-**Draft PR (iFilm docs):** https://github.com/nimroozy/ifilm2026/pull/76  
+**Status:** A1 IMPLEMENTATION: READY FOR HUMAN REVIEW  
+**Train:** A1  
+**Baseline:** production `v1.17.0` (unchanged — do not deploy from this PR alone without ops enablement)  
+**Draft PR:** https://github.com/nimroozy/ifilm2026/pull/76  
 **Branch:** `cursor/a1-portal-subscriber-auth-4873`  
-**Head SHA:** `c1432397346a0e6a483af3c3276bd37b15f9727d`
+**Head SHA:** *(updated after push)*
 
-**Do not merge as an authentication implementation. Do not deploy. Do not start G3/T1/player redesign.**
-
----
-
-## Verdict
-
-Portal already has a partner JSON API at `https://portal.mns.af/api/voice-ai/v1` (3CX voice agent).
-
-A1 must **reuse** `POST /customers/lookup` when iFilm-client QA succeeds. Do **not** invent `/api/integrations/ifilm/*` authenticate.
-
-Do **not** call the whole lookup integration LIVE-verified for iFilm yet.
-
-`GET /agent/config` is **remote voice-agent prompt/config**, not a location source.
-
-### Portal-side implementation attempt (blocked)
-
-A human requested portal implementation of:
-
-1. Dedicated iFilm bearer + `X-Mobin-Client: ifilm`
-2. `request_source=ifilm` on `/customers/lookup`
-3. `GET /api/voice-ai/v1/service-locations`
-4. `POST /api/voice-ai/v1/customers/status`
-5. Portal tests + `docs/integrations/IFILM.md` + Draft PR on the **portal** project
-
-**This Cursor agent environment only has `github.com/nimroozy/ifilm2026`.**  
-The Laravel source that deploys `portal.mns.af` is **not** cloned, not linked, and not accessible via GitHub from this run (no `portal` / `mns-portal` / `customer-portal` repo resolvable).
-
-Therefore:
-
-- No portal Draft PR could be opened
-- Multi-client middleware could not be audited or extended
-- `/service-locations` and `/customers/status` were not implemented
-- Live QA with an iFilm bearer was not run (no iFilm secret in this environment; 3CX token not used)
-- Inventing a parallel portal codebase inside iFilm is **forbidden**
-
-**Unblock:** attach the real portal Laravel repository to a Cursor Cloud Agent (or open the agent in that workspace) with GitHub write access, then re-run the portal implementation prompt.
-
-Required portal additions (unchanged):
-
-| ID | Addition |
-|----|----------|
-| A | Dedicated iFilm service credential (verify/extend middleware if only one global token exists) |
-| B | `GET /api/voice-ai/v1/service-locations` |
-| C | `POST /api/voice-ai/v1/customers/status` (preferred; else 15-minute TTL policy) |
+**Do not merge/deploy automatically. Do not start G3/T1/player redesign.**
 
 ---
 
-## 1. Corrected lookup JSON shape (PRIOR_3CX)
+## Implementation summary
 
-Envelope: `success`, `verified`.  
-Subscriber/service fields under `customer`.  
-`current_package` is an object.
+iFilm now authenticates Internet subscribers via the **existing** portal Voice AI API:
 
-```json
-{
-  "success": true,
-  "verified": true,
-  "customer": {
-    "display_name": "...",
-    "customer_number": "...",
-    "branch": "Kabul",
-    "account_status": "...",
-    "internet_status": "...",
-    "current_package": {
-      "name": "...",
-      "download_speed": "...",
-      "upload_speed": "..."
-    },
-    "expiry_date": "...",
-    "days_remaining": 10
-  }
-}
-```
+`POST https://portal.mns.af/api/voice-ai/v1/customers/lookup`
 
-Do **not** build DTOs from a flattened response.
+using `Authorization: Bearer <PORTAL_VOICE_AI_TOKEN>`, `X-Mobin-Client: 3cx-voice-agent`, `request_source=3cx_voice`.
 
-Exact `account_status` / `internet_status` values: **require QA**.
+No new portal authenticate endpoint. No separate iFilm portal credential in this pass.
 
-PRIOR_3CX validation codes (HTTP 400/422; **do not show to customers**):
+### iFilm routes
 
-`invalid_branch`, `branch_rejected`, `username_rejected`, `password_rejected`
+| Method | Path |
+|--------|------|
+| `GET` | `/api/auth/isp/locations` |
+| `POST` | `/api/auth/isp/login` |
 
----
+### Identity
 
-## 2. Corrected `/agent/config` purpose
+`provider=portal_mns`, `external_subject={CODE}:{username}` (e.g. `NMZ:1210000`).
 
-PRIOR_3CX success (approximate):
+Migration **024** required: drop global UNIQUE on `subscribers.username`.
 
-```json
-{
-  "success": true,
-  "version": "...",
-  "instructions": "..."
-}
-```
+### Entitlement
 
-Classification: **remote voice-agent configuration**.  
-**Not** a confirmed location source. Do not use it for the iFilm Service Location dropdown.
+Allow when `success && verified && account_status == "active"`.  
+Ignore `internet_status` (offline ≠ inactive).  
+15-minute snapshot TTL; password never stored; re-login after TTL for new protected playback.
 
----
+### Login UI
 
-## 3. Service locations
+Service Location + Internet Username + Password; EN / FA / PS with `dir` RTL.
 
-Known names (HTML + PRIOR_3CX) — **not** a long-term iFilm hard-code:
+### Tests (automated)
 
-Kabul, Kandahar, Ghazni, Nimruz, Buldak, Helmand
+- Backend `tests/test_portal_isp_auth.py` — pass
+- Frontend `subscriberAuth.test.tsx` — pass
+- Related subscriber/radius tests — pass
 
-No JSON locations endpoint exists (**LIVE** 404).  
-Minimal portal add: `GET /api/voice-ai/v1/service-locations`.
+### Remaining ops blockers (not code)
 
-Preferred:
+1. Set production/staging secrets: `PORTAL_AUTH_ENABLED=true`, `SUBSCRIBER_IDENTITY_MODE=portal`, `PORTAL_VOICE_AI_TOKEN=…`
+2. Run migration 024 on deploy
+3. Human staging QA with real portal credential (token not in this environment)
 
-```json
-{
-  "success": true,
-  "locations": [
-    { "id": "1", "name": "Kabul", "active": true }
-  ]
-}
-```
-
-Use actual portal fields when implemented. Never expose SAS hosts/secrets.
-
----
-
-## 4. Token-model uncertainty
-
-PRIOR_3CX proves a service **bearer exists**.
-
-It does **not** prove portal supports multiple client-specific tokens.
-
-Required end state:
-
-| Client | Header | Token |
-|--------|--------|--------|
-| 3CX | `X-Mobin-Client: 3cx-voice-agent` | its own |
-| iFilm | `X-Mobin-Client: ifilm` | **separate** |
-
-Do not reuse the 3CX token / `MOBIN_PORTAL_AI_TOKEN`.
-
-If middleware currently accepts only one global secret, document and implement a **small portal auth-middleware change**. Classify as: **verify / possibly extend**.
-
----
-
-## 5. `request_source`
-
-| Value | Status |
-|-------|--------|
-| `3cx_voice` | **Confirmed** (PRIOR_3CX) |
-| `ifilm` | **UNKNOWN** — do not assume until portal accepts/documents it |
-
----
-
-## 6. Passwordless status
-
-**Not found** (LIVE 404).
-
-Recommended: `POST /api/voice-ai/v1/customers/status`
-
-```json
-{ "branch": "Kabul", "customer_number": "..." }
-```
-
-No password. Portal queries **current** service state.
-
-Optional for v1 only if product accepts bounded entitlement TTL + forced re-login.
-
----
-
-## 7. Exact remaining portal additions
-
-Reuse: `POST /api/voice-ai/v1/customers/lookup`.
-
-Add (small):
-
-1. **A** — dedicated iFilm credential support  
-2. **B** — `GET /api/voice-ai/v1/service-locations`  
-3. **C** — `POST /api/voice-ai/v1/customers/status` (unless TTL/re-login is explicit)
-
-Do **not** build another authenticate endpoint.
-
----
-
-## 8. Successful QA lookup
-
-**Not run.** No iFilm credential and no QA subscriber secret in this environment. 3CX token not used.
-
----
-
-## 9. Revised A1 blockers
-
-See **Frozen portal requirements** below. Capability is PRIOR_3CX; route is LIVE; iFilm reuse is PROVISIONAL; production iFilm auth is NOT VERIFIED.
-
-**This PR:** docs only. No application code, no migration, no login UI, no deploy.
-
----
-
-## iFilm identity / migration status
-
-| Item | Status |
-|------|--------|
-| Attach point | `SubscriberIdentityProvider` + `subscribers` + entitlement snapshots |
-| Migration `024_…` | **Not created** |
-| Alembic head | `023_media_tracks_packaging_v1` |
-| Portal client / login UI | **Not implemented** |
-| Admin auth | Unchanged |
-
----
-
-## Ready gate (evidence classes)
-
-| Gate | Classification |
-|------|----------------|
-| Existing `/customers/lookup` authentication capability | **PASS — PRIOR_3CX** |
-| Route/API existence (`/api/voice-ai/v1`, including lookup) | **PASS — LIVE** |
-| Reusable for iFilm | **PROVISIONAL** — pending dedicated iFilm token + successful QA lookup |
-| Production iFilm authentication | **NOT VERIFIED** |
-| `/agent/config` as locations | **N/A** — not a location source |
-| Dynamic locations API | **FAIL** — add `/service-locations` (or another real JSON source) |
-| Dedicated iFilm credential | **FAIL** (multi-token support UNKNOWN) |
-| Never connect to SAS DB | **PASS** |
-
-The lookup route is LIVE. The 3CX auth *capability* is PRIOR_3CX. The integration is **not** LIVE-verified for iFilm.
-
-**A1 Ready: NO** — contract/audit complete; portal-side code blocked (no portal Laravel repo in this agent); iFilm auth blocked on portal credential + QA.
-
----
-
-## Frozen portal requirements (before iFilm implementation)
-
-**Existing and reused:** `POST /api/voice-ai/v1/customers/lookup`
-
-Required:
-
-1. Dedicated iFilm portal bearer
-2. `X-Mobin-Client: ifilm` accepted
-3. Confirmed `request_source` for iFilm
-4. `GET /api/voice-ai/v1/service-locations` **or** another real dynamic JSON location source
-5. One successful QA lookup
-6. `customer_number` identity semantics
-7. `account_status` enum
-8. `internet_status` enum
-
-**Preferred:** `POST /api/voice-ai/v1/customers/status` (passwordless current-service validation).
-
-### If `/customers/status` is deferred for v1
-
-Exact policy:
-
-- Entitlement snapshot TTL = **15 minutes**
-- After TTL expires, **new** protected playback is denied
-- Customer must log in again
-- Password is never stored
-- Existing playback already issued is **not** retroactively recalled unless the current player/token architecture already supports that
-
----
-
-## Stop
-
-**A1 CONTRACT / AUDIT COMPLETE.**  
-**A1 IMPLEMENTATION BLOCKED ON PORTAL CREDENTIAL + QA.**  
-No merge as authentication implementation. No deploy.
+**A1 IMPLEMENTATION: READY FOR HUMAN REVIEW**

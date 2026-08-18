@@ -27,10 +27,11 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60
     refresh_token_expire_days: int = 30
 
-    # Subscriber identity: fixture | radius | disabled | demo
+    # Subscriber identity: fixture | radius | disabled | demo | portal
     # fixture is rejected outside development/test.
     # demo authenticates only demo-owned subscribers with local hashes when
     # DEMO_ALLOW_LOCAL_AUTH=true (never enables live Radius).
+    # portal = Mobin Net portal.mns.af Voice AI lookup (A1).
     # Default disabled — live Radius must not be enabled in production without
     # staging-verified entitlement attribute mapping.
     subscriber_identity_mode: str = "disabled"
@@ -39,6 +40,21 @@ class Settings(BaseSettings):
     entitlement_cache_grace_seconds: int = 0  # expired cache never authorizes
     subscriber_login_rate_limit: int = 10
     subscriber_login_rate_window_seconds: int = 60
+
+    # Portal.mns.af Voice AI (A1). Backend-only — never VITE_*.
+    portal_auth_enabled: bool = False
+    portal_base_url: str = "https://portal.mns.af"
+    portal_voice_ai_prefix: str = "/api/voice-ai/v1"
+    portal_voice_ai_token: str = ""
+    portal_voice_ai_client: str = "3cx-voice-agent"
+    portal_request_source: str = "3cx_voice"
+    portal_connect_timeout_seconds: float = 3.0
+    portal_read_timeout_seconds: float = 5.0
+    # A1 v1: 15-minute entitlement snapshot TTL when passwordless status is absent.
+    portal_entitlement_cache_ttl_seconds: int = 900
+    portal_login_rate_limit: int = 5
+    portal_login_rate_window_seconds: int = 300
+
 
     # Staging-only: allow fixture subscriber identity when APP_ENV=staging.
     # Production/prod must never set this. Live SAS Radius stays disabled.
@@ -238,10 +254,23 @@ class Settings(BaseSettings):
         self.csp_mode = (self.csp_mode or "").strip().lower()
         if self.csp_mode and self.csp_mode not in {"production", "development"}:
             raise ValueError("CSP_MODE must be production, development, or empty")
-        if self.subscriber_identity_mode not in {"fixture", "radius", "disabled", "demo"}:
+        if self.subscriber_identity_mode not in {
+            "fixture",
+            "radius",
+            "disabled",
+            "demo",
+            "portal",
+        }:
             raise ValueError(
-                "SUBSCRIBER_IDENTITY_MODE must be fixture, radius, disabled, or demo"
+                "SUBSCRIBER_IDENTITY_MODE must be fixture, radius, disabled, demo, or portal"
             )
+        if self.subscriber_identity_mode == "portal" and self.portal_auth_enabled:
+            # Prefer the A1 15-minute TTL for portal snapshots.
+            if int(self.entitlement_cache_ttl_seconds) == 300:
+                self.entitlement_cache_ttl_seconds = int(
+                    self.portal_entitlement_cache_ttl_seconds or 900
+                )
+
         # Legacy bridge: ENABLE_RADIUS_LOGIN + RADIUS_MODE=mock → fixture identity.
         if self.subscriber_identity_mode == "disabled" and self.enable_radius_login:
             if self.radius_mode == "mock":

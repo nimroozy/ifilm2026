@@ -1586,6 +1586,27 @@ export const api = {
     return data;
   },
 
+  async ispLocations(): Promise<{ locations: Array<{ id: string; name: string; code: string; active: boolean }> }> {
+    const { data } = await http.get('/auth/isp/locations');
+    return data;
+  },
+
+  async ispLogin(branch: string, username: string, password: string, rememberDevice = false) {
+    const { data } = await http.post<TokenResponse>('/auth/isp/login', {
+      branch,
+      username,
+      password,
+      remember_device: rememberDevice,
+      device_id: getOrCreateDeviceId(),
+      device_name: typeof navigator !== 'undefined' ? navigator.platform || 'Web' : 'Web',
+      device_type: 'desktop',
+      browser: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 100) : '',
+    });
+    tokenStore.set(data.access_token);
+    if (data.refresh_token) tokenStore.setRefresh(data.refresh_token);
+    return data;
+  },
+
   async refresh() {
     const refresh = tokenStore.getRefresh();
     if (!refresh) throw new ApiError('No refresh token', 401);
