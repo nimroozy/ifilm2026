@@ -5,7 +5,7 @@
 **Baseline:** production `v1.17.0`  
 **Draft PR:** (filled after open)  
 **Branch:** `cursor/a1-portal-subscriber-auth-4873`  
-**Head SHA:** `b9ca5daa291e137e179f60ff58b323c49abd1455`
+**Head SHA:** `871a1de9b07e3ff541d85cc62f19acb793d243f1`
 
 **Do not merge. Do not deploy. Do not start G3/T1/player redesign.**
 
