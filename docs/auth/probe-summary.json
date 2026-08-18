@@ -1,0 +1,71 @@
+{
+  "discovered_endpoints": [
+    {
+      "method": "POST",
+      "path": "/api/customer/login",
+      "notes": "requires branch_id, username, password; 401 invalid creds; CSRF/session cookies"
+    },
+    {
+      "method": "GET",
+      "path": "/api/customer/service",
+      "notes": "401 Unauthenticated without session"
+    },
+    {
+      "method": "GET",
+      "path": "/api/customer/invoices",
+      "notes": "401 Unauthenticated without session"
+    },
+    {
+      "method": "GET",
+      "path": "/up",
+      "notes": "Laravel up endpoint returns HTML"
+    },
+    {
+      "method": "GET",
+      "path": "/login",
+      "notes": "HTML form with embedded branch options"
+    }
+  ],
+  "missing_preferred_endpoints": [
+    "GET /api/integrations/ifilm/service-locations",
+    "POST /api/integrations/ifilm/authenticate",
+    "POST /api/integrations/ifilm/validate"
+  ],
+  "branches_embedded_in_html": [
+    {
+      "id": 6,
+      "name": "Buldak"
+    },
+    {
+      "id": 4,
+      "name": "Ghazni"
+    },
+    {
+      "id": 5,
+      "name": "Helmand"
+    },
+    {
+      "id": 1,
+      "name": "Kabul"
+    },
+    {
+      "id": 3,
+      "name": "Kandahar"
+    },
+    {
+      "id": 2,
+      "name": "Nimruz"
+    }
+  ],
+  "invalid_login_probe": {
+    "request": {
+      "branch_id": 1,
+      "username": "ifilm_a1_nonexistent_user_zzz",
+      "password": "[REDACTED]"
+    },
+    "response_status": 401,
+    "response_body": {
+      "message": "Invalid username or password."
+    }
+  }
+}
