@@ -252,6 +252,8 @@ write_env() {
   [[ -n "${jwt:-}" ]] || jwt="$(rand_hex)"
   [[ -n "${playback:-}" ]] || playback="$(rand_hex)"
   [[ -n "${agent:-}" ]] || agent="$(rand_hex)"
+  integration_key="$(read_env_value INTEGRATION_SECRETS_KEY "$existing_env")"
+  [[ -n "${integration_key:-}" ]] || integration_key="$(python3 -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())' 2>/dev/null || rand_hex)"
 
   umask 077
   cat >"$ENV_FILE" <<EOF
@@ -277,6 +279,7 @@ REDIS_REQUIRED=true
 JWT_SECRET=${jwt}
 PLAYBACK_TOKEN_SECRET=${playback}
 UPDATE_AGENT_SHARED_SECRET=${agent}
+INTEGRATION_SECRETS_KEY=${integration_key}
 UPDATE_AGENT_SOCKET=/run/ifilm/update-agent.sock
 UPDATE_AGENT_SOCKET_MODE=0o666
 UPDATE_CHANNEL=stable

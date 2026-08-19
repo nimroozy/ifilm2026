@@ -10,6 +10,7 @@ from app.core.deps import DbSession
 from app.schemas.auth import SubscriberTokenResponse
 from app.services.portal import list_active_locations
 from app.services.portal.auth_decision import MSG_INVALID, MSG_UNAVAILABLE
+from app.services.portal.config_resolver import resolve_portal_runtime_config
 from app.services.rate_limit import login_rate_limiter
 from app.services.subscriber_auth import login_portal_subscriber
 
@@ -48,9 +49,10 @@ def _client_ip(request: Request) -> str:
 
 
 @router.get("/locations", response_model=IspLocationsResponse)
-def isp_locations():
+def isp_locations(db: DbSession):
     settings = get_settings()
-    if not settings.portal_auth_enabled:
+    portal = resolve_portal_runtime_config(db, settings)
+    if not portal.enabled:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"code": "provider_unavailable", "message": MSG_UNAVAILABLE},
@@ -66,7 +68,8 @@ def isp_locations():
 @router.post("/login", response_model=SubscriberTokenResponse)
 def isp_login(payload: IspLoginRequest, db: DbSession, request: Request):
     settings = get_settings()
-    if not settings.portal_auth_enabled:
+    portal = resolve_portal_runtime_config(db, settings)
+    if not portal.enabled:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"code": "provider_unavailable", "message": MSG_UNAVAILABLE},
@@ -105,6 +108,7 @@ def isp_login(payload: IspLoginRequest, db: DbSession, request: Request):
         ip=ip,
         user_agent=request.headers.get("user-agent"),
         settings=settings,
+        portal_config=portal,
     )
     if not outcome.ok or outcome.tokens is None:
         if outcome.http_status in {403, 429, 503}:

@@ -87,6 +87,15 @@ from app.db.session import get_db
 from app.main import create_app
 
 
+@pytest.fixture(autouse=True)
+def _reset_portal_runtime_config_cache():
+    from app.services.portal.config_resolver import invalidate_portal_config_cache
+
+    invalidate_portal_config_cache()
+    yield
+    invalidate_portal_config_cache()
+
+
 @pytest.fixture()
 def client():
     # Isolate from integration tests that may swap engines or cached settings.

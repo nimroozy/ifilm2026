@@ -10,7 +10,24 @@ from app.core.config import get_settings
 from app.models.user import Subscriber
 from app.services.entitlements import check_entitlement
 from app.services.portal import PROVIDER_PORTAL, external_subject_for
+from app.services.portal.runtime_config import PortalRuntimeConfig
 from app.services.rate_limit import login_rate_limiter
+
+
+def _portal_runtime_from_settings(settings=None) -> PortalRuntimeConfig:
+    s = settings or get_settings()
+    return PortalRuntimeConfig(
+        enabled=bool(s.portal_auth_enabled),
+        base_url=s.portal_base_url,
+        api_prefix=s.portal_voice_ai_prefix,
+        token=s.portal_voice_ai_token or "",
+        client=s.portal_voice_ai_client,
+        request_source=s.portal_request_source,
+        connect_timeout_seconds=float(s.portal_connect_timeout_seconds),
+        read_timeout_seconds=float(s.portal_read_timeout_seconds),
+        entitlement_cache_ttl_seconds=int(s.portal_entitlement_cache_ttl_seconds),
+        source="env",
+    )
 
 
 def _portal_settings(monkeypatch, **extra):
@@ -110,10 +127,16 @@ def test_isp_locations(client, monkeypatch):
     assert all("code" in loc for loc in resp.json()["locations"])
 
 
-def test_isp_locations_disabled(client, monkeypatch):
+def test_isp_locations_disabled(client, db_session, monkeypatch):
     _portal_settings(monkeypatch, portal_auth_enabled=False)
     monkeypatch.setenv("PORTAL_AUTH_ENABLED", "false")
     get_settings.cache_clear()
+    from app.models.integration_config import IntegrationConfig
+    from app.services.portal.config_resolver import invalidate_portal_config_cache
+
+    db_session.query(IntegrationConfig).delete()
+    db_session.commit()
+    invalidate_portal_config_cache()
     resp = client.get("/api/auth/isp/locations")
     assert resp.status_code == 503
 
@@ -647,10 +670,10 @@ def test_login_sends_canonical_branch_name(client, monkeypatch):
     _portal_settings(monkeypatch)
     seen: dict = {}
 
-    def _fn(settings, *, branch, username, password, http_client=None):
+    def _fn(_config, *, branch, username, password, http_client=None):
         seen["branch"] = branch
         return _mock_lookup(_active_customer(branch="Nimruz"))(
-            settings, branch=branch, username=username, password=password, http_client=http_client
+            _config, branch=branch, username=username, password=password, http_client=http_client
         )
 
     monkeypatch.setattr("app.services.subscriber_auth.lookup_customer", _fn)
@@ -689,7 +712,7 @@ def test_client_sends_ifilm_request_source(monkeypatch):
         from app.services.portal.client import lookup_customer
 
         result = lookup_customer(
-            get_settings(),
+            _portal_runtime_from_settings(get_settings()),
             branch="Nimruz",
             username="1210000",
             password="pw",

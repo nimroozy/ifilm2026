@@ -16,6 +16,7 @@ import {
   HardDrive,
   Sparkles,
   Inbox,
+  Globe,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -68,7 +69,10 @@ const navGroups: NavGroup[] = [
   },
   {
     label: 'System',
-    items: [{ to: '/admin/system/updates', label: 'Updates', icon: ArrowUpCircle }],
+    items: [
+      { to: '/admin/settings/portal', label: 'Portal', icon: Globe },
+      { to: '/admin/system/updates', label: 'Updates', icon: ArrowUpCircle },
+    ],
   },
 ];
 

@@ -6,7 +6,7 @@ from app.models.content import Episode, Genre, Movie, Season, Series
 from app.models.content_requests import ContentRequest, ContentRequestEvent
 from app.models.content_translations import ContentTranslation
 from app.models.credits import MovieCastCredit, SeriesCastCredit
-from app.models.media import EncodingJob, UploadJob
+from app.models.integration_config import IntegrationConfig
 from app.models.media_admin_events import MediaAdminEvent
 from app.models.media_assets import MediaAsset, UploadSession
 from app.models.media_encoding import MediaEncodingProfile, MediaPackage, MediaRendition
@@ -36,6 +36,7 @@ __all__ = [
     "ContentRequestEvent",
     "ContentTranslation",
     "Device",
+    "IntegrationConfig",
     "EncodingJob",
     "Episode",
     "Genre",

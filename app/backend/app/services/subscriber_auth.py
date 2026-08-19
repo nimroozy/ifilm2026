@@ -37,6 +37,7 @@ from app.services.identity.provider import (
 )
 from app.services.portal import PortalClientError, lookup_customer, resolve_location
 from app.services.portal.auth_decision import MSG_UNAVAILABLE, decide_from_lookup
+from app.services.portal.runtime_config import PortalRuntimeConfig
 
 
 @dataclass
@@ -228,11 +229,17 @@ def login_portal_subscriber(
     ip: str = "",
     user_agent: str | None = None,
     settings: Settings | None = None,
+    portal_config: PortalRuntimeConfig | None = None,
     lookup_fn=None,
 ) -> LoginOutcome:
     """Authenticate via portal Voice AI lookup. Never persists the Internet password."""
     cfg = settings or get_settings()
-    if not cfg.portal_auth_enabled:
+    portal = portal_config
+    if portal is None:
+        from app.services.portal.config_resolver import resolve_portal_runtime_config
+
+        portal = resolve_portal_runtime_config(db, cfg)
+    if not portal.enabled:
         return LoginOutcome(
             ok=False,
             http_status=503,
@@ -261,7 +268,7 @@ def login_portal_subscriber(
     try:
         fn = lookup_fn or lookup_customer
         lookup = fn(
-            cfg,
+            portal,
             branch=loc.name,
             username=user_norm,
             password=password,
@@ -306,7 +313,7 @@ def login_portal_subscriber(
 
     # Persist snapshot with portal TTL (15 minutes default).
     checked = decision.entitlement.checked_at or utcnow()
-    expires = checked + timedelta(seconds=int(cfg.portal_entitlement_cache_ttl_seconds or 900))
+    expires = checked + timedelta(seconds=int(portal.entitlement_cache_ttl_seconds or 900))
     snap = SubscriberEntitlementSnapshot(
         subscriber_id=user.id,
         allowed=decision.entitlement.allowed,
