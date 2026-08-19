@@ -4,146 +4,123 @@
 A1 CODE: READY FOR HUMAN REVIEW
 A1 CI: PASS
 A1 PORTAL CONTRACT: PROVISIONAL
+A1 LIVE QA: BLOCKED — MISSING SECURE CREDENTIALS
 A1 PRODUCTION READY: NO
 A1 MERGE: BLOCKED ON LIVE PORTAL QA / OWNER DECISIONS
 ```
 
-**Train:** A1  
-**Baseline:** production `v1.17.0` (unchanged)  
 **Draft PR:** https://github.com/nimroozy/ifilm2026/pull/76  
 **Branch:** `cursor/a1-portal-subscriber-auth-4873`  
-**Head SHA:** `cf5c70a93226228a210c903230d4fbf18f4455a0`
+**Head SHA (docs tip):** see latest commit on branch  
 
-**Do not merge. Do not deploy. Do not start G3 / T1 / player redesign.**  
-**Keep `PORTAL_AUTH_ENABLED=false` by default. No production portal secret committed.**
-
----
-
-## What CI accepted
-
-Backend, Installer, and Frontend CI are green on this tip. Migration 024 correctness,
-portal identity uniqueness, and feature-off defaults are acceptable **for review only**.
-
-Migration 024 may remain in the Draft PR for review, but **must not be merged** while
-the final external identity contract is still unverified.
+**Do not merge. Do not deploy. Keep `PORTAL_AUTH_ENABLED=false`.**  
+**Do not start G3 / T1 / player redesign.**
 
 ---
 
-## Provisional assumptions (NOT production-approved)
+## LIVE_QA pass status (2026-08-19)
 
-Human review found four unproven assumptions. Treat each as **provisional** until live
-portal QA / owner decisions close it.
+### Authorization for this pass
 
-### 1. Portal service credential — PROVISIONAL
+Owner authorized **QA-only** use of the existing Voice AI / 3CX-shaped service credential
+**if supplied through the agent secure environment**. That does **not** approve production
+credential sharing for iFilm.
 
-Current defaults (configurable env only):
+### Credential availability in this agent
 
-```text
-PORTAL_VOICE_AI_CLIENT=3cx-voice-agent
-PORTAL_REQUEST_SOURCE=3cx_voice
-existing Voice AI bearer (PORTAL_VOICE_AI_TOKEN)
-```
+| Secret | In agent env? |
+|--------|----------------|
+| `PORTAL_VOICE_AI_TOKEN` | **MISSING** |
+| Dedicated QA subscriber username/password/branch | **MISSING** |
+| Inactive / suspended / second-branch QA accounts | **MISSING** |
 
-This is **not** the final production A1 contract.
+No bearer token, subscriber password, or production secret was printed, logged, committed,
+or written into this repository.
 
-Production remains blocked until either:
+**Result:** Authenticated `POST /customers/lookup` LIVE_QA cases **could not be executed**.
+Application behavior was **not** changed.
 
-- **A.** Portal supports a dedicated iFilm credential (`X-Mobin-Client: ifilm`, dedicated
-  bearer, confirmed iFilm `request_source`), **or**
-- **B.** The owner **explicitly** approves temporary credential sharing.
+### LIVE probes that do not require a real token (LIVE_QA)
 
-Do **not** silently classify the existing 3CX credential as approved for iFilm.
+Against `https://portal.mns.af/api/voice-ai/v1`:
 
-### 2. Service locations — TEMPORARY FALLBACK
+| Call | HTTP | Body (safe) |
+|------|------|-------------|
+| `GET /service-locations` | **404** | Laravel not-found (no dynamic JSON locations) |
+| `POST /customers/lookup` with no `Authorization` + `X-Mobin-Client: 3cx-voice-agent` + `request_source=3cx_voice` | **401** | `success=false`, `code=unauthorized`, `message=Invalid or missing service token.` |
+| Same with fake non-secret bearer | **401** | identical unauthorized JSON |
 
-The centralized backend static list is acceptable only as a **temporary implementation
-fallback / test fixture**. It is **not** the final authoritative production source.
-
-Production requirement remains a real dynamic portal JSON source, preferably:
-
-```text
-GET /api/voice-ai/v1/service-locations
-```
-
-Do not duplicate the list in frontend code. Keep the backend abstraction so a dynamic
-provider can replace the static source without UI changes.
-
-### 3. External identity — PROVISIONAL
-
-Current implementation:
-
-```text
-provider = portal_mns
-external_subject = {BRANCH_CODE}:{username}
-```
-
-Do **not** claim username is the final stable identity. Live QA must determine
-`customer_number` semantics.
-
-Preferred final shapes (after QA):
-
-```text
-if customer_number globally unique:
-    portal_mns:<customer_number>   # or equivalent subject form
-
-if branch scoped:
-    portal_mns:<branch>:<customer_number>
-```
-
-Retain `branch:username` only if portal QA explicitly establishes that username is the
-correct stable immutable subscriber identifier. Watchlist, progress, and Continue
-Watching continuity depend on this choice.
-
-### 4. Entitlement mapping — PROVISIONAL ONLY
-
-Current rule:
-
-```text
-success && verified && account_status == "active"
-```
-
-with `internet_status` ignored — is **provisional only**.
-
-Do **not** classify `internet_status` as merely RADIUS online/offline without proof.
-Live QA must establish actual meanings of `account_status`, `internet_status`, and
-`expiry_date`.
-
-Until proven:
-
-- unknown status ⇒ deny
-- do not assume `internet_status` is irrelevant
-- do not assume `account_status=active` alone is sufficient
-- do not ignore an expired `expiry_date` without documented portal semantics
-- do not invent enum mappings
+These confirm the lookup route still enforces a service bearer. They do **not** prove
+success payload shape, entitlement enums, identity, or branch acceptance for real
+subscribers.
 
 ---
 
-## Feature-off / secrets
+## Required report items (authenticated LIVE_QA)
 
-| Control | Required state |
-|---------|----------------|
-| `PORTAL_AUTH_ENABLED` | `false` by default |
-| Production enablement | Forbidden until QA + owner decisions |
-| Portal bearer in repo / frontend | Forbidden |
-| Deploy from this PR | Forbidden |
+| # | Item | Status |
+|---|------|--------|
+| 1 | Active lookup HTTP status | **NOT TESTED** — no token / QA subscriber |
+| 2 | Redacted active lookup JSON | **NOT CAPTURED** |
+| 3 | Invalid-password behavior | **NOT TESTED** |
+| 4 | Invalid-user behavior | **NOT TESTED** |
+| 5 | Wrong-branch behavior | **NOT TESTED** |
+| 6 | Inactive/suspended behavior | **NOT TESTED** |
+| 7 | Exact `account_status` values | **UNKNOWN** |
+| 8 | Exact `internet_status` values | **UNKNOWN** |
+| 9 | `expiry_date` format/semantics | **UNKNOWN** |
+| 10 | `customer_number` type / identity recommendation | **UNKNOWN** — keep provisional `{branch}:{username}` |
+| 11 | Accepted branch representation | **UNKNOWN** for Voice AI lookup body (HTML login still embeds name+id; not authoritative for S2S) |
+| 12 | Current entitlement code correct? | **UNPROVEN** — remain fail-closed; do not change |
+| 13 | Change `{branch}:{username}` identity? | **UNPROVEN** — do not migrate yet |
+| 14 | Application changes required | **None from this pass** (no contradicting LIVE evidence) |
+| 15 | PR head SHA | Updated only for this documentation commit |
+
+### Entitlement / identity (still PROVISIONAL — not LIVE_QA)
+
+Until authenticated LIVE_QA succeeds:
+
+- Do **not** treat `account_status == active` alone as proven sufficient.
+- Do **not** classify `internet_status` as online/offline session state without proof.
+- Do **not** ignore `expiry_date` without documented portal semantics.
+- Unknown statuses remain **deny**.
+- Preferred identity after QA remains `customer_number` (global or branch-scoped); current
+  `{BRANCH_CODE}:{username}` stays provisional.
+- Static six-location backend list remains temporary fallback; `GET /service-locations`
+  still **LIVE 404**.
 
 ---
 
-## Required live QA before approval
+## What owner must inject for the next LIVE_QA agent pass
 
-Redact passwords and bearer tokens from all reports.
+Supply via **secure environment / Cursor secrets only** (never repo files):
 
-1. Successful active subscriber lookup  
-2. Invalid password lookup  
-3. Inactive/expired subscriber lookup  
-4. Preferably suspended subscriber lookup  
-5. Exact `account_status` values  
-6. Exact `internet_status` values  
-7. Exact `expiry_date` behavior  
-8. Returned `customer_number`  
-9. `customer_number` uniqueness/stability across branches  
-10. Accepted iFilm client / `request_source`  
-11. Dynamic service-location source  
+```text
+PORTAL_VOICE_AI_TOKEN=<existing Voice AI bearer — QA only>
+PORTAL_QA_BRANCH=<accepted branch string>
+PORTAL_QA_USERNAME=<QA subscriber>
+PORTAL_QA_PASSWORD=<QA password>
+```
+
+Optional for fuller matrix:
+
+```text
+PORTAL_QA_BRANCH_2 / PORTAL_QA_USERNAME_2 / PORTAL_QA_PASSWORD_2
+PORTAL_QA_INACTIVE_* or PORTAL_QA_EXPIRED_*
+PORTAL_QA_SUSPENDED_*
+```
+
+Then re-run the authenticated matrix in the task brief (active, bad password, bad user,
+wrong branch, inactive/suspended if available, second branch if available). Redact all
+secrets from reports.
+
+---
+
+## CI / code review context (unchanged)
+
+- CI green on implementation tip; migration 024 reviewable in Draft only.
+- `PORTAL_AUTH_ENABLED=false` by default.
+- No production enablement; no merge while contract unproven.
 
 ---
 
@@ -153,6 +130,7 @@ Redact passwords and bearer tokens from all reports.
 A1 CODE: READY FOR HUMAN REVIEW
 A1 CI: PASS
 A1 PORTAL CONTRACT: PROVISIONAL
+A1 LIVE QA: BLOCKED — MISSING SECURE CREDENTIALS
 A1 PRODUCTION READY: NO
 A1 MERGE: BLOCKED ON LIVE PORTAL QA / OWNER DECISIONS
 ```
