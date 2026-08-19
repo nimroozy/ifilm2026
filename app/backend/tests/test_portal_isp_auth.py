@@ -310,6 +310,193 @@ def test_external_subject_helper():
     assert external_subject_for(branch="Kabul", username="1210000") == "KBL:1210000"
 
 
+def test_portal_identity_unique_constraint(db_session, client):
+    """Same (provider, external_subject) cannot be inserted twice."""
+    from sqlalchemy.exc import IntegrityError
+
+    db_session.add(
+        Subscriber(
+            username="1210000",
+            identity_provider=PROVIDER_PORTAL,
+            external_subject="NMZ:1210000",
+            name="A",
+        )
+    )
+    db_session.commit()
+    db_session.add(
+        Subscriber(
+            username="1210000",
+            identity_provider=PROVIDER_PORTAL,
+            external_subject="NMZ:1210000",
+            name="B",
+        )
+    )
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+    db_session.rollback()
+
+
+def test_portal_identity_branch_scoped_subjects_coexist(db_session, client):
+    """Same username in different branches → different external_subject, both valid."""
+    db_session.add_all(
+        [
+            Subscriber(
+                username="1210000",
+                identity_provider=PROVIDER_PORTAL,
+                external_subject="NMZ:1210000",
+                name="Nimruz",
+                branch="Nimruz",
+            ),
+            Subscriber(
+                username="1210000",
+                identity_provider=PROVIDER_PORTAL,
+                external_subject="KBL:1210000",
+                name="Kabul",
+                branch="Kabul",
+            ),
+        ]
+    )
+    db_session.commit()
+    rows = (
+        db_session.query(Subscriber)
+        .filter(Subscriber.username == "1210000", Subscriber.identity_provider == PROVIDER_PORTAL)
+        .all()
+    )
+    assert {r.external_subject for r in rows} == {"NMZ:1210000", "KBL:1210000"}
+
+
+def test_local_null_external_subjects_coexist(db_session, client):
+    """Ordinary local subscribers with external_subject=NULL may coexist."""
+    db_session.add_all(
+        [
+            Subscriber(username="local_a", identity_provider="local", external_subject=None),
+            Subscriber(username="local_b", identity_provider="local", external_subject=None),
+            Subscriber(username="local_c", identity_provider="local", external_subject=None),
+        ]
+    )
+    db_session.commit()
+    assert (
+        db_session.query(Subscriber)
+        .filter(Subscriber.identity_provider == "local", Subscriber.external_subject.is_(None))
+        .count()
+        >= 3
+    )
+
+
+def test_portal_upsert_matches_provider_subject_not_username(db_session, client, monkeypatch):
+    """Upsert finds existing portal row by provider+subject, not global username."""
+    from app.core.config import get_settings
+    from app.services.identity.provider import IdentityAuthResult
+    from app.services.subscriber_auth import upsert_subscriber_from_identity
+
+    _portal_settings(monkeypatch)
+    existing = Subscriber(
+        username="1210000",
+        identity_provider=PROVIDER_PORTAL,
+        external_subject="NMZ:1210000",
+        name="Original",
+        branch="Nimruz",
+    )
+    # Decoy: same username, different branch subject — must not be overwritten.
+    decoy = Subscriber(
+        username="1210000",
+        identity_provider=PROVIDER_PORTAL,
+        external_subject="KBL:1210000",
+        name="Decoy Kabul",
+        branch="Kabul",
+    )
+    db_session.add_all([existing, decoy])
+    db_session.commit()
+    existing_id = existing.id
+    decoy_id = decoy.id
+
+    identity = IdentityAuthResult(
+        success=True,
+        external_subject="NMZ:1210000",
+        display_name="Updated Name",
+        account_status="active",
+        service_status="unknown",
+        package_name="L1",
+        branch_code="Nimruz",
+        source=PROVIDER_PORTAL,
+    )
+    user = upsert_subscriber_from_identity(
+        db_session,
+        username="1210000",
+        identity=identity,
+        settings=get_settings(),
+    )
+    db_session.commit()
+    assert user.id == existing_id
+    assert user.name == "Updated Name"
+    decoy_row = db_session.get(Subscriber, decoy_id)
+    assert decoy_row is not None
+    assert decoy_row.name == "Decoy Kabul"
+    assert decoy_row.external_subject == "KBL:1210000"
+
+
+def test_concurrent_first_login_integrity_error_refetch(db_session, client, monkeypatch):
+    """Race on first insert: IntegrityError → re-fetch existing identity, no unhandled 500."""
+    from app.core.config import get_settings
+    from app.services import subscriber_auth as auth_mod
+    from app.services.identity.provider import IdentityAuthResult
+    from app.services.subscriber_auth import upsert_subscriber_from_identity
+
+    _portal_settings(monkeypatch)
+    winner = Subscriber(
+        username="1210000",
+        identity_provider=PROVIDER_PORTAL,
+        external_subject="NMZ:1210000",
+        name="Winner",
+        branch="Nimruz",
+    )
+    db_session.add(winner)
+    db_session.commit()
+    winner_id = winner.id
+
+    identity = IdentityAuthResult(
+        success=True,
+        external_subject="NMZ:1210000",
+        display_name="Recovered",
+        account_status="active",
+        service_status="unknown",
+        package_name="L1",
+        branch_code="Nimruz",
+        source=PROVIDER_PORTAL,
+    )
+
+    # Simulate concurrent SELECT miss: first lookup sees nothing, insert races.
+    real_find = auth_mod._find_by_provider_subject
+    calls = {"n": 0}
+
+    def _find(db, *, provider_name, external):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return None
+        return real_find(db, provider_name=provider_name, external=external)
+
+    monkeypatch.setattr(auth_mod, "_find_by_provider_subject", _find)
+
+    user = upsert_subscriber_from_identity(
+        db_session,
+        username="1210000",
+        identity=identity,
+        settings=get_settings(),
+    )
+    db_session.commit()
+    assert user.id == winner_id
+    assert user.name == "Recovered"
+    assert (
+        db_session.query(Subscriber)
+        .filter(
+            Subscriber.identity_provider == PROVIDER_PORTAL,
+            Subscriber.external_subject == "NMZ:1210000",
+        )
+        .count()
+        == 1
+    )
+
+
 def test_client_sends_3cx_request_source(monkeypatch):
     _portal_settings(monkeypatch)
     captured: dict = {}

@@ -113,7 +113,7 @@ jobs:
       - name: Alembic heads
         run: |
           alembic heads | tee /tmp/alembic-heads.txt
-          grep -q '023_media_tracks_packaging_v1' /tmp/alembic-heads.txt
+          grep -q '024_portal_subscriber_identity_v1' /tmp/alembic-heads.txt
 
       - name: Alembic upgrade on empty PostgreSQL database
         run: |

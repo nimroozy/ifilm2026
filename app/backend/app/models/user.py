@@ -21,6 +21,18 @@ def utcnow() -> datetime:
 
 class Subscriber(Base):
     __tablename__ = "subscribers"
+    __table_args__ = (
+        # Portal / external identity: one row per (provider, subject).
+        # NULL external_subject rows (ordinary local subscribers) may coexist.
+        Index(
+            "uq_subscribers_provider_subject",
+            "identity_provider",
+            "external_subject",
+            unique=True,
+            postgresql_where=text("external_subject IS NOT NULL"),
+            sqlite_where=text("external_subject IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     username: Mapped[str] = mapped_column(String(100), index=True, nullable=False)

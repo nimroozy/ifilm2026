@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import timedelta
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
@@ -91,6 +92,51 @@ def _issue_tokens(
     )
 
 
+def _find_by_provider_subject(
+    db: Session,
+    *,
+    provider_name: str,
+    external: str,
+) -> Subscriber | None:
+    return (
+        db.query(Subscriber)
+        .filter(
+            Subscriber.identity_provider == provider_name,
+            Subscriber.external_subject == external,
+        )
+        .one_or_none()
+    )
+
+
+def _apply_identity_fields(
+    user: Subscriber,
+    *,
+    username: str,
+    identity,
+    provider_name: str,
+    external: str | None,
+) -> None:
+    if provider_name != PROVIDER_DEMO:
+        user.hashed_password = None
+    user.username = username
+    user.name = identity.display_name or user.name or username
+    user.branch = identity.branch_code or user.branch or ""
+    user.package = identity.package_name or user.package or ""
+    user.status = identity.account_status or user.status or "unknown"
+    user.identity_provider = provider_name
+    user.external_subject = external
+    user.radius_synced = provider_name == PROVIDER_RADIUS
+    if identity.max_devices:
+        user.max_devices = identity.max_devices
+    if identity.service_status:
+        user.service_status = identity.service_status
+    if identity.valid_from is not None:
+        user.valid_from = identity.valid_from
+    if identity.valid_until is not None:
+        user.valid_until = identity.valid_until
+    user.last_activity = utcnow()
+
+
 def upsert_subscriber_from_identity(
     db: Session,
     *,
@@ -104,37 +150,16 @@ def upsert_subscriber_from_identity(
     # Portal (and any external subject): never match by username alone.
     user = None
     if external and provider_name:
-        user = (
-            db.query(Subscriber)
-            .filter(
-                Subscriber.identity_provider == provider_name,
-                Subscriber.external_subject == external,
-            )
-            .one_or_none()
+        user = _find_by_provider_subject(
+            db, provider_name=provider_name, external=external
         )
 
     if user is None and provider_name not in {PROVIDER_PORTAL}:
         user = db.query(Subscriber).filter(Subscriber.username == username).one_or_none()
 
     if user is None:
-        # Avoid colliding with an existing row that has the same username under
-        # a different portal subject — use a unique local username key for portal.
-        store_username = username
-        if provider_name == PROVIDER_PORTAL and external:
-            store_username = username
-            clash = (
-                db.query(Subscriber)
-                .filter(
-                    Subscriber.username == username,
-                    Subscriber.identity_provider == PROVIDER_PORTAL,
-                    Subscriber.external_subject != external,
-                )
-                .first()
-            )
-            # Allowed after migration 024 (username not globally unique).
-            _ = clash
         user = Subscriber(
-            username=store_username,
+            username=username,
             hashed_password=None,
             name=identity.display_name or username,
             branch=identity.branch_code or "",
@@ -151,16 +176,35 @@ def upsert_subscriber_from_identity(
             last_activity=utcnow(),
         )
         db.add(user)
-        db.flush()
+        try:
+            db.flush()
+        except IntegrityError:
+            # Concurrent first-login race on (identity_provider, external_subject).
+            db.rollback()
+            if not (external and provider_name):
+                raise
+            user = _find_by_provider_subject(
+                db, provider_name=provider_name, external=external
+            )
+            if user is None:
+                raise
+            _apply_identity_fields(
+                user,
+                username=username,
+                identity=identity,
+                provider_name=provider_name,
+                external=external,
+            )
+            db.add(user)
+            db.flush()
     else:
-        if provider_name != PROVIDER_DEMO:
-            user.hashed_password = None
-        user.username = username
-        user.name = identity.display_name or user.name or username
-        user.identity_provider = provider_name
-        user.external_subject = external
-        user.radius_synced = provider_name == PROVIDER_RADIUS
-        user.last_activity = utcnow()
+        _apply_identity_fields(
+            user,
+            username=username,
+            identity=identity,
+            provider_name=provider_name,
+            external=external,
+        )
         db.add(user)
         db.flush()
     return user
