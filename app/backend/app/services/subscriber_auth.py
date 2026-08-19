@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import timedelta
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
@@ -15,7 +16,7 @@ from app.core.security import (
     new_token_family_id,
 )
 from app.models.media_assets import utcnow
-from app.models.subscriber_auth import SubscriberRefreshToken
+from app.models.subscriber_auth import SubscriberEntitlementSnapshot, SubscriberRefreshToken
 from app.models.user import Subscriber
 from app.services.devices import (
     DeviceLimitExceeded,
@@ -29,7 +30,14 @@ from app.services.entitlements import (
     persist_snapshot,
 )
 from app.services.identity import GENERIC_FAILURE, get_identity_provider
-from app.services.identity.provider import PROVIDER_DEMO, PROVIDER_FIXTURE, PROVIDER_RADIUS
+from app.services.identity.provider import (
+    PROVIDER_DEMO,
+    PROVIDER_PORTAL,
+    PROVIDER_RADIUS,
+)
+from app.services.portal import PortalClientError, lookup_customer, resolve_location
+from app.services.portal.auth_decision import MSG_UNAVAILABLE, decide_from_lookup
+from app.services.portal.runtime_config import PortalRuntimeConfig
 
 
 @dataclass
@@ -85,6 +93,51 @@ def _issue_tokens(
     )
 
 
+def _find_by_provider_subject(
+    db: Session,
+    *,
+    provider_name: str,
+    external: str,
+) -> Subscriber | None:
+    return (
+        db.query(Subscriber)
+        .filter(
+            Subscriber.identity_provider == provider_name,
+            Subscriber.external_subject == external,
+        )
+        .one_or_none()
+    )
+
+
+def _apply_identity_fields(
+    user: Subscriber,
+    *,
+    username: str,
+    identity,
+    provider_name: str,
+    external: str | None,
+) -> None:
+    if provider_name != PROVIDER_DEMO:
+        user.hashed_password = None
+    user.username = username
+    user.name = identity.display_name or user.name or username
+    user.branch = identity.branch_code or user.branch or ""
+    user.package = identity.package_name or user.package or ""
+    user.status = identity.account_status or user.status or "unknown"
+    user.identity_provider = provider_name
+    user.external_subject = external
+    user.radius_synced = provider_name == PROVIDER_RADIUS
+    if identity.max_devices:
+        user.max_devices = identity.max_devices
+    if identity.service_status:
+        user.service_status = identity.service_status
+    if identity.valid_from is not None:
+        user.valid_from = identity.valid_from
+    if identity.valid_until is not None:
+        user.valid_until = identity.valid_until
+    user.last_activity = utcnow()
+
+
 def upsert_subscriber_from_identity(
     db: Session,
     *,
@@ -92,18 +145,24 @@ def upsert_subscriber_from_identity(
     identity,
     settings: Settings,
 ) -> Subscriber:
-    provider_name = identity.source if identity.source in {PROVIDER_FIXTURE, PROVIDER_RADIUS} else identity.source
-    external = identity.external_subject or username
-    user = db.query(Subscriber).filter(Subscriber.username == username).one_or_none()
-    if user is None:
-        user = (
-            db.query(Subscriber)
-            .filter(
-                Subscriber.identity_provider == provider_name,
-                Subscriber.external_subject == external,
-            )
-            .one_or_none()
+    provider_name = identity.source
+    if provider_name == PROVIDER_PORTAL:
+        external = identity.external_subject
+        if not external:
+            raise ValueError("portal identity requires external_subject from customer_number")
+    else:
+        external = identity.external_subject or username
+
+    # Portal (and any external subject): never match by username alone.
+    user = None
+    if external and provider_name:
+        user = _find_by_provider_subject(
+            db, provider_name=provider_name, external=external
         )
+
+    if user is None and provider_name not in {PROVIDER_PORTAL}:
+        user = db.query(Subscriber).filter(Subscriber.username == username).one_or_none()
+
     if user is None:
         user = Subscriber(
             username=username,
@@ -123,19 +182,208 @@ def upsert_subscriber_from_identity(
             last_activity=utcnow(),
         )
         db.add(user)
-        db.flush()
+        try:
+            db.flush()
+        except IntegrityError:
+            # Concurrent first-login race on (identity_provider, external_subject).
+            db.rollback()
+            if not (external and provider_name):
+                raise
+            user = _find_by_provider_subject(
+                db, provider_name=provider_name, external=external
+            )
+            if user is None:
+                raise
+            _apply_identity_fields(
+                user,
+                username=username,
+                identity=identity,
+                provider_name=provider_name,
+                external=external,
+            )
+            db.add(user)
+            db.flush()
     else:
-        # Demo local auth keeps Argon2 hashes; Radius/fixture must never persist passwords.
-        if provider_name != PROVIDER_DEMO:
-            user.hashed_password = None
-        user.name = identity.display_name or user.name or username
-        user.identity_provider = provider_name
-        user.external_subject = external
-        user.radius_synced = provider_name == PROVIDER_RADIUS
-        user.last_activity = utcnow()
+        _apply_identity_fields(
+            user,
+            username=username,
+            identity=identity,
+            provider_name=provider_name,
+            external=external,
+        )
         db.add(user)
         db.flush()
     return user
+
+
+def login_portal_subscriber(
+    db: Session,
+    *,
+    branch: str,
+    username: str,
+    password: str,
+    client_device_id: str | None = None,
+    device_name: str = "",
+    device_type: str = "desktop",
+    browser: str = "",
+    ip: str = "",
+    user_agent: str | None = None,
+    settings: Settings | None = None,
+    portal_config: PortalRuntimeConfig | None = None,
+    lookup_fn=None,
+) -> LoginOutcome:
+    """Authenticate via portal Voice AI lookup. Never persists the Internet password."""
+    cfg = settings or get_settings()
+    portal = portal_config
+    if portal is None:
+        from app.services.portal.config_resolver import resolve_portal_runtime_config
+
+        portal = resolve_portal_runtime_config(db, cfg)
+    if not portal.enabled:
+        return LoginOutcome(
+            ok=False,
+            http_status=503,
+            code="provider_unavailable",
+            detail=MSG_UNAVAILABLE,
+        )
+
+    loc = resolve_location(branch)
+    if loc is None:
+        return LoginOutcome(
+            ok=False,
+            http_status=401,
+            code="invalid_credentials",
+            detail="Unable to sign in with the provided Internet account.",
+        )
+
+    user_norm = (username or "").strip()
+    if not user_norm or password is None or password == "":
+        return LoginOutcome(
+            ok=False,
+            http_status=401,
+            code="invalid_credentials",
+            detail="Unable to sign in with the provided Internet account.",
+        )
+
+    try:
+        fn = lookup_fn or lookup_customer
+        lookup = fn(
+            portal,
+            branch=loc.name,
+            username=user_norm,
+            password=password,
+        )
+    except PortalClientError as exc:
+        return LoginOutcome(
+            ok=False,
+            http_status=503,
+            code=exc.code,
+            detail=exc.message,
+        )
+
+    decision = decide_from_lookup(
+        branch=loc.name,
+        username=user_norm,
+        success=lookup.success,
+        verified=lookup.verified,
+        customer=lookup.customer,
+        http_status=lookup.http_status,
+    )
+
+    if decision.http_status != 200 or not decision.identity.success:
+        # Do not upsert on failed auth (avoid username enumeration side effects).
+        return LoginOutcome(
+            ok=False,
+            http_status=decision.http_status,
+            code=decision.code,
+            detail=decision.detail,
+        )
+
+    identity = decision.identity
+    user = upsert_subscriber_from_identity(
+        db, username=user_norm, identity=identity, settings=cfg
+    )
+
+    apply_entitlement_to_subscriber(user, decision.entitlement)
+    if decision.display_expiry is not None:
+        user.valid_until = decision.display_expiry
+        user.expiration = decision.display_expiry.date().isoformat()
+    user.hashed_password = None
+    user.last_activity = utcnow()
+
+    # Persist snapshot with portal TTL (15 minutes default).
+    checked = decision.entitlement.checked_at or utcnow()
+    expires = checked + timedelta(seconds=int(portal.entitlement_cache_ttl_seconds or 900))
+    snap = SubscriberEntitlementSnapshot(
+        subscriber_id=user.id,
+        allowed=decision.entitlement.allowed,
+        account_status=decision.entitlement.account_status,
+        service_status=decision.entitlement.service_status,
+        package_name=decision.entitlement.package_name,
+        branch_code=decision.entitlement.branch_code,
+        valid_from=decision.entitlement.valid_from,
+        valid_until=None,
+        denial_code=decision.entitlement.denial_code,
+        safe_reason=decision.entitlement.safe_reason,
+        max_devices=decision.entitlement.max_devices,
+        source=PROVIDER_PORTAL,
+        checked_at=checked,
+        expires_at=expires,
+    )
+    db.add(snap)
+    db.add(user)
+    db.flush()
+
+    if decision.entitlement.denial_code == "account_disabled":
+        db.commit()
+        return LoginOutcome(
+            ok=False,
+            http_status=403,
+            code=decision.code,
+            detail=decision.detail,
+            subscriber=user,
+        )
+
+    device_session_id: int | None = None
+    if client_device_id:
+        try:
+            device = register_or_touch_device(
+                db,
+                user,
+                client_device_id=client_device_id,
+                name=device_name,
+                device_type=device_type,
+                browser=browser,
+                ip=ip,
+                user_agent=user_agent,
+                settings=cfg,
+            )
+            device_session_id = device.id
+        except DeviceLimitExceeded:
+            db.commit()
+            return LoginOutcome(
+                ok=False,
+                http_status=403,
+                code="device_limit_exceeded",
+                detail="Device limit reached. Remove a device and try again.",
+                subscriber=user,
+            )
+        except ValueError:
+            db.commit()
+            return LoginOutcome(
+                ok=False,
+                http_status=400,
+                code="invalid_device",
+                detail="Invalid device identifier",
+                subscriber=user,
+            )
+
+    tokens = _issue_tokens(db, user, device_session_id=device_session_id, settings=cfg)
+    db.commit()
+    db.refresh(user)
+    return LoginOutcome(
+        ok=True, tokens=tokens, subscriber=user, http_status=200, code="ok", detail="ok"
+    )
 
 
 def login_subscriber(

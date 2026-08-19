@@ -38,6 +38,7 @@ PROVIDER_RADIUS = "radius"
 PROVIDER_DISABLED = "disabled"
 PROVIDER_LOCAL = "local"
 PROVIDER_DEMO = "demo"
+PROVIDER_PORTAL = "portal_mns"
 
 
 @dataclass(frozen=True)
@@ -737,6 +738,47 @@ class DemoIdentityProvider:
         }
 
 
+class PortalIdentityProvider:
+    """Portal Voice AI identity. Authenticate requires branch — use ISP login path.
+
+    get_entitlement is intentionally unavailable so playback uses the 15-minute
+    login snapshot TTL (no passwordless /customers/status yet).
+    """
+
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
+
+    def authenticate(self, username: str, password: str) -> IdentityAuthResult:
+        _ = username, password
+        return IdentityAuthResult(
+            success=False,
+            denial_code="invalid_credentials",
+            safe_reason=GENERIC_FAILURE,
+            source=PROVIDER_PORTAL,
+        )
+
+    def get_account_status(self, external_subject: str) -> AccountStatusResult:
+        _ = external_subject
+        return AccountStatusResult(
+            account_status="unknown",
+            service_status="unknown",
+            denial_code=PROVIDER_UNAVAILABLE,
+            safe_reason="Portal passwordless status is not available; re-login required",
+            source=PROVIDER_PORTAL,
+            available=False,
+        )
+
+    def get_entitlement(self, external_subject: str) -> EntitlementProviderResult:
+        _ = external_subject
+        return EntitlementProviderResult(
+            allowed=False,
+            denial_code=PROVIDER_UNAVAILABLE,
+            safe_reason="Portal passwordless status is not available; re-login required",
+            source=PROVIDER_PORTAL,
+            available=False,
+        )
+
+
 def get_identity_provider(settings: Settings | None = None) -> SubscriberIdentityProvider:
     cfg = settings or get_settings()
     mode = cfg.subscriber_identity_mode
@@ -746,4 +788,6 @@ def get_identity_provider(settings: Settings | None = None) -> SubscriberIdentit
         return RadiusIdentityProvider(cfg)
     if mode == PROVIDER_DEMO:
         return DemoIdentityProvider(cfg)
+    if mode == "portal":
+        return PortalIdentityProvider(cfg)
     return DisabledIdentityProvider()

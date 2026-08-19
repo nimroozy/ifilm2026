@@ -23,46 +23,87 @@ function loginErrorMessage(error: unknown): string {
       const message = String((detail as { message?: string }).message || error.message);
       switch (code) {
         case 'account_suspended':
-          return 'Your account is suspended. Contact support.';
         case 'account_disabled':
-          return 'Your account is disabled.';
         case 'service_expired':
-          return 'Your service has expired. Contact support to renew.';
+        case 'service_inactive':
+        case 'entitlement_unverified':
+          return message || 'Your Internet service is not currently active.';
         case 'device_limit_exceeded':
           return 'Too many devices. Remove a device and try again.';
         case 'provider_unavailable':
-          return 'Sign-in is temporarily unavailable. Try again later.';
+          return message || 'Authentication service is temporarily unavailable. Please try again.';
         case 'rate_limited':
           return 'Too many attempts. Wait a moment and try again.';
+        case 'invalid_credentials':
+          return message || 'Unable to sign in with the provided Internet account.';
         default:
-          return message || 'Invalid username or password';
+          return message || 'Unable to sign in with the provided Internet account.';
       }
     }
-    if (error.status === 401) return 'Invalid username or password';
+    if (error.status === 401) return 'Unable to sign in with the provided Internet account.';
+    if (error.status === 403) return 'Your Internet service is not currently active.';
     if (error.status === 429) return 'Too many attempts. Wait a moment and try again.';
-    if (error.status === 503) return 'Sign-in is temporarily unavailable. Try again later.';
+    if (error.status === 503) return 'Authentication service is temporarily unavailable. Please try again.';
   }
-  return 'Invalid username or password';
+  return 'Unable to sign in with the provided Internet account.';
 }
 
 // ============ LOGIN PAGE ============
 export function LoginPage() {
-  const { t } = useLang();
+  const { t, dir } = useLang();
   const navigate = useNavigate();
   const { login } = useAuth();
+  const [branch, setBranch] = useState('');
+  const [locations, setLocations] = useState<Array<{ id: string; name: string; code: string }>>([]);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [locationsError, setLocationsError] = useState('');
   const mockMode = isMockMode();
+
+  useEffect(() => {
+    if (mockMode) {
+      // Mock/demo only — production locations come solely from GET /auth/isp/locations.
+      setLocations([
+        { id: '1', name: 'Kabul', code: 'KBL' },
+        { id: '2', name: 'Nimruz', code: 'NMZ' },
+        { id: '3', name: 'Kandahar', code: 'KDR' },
+        { id: '4', name: 'Ghazni', code: 'GHZ' },
+        { id: '5', name: 'Helmand', code: 'HLD' },
+        { id: '6', name: 'Buldak', code: 'BLD' },
+      ]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await api.ispLocations();
+        if (cancelled) return;
+        setLocations(data.locations.filter((l) => l.active !== false));
+        setLocationsError('');
+      } catch {
+        if (!cancelled) {
+          setLocationsError(t.login.locationsUnavailable);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mockMode, t.login.locationsUnavailable]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     try {
-      await login(username, password, remember);
+      if (!branch) {
+        setError(t.login.locationRequired);
+        return;
+      }
+      await login(username, password, remember, branch);
       navigate('/');
     } catch (err) {
       setError(loginErrorMessage(err));
@@ -72,7 +113,7 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
+    <div className="min-h-screen flex items-center justify-center px-4" dir={dir}>
       <Card className="w-full max-w-md bg-card border-border">
         <CardHeader className="text-center">
           <h1 className="mb-2 font-display text-3xl font-bold text-primary">iFilm</h1>
@@ -80,27 +121,51 @@ export function LoginPage() {
           <p className="text-sm text-muted-foreground mt-2">{t.login.note}</p>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-4" data-testid="isp-login-form">
             {error && (
               <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm" role="alert">
                 <AlertCircle className="h-4 w-4 flex-shrink-0" />
                 <span>{error}</span>
               </div>
             )}
+            {locationsError && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm" role="alert">
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                <span>{locationsError}</span>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="branch">{t.login.location}</Label>
+              <select
+                id="branch"
+                value={branch}
+                onChange={(e) => setBranch(e.target.value)}
+                required
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                data-testid="isp-location"
+              >
+                <option value="">{t.login.locationPlaceholder}</option>
+                {locations.map((loc) => (
+                  <option key={loc.id} value={loc.name}>
+                    {loc.name}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="username">{t.login.username}</Label>
-              <Input id="username" value={username} onChange={e => setUsername(e.target.value)} autoComplete="username" className="bg-background border-border" />
+              <Input id="username" value={username} onChange={e => setUsername(e.target.value)} autoComplete="username" className="bg-background border-border" data-testid="isp-username" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">{t.login.password}</Label>
-              <Input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" className="bg-background border-border" />
+              <Input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" className="bg-background border-border" data-testid="isp-password" />
             </div>
             <div className="flex items-center gap-2">
               <Checkbox id="remember" checked={remember} onCheckedChange={(v) => setRemember(v === true)} />
               <Label htmlFor="remember" className="text-sm text-muted-foreground cursor-pointer">{t.login.remember}</Label>
             </div>
-            <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={loading}>
-              {loading ? 'Signing in...' : t.login.signIn}
+            <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={loading || !!locationsError} data-testid="isp-sign-in">
+              {loading ? t.login.signingIn : t.login.signIn}
             </Button>
             <Button type="button" variant="outline" className="w-full" onClick={() => navigate('/contact')}>
               {t.login.support}

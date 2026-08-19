@@ -1,0 +1,112 @@
+{
+  "date": "2026-08-18",
+  "correction": "Previous pass missed /api/voice-ai/v1. 3CX evidence: /agent/config is voice-agent prompt/config, not locations. Lookup success is nested under customer.",
+  "prior_3cx": {
+    "agent_config_purpose": "remote_voice_agent_prompt_config",
+    "agent_config_not_location_source": true,
+    "lookup_envelope": ["success", "verified"],
+    "lookup_customer_object": true,
+    "request_source_confirmed": "3cx_voice",
+    "request_source_ifilm": "unknown",
+    "validation_codes": [
+      "invalid_branch",
+      "branch_rejected",
+      "username_rejected",
+      "password_rejected"
+    ],
+    "multi_client_tokens_proven": false
+  },
+  "voice_ai_base": "https://portal.mns.af/api/voice-ai/v1",
+  "token_used": false,
+  "real_3cx_token_used": false,
+  "discovered_s2s_endpoints": [
+    {
+      "method": "GET",
+      "path": "/api/voice-ai/v1/agent/config",
+      "unauthenticated": {
+        "status": 401,
+        "body": {
+          "success": false,
+          "code": "unauthorized",
+          "message": "Invalid or missing service token."
+        },
+        "rate_limit_limit": 60,
+        "cache_control": "no-store, private"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/voice-ai/v1/customers/lookup",
+      "unauthenticated": {
+        "status": 401,
+        "code": "unauthorized"
+      },
+      "wrong_method_get": {
+        "status": 405,
+        "supported": ["POST"]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/voice-ai/v1/packages/search",
+      "unauthenticated": {
+        "status": 401,
+        "code": "unauthorized"
+      }
+    }
+  ],
+  "missing_passwordless_or_locations": [
+    "GET /api/voice-ai/v1/service-locations",
+    "GET /api/voice-ai/v1/branches",
+    "POST /api/voice-ai/v1/customers/status",
+    "POST /api/voice-ai/v1/customers/validate"
+  ],
+  "cors": {
+    "access_control_allow_origin": "*",
+    "preflight_allows_headers": [
+      "authorization",
+      "x-mobin-client",
+      "content-type"
+    ]
+  },
+  "partner_auth_notes": [
+    "Bearer token is mandatory; X-Mobin-Client does not bypass it",
+    "X-Client-Id is not the portal convention",
+    "Dedicated iFilm token was not available and was not invented",
+    "3CX token was not used"
+  ],
+  "browser_customer_api_still_present": [
+    {
+      "method": "POST",
+      "path": "/api/customer/login",
+      "notes": "CSRF/session; branch_id, username, password"
+    },
+    {
+      "method": "GET",
+      "path": "/login",
+      "notes": "HTML form with embedded branch options"
+    }
+  ],
+  "branches_embedded_in_html": [
+    { "id": 6, "name": "Buldak" },
+    { "id": 4, "name": "Ghazni" },
+    { "id": 5, "name": "Helmand" },
+    { "id": 1, "name": "Kabul" },
+    { "id": 3, "name": "Kandahar" },
+    { "id": 2, "name": "Nimruz" }
+  ],
+  "qa_lookup_success": "not_run",
+  "lookup_evidence_classes": {
+    "existing_authentication_capability": "PASS — PRIOR_3CX",
+    "route_api_existence": "PASS — LIVE",
+    "reusable_for_ifilm": "PROVISIONAL — pending dedicated iFilm token + successful QA lookup",
+    "production_ifilm_authentication": "NOT VERIFIED"
+  },
+  "deferred_status_v1_policy": {
+    "entitlement_snapshot_ttl_seconds": 900,
+    "new_protected_playback_after_ttl": "denied",
+    "relogin_required": true,
+    "password_stored": false,
+    "retroactive_recall_of_issued_playback": "no unless current player/token architecture already supports it"
+  }
+}

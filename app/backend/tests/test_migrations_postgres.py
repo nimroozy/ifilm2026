@@ -169,7 +169,7 @@ def test_postgresql_migration_succeeds(postgres_url):
     assert "content_requests" in tables
     assert "content_request_events" in tables
     assert "media_tracks" in tables
-    assert version == "023_media_tracks_packaging_v1"
+    assert version == "025_integration_configs_v1"
 
 
 def test_postgresql_migration_from_previous_revision(postgres_url):
@@ -202,7 +202,7 @@ def test_postgresql_migration_from_previous_revision(postgres_url):
     assert movie_slug == "ordinary-film"
     assert series_slug == "ordinary-show"
     assert null_imdb >= 1
-    assert version == "023_media_tracks_packaging_v1"
+    assert version == "025_integration_configs_v1"
 
 
 def test_002_to_head_duplicate_and_messy_titles(postgres_url):
@@ -1160,9 +1160,9 @@ def test_alembic_heads_single(postgres_url):
     result = _run_alembic(postgres_url, "heads")
     assert result.returncode == 0, result.stdout + result.stderr
     lines = [ln for ln in (result.stdout + result.stderr).splitlines() if ln.strip()]
-    head_lines = [ln for ln in lines if "023_media_tracks_packaging_v1" in ln]
+    head_lines = [ln for ln in lines if "025_integration_configs_v1" in ln]
     assert head_lines, result.stdout + result.stderr
-    assert sum(1 for ln in lines if ln.strip().startswith("023_media_tracks_packaging_v1")) >= 1
+    assert sum(1 for ln in lines if ln.strip().startswith("025_integration_configs_v1")) >= 1
 
 
 def test_media_upload_reliability_migration_roundtrip(postgres_url):
@@ -1211,7 +1211,7 @@ def test_media_upload_reliability_migration_roundtrip(postgres_url):
             )
         }
     engine.dispose()
-    assert version == "023_media_tracks_packaging_v1"
+    assert version == "025_integration_configs_v1"
     assert "media_admin_events" in tables
     assert "content_translations" in tables
     assert "content_requests" in tables
@@ -1316,7 +1316,7 @@ def test_content_requests_migration_roundtrip(postgres_url):
             )
         }
     engine.dispose()
-    assert version == "023_media_tracks_packaging_v1"
+    assert version == "025_integration_configs_v1"
     assert "content_requests" in tables
     assert "media_tracks" in tables
 
@@ -1326,7 +1326,7 @@ def test_media_tracks_migration_roundtrip(postgres_url):
     _reset_schema(postgres_url)
     assert _run_alembic(postgres_url, "upgrade", "021_content_requests_v1").returncode == 0
     assert _run_alembic(postgres_url, "upgrade", "022_media_tracks_player_v1").returncode == 0
-    assert _run_alembic(postgres_url, "upgrade", "023_media_tracks_packaging_v1").returncode == 0
+    assert _run_alembic(postgres_url, "upgrade", "024_portal_subscriber_identity_v1").returncode == 0
 
     engine = create_engine(postgres_url)
     with engine.connect() as conn:
@@ -1347,7 +1347,7 @@ def test_media_tracks_migration_roundtrip(postgres_url):
             )
         }
     engine.dispose()
-    assert version == "023_media_tracks_packaging_v1"
+    assert version == "024_portal_subscriber_identity_v1"
     assert "media_tracks" in tables
     assert "content_requests" in tables
     assert "source_media_asset_id" in cols
@@ -1390,6 +1390,220 @@ def test_media_tracks_migration_roundtrip(postgres_url):
             )
         }
     engine.dispose()
-    assert version == "023_media_tracks_packaging_v1"
+    assert version == "025_integration_configs_v1"
     assert "media_tracks" in tables
     assert "source_media_asset_id" in cols
+
+
+def test_portal_identity_migration_024_roundtrip(postgres_url):
+    """023 → 024: drop global username unique; keep provider+subject unique; safe downgrade."""
+    _reset_schema(postgres_url)
+    assert _run_alembic(postgres_url, "upgrade", "023_media_tracks_packaging_v1").returncode == 0
+
+    engine = create_engine(postgres_url)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                INSERT INTO subscribers (username, name, branch, status, package, expiration,
+                    viewing_time, radius_synced, identity_provider, max_devices, service_status)
+                VALUES ('solo_user', '', '', 'active', '', '', 0, false, 'local', 3, 'unknown')
+                """
+            )
+        )
+        uniques_before = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    """
+                    SELECT c.conname
+                    FROM pg_constraint c
+                    JOIN pg_class t ON c.conrelid = t.oid
+                    WHERE t.relname = 'subscribers' AND c.contype = 'u'
+                    """
+                )
+            )
+        }
+        indexes_before = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    """
+                    SELECT indexname FROM pg_indexes
+                    WHERE tablename = 'subscribers' AND indexdef ILIKE '%UNIQUE%'
+                    """
+                )
+            )
+        }
+    engine.dispose()
+    assert "subscribers_username_key" in uniques_before or any(
+        "username" in n for n in (uniques_before | indexes_before)
+    )
+
+    up = _run_alembic(postgres_url, "upgrade", "024_portal_subscriber_identity_v1")
+    assert up.returncode == 0, up.stdout + up.stderr
+
+    engine = create_engine(postgres_url)
+    with engine.begin() as conn:
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        conn.execute(
+            text(
+                """
+                INSERT INTO subscribers (username, name, branch, status, package, expiration,
+                    viewing_time, radius_synced, identity_provider, external_subject,
+                    max_devices, service_status)
+                VALUES
+                  ('1210000', 'Nimruz', 'Nimruz', 'active', '', '', 0, false,
+                   'portal_mns', 'NMZ:1210000', 3, 'unknown'),
+                  ('1210000', 'Kabul', 'Kabul', 'active', '', '', 0, false,
+                   'portal_mns', 'KBL:1210000', 3, 'unknown'),
+                  ('local_a', '', '', 'active', '', '', 0, false, 'local', NULL, 3, 'unknown'),
+                  ('local_b', '', '', 'active', '', '', 0, false, 'local', NULL, 3, 'unknown')
+                """
+            )
+        )
+        idx = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT indexname FROM pg_indexes WHERE tablename = 'subscribers'")
+            )
+        }
+        uniques = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    """
+                    SELECT c.conname
+                    FROM pg_constraint c
+                    JOIN pg_class t ON c.conrelid = t.oid
+                    WHERE t.relname = 'subscribers' AND c.contype = 'u'
+                    """
+                )
+            )
+        }
+    engine.dispose()
+    assert version == "024_portal_subscriber_identity_v1"
+    assert "uq_subscribers_provider_subject" in idx
+    assert "subscribers_username_key" not in uniques
+    assert "subscribers_username_key" not in idx
+
+    # Same portal identity must still conflict (separate transaction).
+    engine = create_engine(postgres_url)
+    with pytest.raises(DBAPIError):
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO subscribers (username, name, branch, status, package, expiration,
+                        viewing_time, radius_synced, identity_provider, external_subject,
+                        max_devices, service_status)
+                    VALUES ('1210000', 'Dup', 'Nimruz', 'active', '', '', 0, false,
+                            'portal_mns', 'NMZ:1210000', 3, 'unknown')
+                    """
+                )
+            )
+    engine.dispose()
+
+    # Downgrade with branch-scoped duplicate usernames must fail clearly (no data loss).
+    down = _run_alembic(postgres_url, "downgrade", "023_media_tracks_packaging_v1")
+    assert down.returncode != 0, down.stdout + down.stderr
+    err = (down.stdout + down.stderr).lower()
+    assert "duplicate" in err and "username" in err
+
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        count = conn.execute(
+            text("SELECT COUNT(*) FROM subscribers WHERE username = '1210000'")
+        ).scalar_one()
+    engine.dispose()
+    assert version == "024_portal_subscriber_identity_v1"
+    assert count == 2
+
+    # Clean duplicates → downgrade succeeds → upgrade again.
+    engine = create_engine(postgres_url)
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM subscribers WHERE external_subject = 'KBL:1210000'"))
+        conn.execute(text("DELETE FROM subscribers WHERE username LIKE 'local_%'"))
+    engine.dispose()
+
+    down_ok = _run_alembic(postgres_url, "downgrade", "023_media_tracks_packaging_v1")
+    assert down_ok.returncode == 0, down_ok.stdout + down_ok.stderr
+    up_again = _run_alembic(postgres_url, "upgrade", "024_portal_subscriber_identity_v1")
+    assert up_again.returncode == 0, up_again.stdout + up_again.stderr
+
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        idx = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT indexname FROM pg_indexes WHERE tablename = 'subscribers'")
+            )
+        }
+    engine.dispose()
+    assert version == "024_portal_subscriber_identity_v1"
+    assert "uq_subscribers_provider_subject" in idx
+
+
+def test_fresh_database_reaches_025(postgres_url):
+    _reset_schema(postgres_url)
+    result = _run_alembic(postgres_url, "upgrade", "head")
+    assert result.returncode == 0, result.stdout + result.stderr
+    heads = _run_alembic(postgres_url, "heads")
+    assert heads.returncode == 0
+    assert "025_integration_configs_v1" in (heads.stdout + heads.stderr)
+    current = _run_alembic(postgres_url, "current")
+    assert current.returncode == 0
+    assert "025_integration_configs_v1" in (current.stdout + current.stderr)
+    history = _run_alembic(postgres_url, "history")
+    assert history.returncode == 0
+    assert "025_integration_configs_v1" in (history.stdout + history.stderr)
+
+
+def test_integration_configs_migration_025_roundtrip(postgres_url):
+    """024 → 025: integration_configs table; safe downgrade to 024."""
+    _reset_schema(postgres_url)
+    assert _run_alembic(postgres_url, "upgrade", "024_portal_subscriber_identity_v1").returncode == 0
+
+    up = _run_alembic(postgres_url, "upgrade", "025_integration_configs_v1")
+    assert up.returncode == 0, up.stdout + up.stderr
+
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        tables = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT tablename FROM pg_tables WHERE schemaname='public'")
+            )
+        }
+        cols = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='integration_configs'"
+                )
+            )
+        }
+    engine.dispose()
+    assert version == "025_integration_configs_v1"
+    assert "integration_configs" in tables
+    assert {"provider", "enabled", "config_json", "secret_ciphertext", "updated_by_admin_id"} <= cols
+
+    down = _run_alembic(postgres_url, "downgrade", "024_portal_subscriber_identity_v1")
+    assert down.returncode == 0, down.stdout + down.stderr
+
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        tables = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT tablename FROM pg_tables WHERE schemaname='public'")
+            )
+        }
+    engine.dispose()
+    assert version == "024_portal_subscriber_identity_v1"
+    assert "integration_configs" not in tables

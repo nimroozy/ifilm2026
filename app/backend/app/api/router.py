@@ -3,7 +3,9 @@ from fastapi import APIRouter
 from app.api.routes import (
     admin_auth,
     admin_catalog,
+    admin_integrations,
     auth,
+    auth_isp,
     cdn,
     collections,
     config,
@@ -32,11 +34,13 @@ api_router = APIRouter()
 api_router.include_router(health.router)
 api_router.include_router(config.router)
 api_router.include_router(auth.router)
+api_router.include_router(auth_isp.router)
 api_router.include_router(me.router)
 api_router.include_router(home.router)
 api_router.include_router(content_requests.router)
 api_router.include_router(recommendations.router)
 api_router.include_router(admin_auth.router)
+api_router.include_router(admin_integrations.router)
 api_router.include_router(movies.router)
 api_router.include_router(series.router)
 api_router.include_router(seasons.router)

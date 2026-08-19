@@ -832,4 +832,59 @@ export const adminApi = {
     );
     return data;
   },
+
+  async getPortalIntegration(): Promise<PortalIntegrationDto> {
+    const { data } = await adminHttp.get<PortalIntegrationDto>('/admin/integrations/portal');
+    return data;
+  },
+
+  async updatePortalIntegration(payload: PortalIntegrationUpdatePayload): Promise<PortalIntegrationDto> {
+    const { data } = await adminHttp.put<PortalIntegrationDto>('/admin/integrations/portal', payload);
+    return data;
+  },
+
+  async testPortalConnection(): Promise<PortalConnectionTestDto> {
+    const { data } = await adminHttp.post<PortalConnectionTestDto>('/admin/integrations/portal/test');
+    return data;
+  },
+};
+
+export type PortalIntegrationDto = {
+  enabled: boolean;
+  base_url: string;
+  api_prefix: string;
+  client: string;
+  request_source: string;
+  connect_timeout_seconds: number;
+  read_timeout_seconds: number;
+  entitlement_ttl_seconds: number;
+  token_configured: boolean;
+  updated_at?: string | null;
+  last_test_at?: string | null;
+  last_test_ok?: boolean | null;
+  last_test_http_status?: number | null;
+  last_test_portal_reachable?: boolean | null;
+  last_test_credential_accepted?: boolean | null;
+  config_source?: string | null;
+};
+
+export type PortalIntegrationUpdatePayload = {
+  enabled?: boolean;
+  base_url?: string;
+  api_prefix?: string;
+  client?: string;
+  request_source?: string;
+  connect_timeout_seconds?: number;
+  read_timeout_seconds?: number;
+  entitlement_ttl_seconds?: number;
+  token?: string;
+  remove_token?: boolean;
+};
+
+export type PortalConnectionTestDto = {
+  ok: boolean;
+  portal_reachable: boolean;
+  credential_accepted: boolean;
+  http_status?: number | null;
+  message: string;
 };

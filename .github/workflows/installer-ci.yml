@@ -23,14 +23,16 @@ on:
 jobs:
   shell-and-agent:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
       - name: ShellCheck
         run: |
-          sudo apt-get update -y
-          sudo apt-get install -y shellcheck
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends shellcheck
+          fi
           shellcheck -x install.sh packaging/installer/install_release.sh packaging/scripts/uninstall.sh packaging/https/enable_https.sh packaging/scripts/run_demo_seed.sh packaging/scripts/run_real_demo_seed.sh
 
       - name: Compose config (immutable digest placeholders)
@@ -61,6 +63,9 @@ jobs:
 
       - name: Installer env reuse / wipe helpers
         run: bash packaging/tests/test_install_env_reuse.sh
+
+      - name: Integration secrets Fernet key generation
+        run: bash packaging/tests/test_integration_secrets_key.sh
 
       - name: Alembic works in production-like Compose (no DATABASE_URL env)
         run: bash packaging/tests/test_alembic_prod_exec.sh
