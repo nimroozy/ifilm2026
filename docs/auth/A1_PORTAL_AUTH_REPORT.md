@@ -10,7 +10,7 @@ A1 MERGE: BLOCKED (credential rotation / dedicated iFilm token + deploy approval
 
 **Draft PR:** https://github.com/nimroozy/ifilm2026/pull/76  
 **Branch:** `cursor/a1-portal-subscriber-auth-4873`  
-**Head SHA:** _(stamped in tip commit)_  
+**Head SHA:** `5f82b8bac96af95b891f5557bc19f476d30bdb06`
 
 **Do not merge. Do not deploy. Keep `PORTAL_AUTH_ENABLED=false`.**
 
