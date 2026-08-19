@@ -4,14 +4,14 @@
 A1 CODE: READY FOR HUMAN REVIEW
 A1 CI: PASS
 A1 PORTAL CONTRACT: PROVISIONAL
-A1 LIVE QA: BLOCKED — SECRETS NOT INJECTED INTO THIS AGENT VM
+A1 LIVE QA: BLOCKED — SUPPLIED SERVICE TOKEN REJECTED
 A1 PRODUCTION READY: NO
 A1 MERGE: BLOCKED ON LIVE PORTAL QA / OWNER DECISIONS
 ```
 
 **Draft PR:** https://github.com/nimroozy/ifilm2026/pull/76  
 **Branch:** `cursor/a1-portal-subscriber-auth-4873`  
-**Head SHA:** `e2630d24e1186c84def6eed07fd90296c2f2e816`
+**Head SHA:** _(stamped in tip commit)_  
 
 **Do not merge. Do not deploy. Keep `PORTAL_AUTH_ENABLED=false`.**  
 **Do not start G3 / T1 / player redesign.**
@@ -21,81 +21,74 @@ Classification key:
 | Tag | Meaning |
 |-----|---------|
 | **LIVE_QA** | Observed against production portal in this agent pass |
-| **PRIOR_3CX** | Historical 3CX integration evidence (not re-authenticated this pass) |
-| **PROVISIONAL** | Implementation assumption — not proven by authenticated LIVE_QA |
+| **PRIOR_3CX** | Historical 3CX integration evidence |
+| **PROVISIONAL** | Implementation assumption — not proven by authenticated success |
+
+**Security note (owner action):** A service bearer and QA subscriber password were pasted into
+chat for this pass. Treat both as **compromised for sharing channels**. Rotate the portal
+Voice AI service token and the QA subscriber password after QA. Never commit secrets to the
+repo. This document contains **no** secret values.
 
 ---
 
-## LIVE_QA resume attempt (2026-08-19)
+## LIVE_QA authenticated attempt (2026-08-19)
 
-### Authorization
+### What was attempted
 
-Owner authorized **QA-only** use of the existing Voice AI / 3CX-shaped service credential
-for authenticated LIVE_QA. That does **not** approve production credential sharing for iFilm.
+`POST https://portal.mns.af/api/voice-ai/v1/customers/lookup` with:
 
-### Credential visibility on this agent (resume pass)
+- `X-Mobin-Client: 3cx-voice-agent`
+- `request_source: 3cx_voice`
+- `Authorization: Bearer <supplied token>` (value never logged/committed)
+- QA branch / username / password from owner (values never committed)
 
-Owner stated secure environment variables were provided. This agent VM still reports:
+Also probed alternate auth header forms (token-only Authorization, `X-Api-Key`,
+`X-Mobin-Token`, client header variants, `GET /agent/config`). **All** returned the same
+service-auth failure.
 
-| Variable | Visible in process environment? |
-|----------|----------------------------------|
-| `PORTAL_VOICE_AI_TOKEN` | **NO** |
-| `PORTAL_QA_BRANCH` | **NO** |
-| `PORTAL_QA_USERNAME` | **NO** |
-| `PORTAL_QA_PASSWORD` | **NO** |
-| Optional inactive / second-branch QA vars | **NO** |
+### LIVE_QA result — service credential
 
-Diagnostics for this run (`cursor-cloud` `environment-info`):
+| Observation | Value | Tag |
+|-------------|-------|-----|
+| HTTP status | **401** | **LIVE_QA** |
+| Body | `{"success":false,"code":"unauthorized","message":"Invalid or missing service token."}` | **LIVE_QA** |
+| Matches missing/fake bearer behavior? | **Yes** (identical) | **LIVE_QA** |
+| Supplied token shape (non-secret) | length **64**, lowercase hex charset | **LIVE_QA** |
+| Subscriber lookup body reached? | **No** — rejected before customer validation | **LIVE_QA** |
 
-- **Linked Cursor environment:** `null` (no dashboard environment attached to this agent)
-- Therefore dashboard/environment secrets **cannot inject** into this VM
+**Implication:** The string provided as `PORTAL_VOICE_AI_TOKEN` is **not accepted** by
+portal Voice AI middleware as a live service bearer. Authenticated customer-matrix items
+(success JSON, statuses, identity, wrong-password, etc.) **cannot** be measured until a
+**working** service token is supplied.
 
-No bearer token, subscriber password, or Authorization header value was printed, logged,
-committed, or written into this repository.
+Hypothesis (not proven): a 64-char hex string may be a **hash** of a Sanctum/plain token
+rather than the plaintext token 3CX actually sends. Portal likely expects the **plaintext**
+service token (often Laravel Sanctum-style), not a SHA-256 digest.
 
-**Result:** Authenticated `POST /customers/lookup` LIVE_QA matrix **still could not be
-executed**. Application behavior was **not** changed.
+### LIVE_QA matrix status
 
-### How to unblock the next agent
+| Case | Status |
+|------|--------|
+| Active subscriber lookup | **BLOCKED** — service token rejected |
+| Invalid password | **BLOCKED** — same |
+| Invalid username | **BLOCKED** — same |
+| Wrong branch | **BLOCKED** — same |
+| Branch as numeric id (`1`) / code (`KBL`) | **BLOCKED** — same (cannot evaluate acceptance) |
+| Inactive/suspended | **NOT TESTED** (no valid service auth; no optional QA accounts used) |
 
-1. Create or attach a **Cursor Cloud environment** for this repo that includes secrets:
-   - `PORTAL_VOICE_AI_TOKEN` (required)
-   - `PORTAL_QA_BRANCH` / `PORTAL_QA_USERNAME` / `PORTAL_QA_PASSWORD` (required)
-   - Optional: inactive/expired/suspended and second-branch QA triples
-2. **Start a new cloud agent** (or rebuild) **from that environment** so secrets are
-   present in the VM process environment at boot.
-3. Re-run the authenticated matrix against
-   `POST https://portal.mns.af/api/voice-ai/v1/customers/lookup` with
-   `X-Mobin-Client: 3cx-voice-agent` and `request_source=3cx_voice` (QA-only).
+### Unauthenticated / structural LIVE_QA (unchanged)
 
-Adding secrets only in chat text or to an environment that is **not** linked to this run
-will not make them visible here.
+| Call | HTTP | Tag |
+|------|------|-----|
+| `GET /service-locations` | **404** | **LIVE_QA** |
+| Lookup without/fake bearer | **401** unauthorized | **LIVE_QA** |
 
-### LIVE_QA probes that do not require a real token (still valid)
-
-Against `https://portal.mns.af/api/voice-ai/v1`:
-
-| Call | HTTP | Body (safe) | Tag |
-|------|------|-------------|-----|
-| `GET /service-locations` | **404** | route not found | **LIVE_QA** |
-| `POST /customers/lookup` no/fake bearer | **401** | `unauthorized` / Invalid or missing service token | **LIVE_QA** |
-
-### LIVE_QA — portal HTML login locations (not S2S authority)
-
-| Name | numeric `value` |
-|------|-----------------|
-| Kabul | `1` |
-| Nimruz | `2` |
-| Kandahar | `3` |
-| Ghazni | `4` |
-| Helmand | `5` |
-| Buldak | `6` |
-
-Does **not** prove `/customers/lookup` accepts name vs id vs code.
+HTML login branch select (not S2S authority): Kabul=`1`, Nimruz=`2`, Kandahar=`3`,
+Ghazni=`4`, Helmand=`5`, Buldak=`6` (**LIVE_QA**).
 
 ---
 
-## Required report items (authenticated LIVE_QA)
+## Required findings (still open)
 
 | # | Question | Status |
 |---|----------|--------|
@@ -107,7 +100,7 @@ Does **not** prove `/customers/lookup` accepts name vs id vs code.
 | 6 | Exact `expiry_date` value/format | **UNKNOWN** |
 | 7 | Is `internet_status` session online/offline or entitlement? | **UNKNOWN** |
 | 8 | Must `expiry_date` independently gate iFilm? | **UNKNOWN** |
-| 9 | Exact accepted branch representation | **UNKNOWN** (HTML name+id is non-S2S **LIVE_QA**) |
+| 9 | Exact accepted branch representation | **UNKNOWN** |
 | 10 | Invalid password behavior | **NOT TESTED** |
 | 11 | Invalid username behavior | **NOT TESTED** |
 | 12 | Wrong branch behavior | **NOT TESTED** |
@@ -115,15 +108,21 @@ Does **not** prove `/customers/lookup` accepts name vs id vs code.
 | 14 | Must entitlement mapping change? | **UNPROVEN** — **do not change code** |
 | 15 | Must `{branch}:{username}` identity change? | **UNPROVEN** — **do not migrate** |
 
-### Still PROVISIONAL (not LIVE_QA)
+Application behavior: **unchanged**.
 
-- Entitlement: `success && verified && account_status == active` (internet_status ignored)
-- Identity: `{BRANCH_CODE}:{username}`
-- Locations: static backend six-name list (temporary fallback)
-- Credential: 3CX-shaped client/source for production iFilm
+---
 
-Unknown statuses remain **deny**. No application behavior changes until authenticated
-LIVE_QA contradicts a specific assumption with redacted evidence.
+## What owner must supply next
+
+1. **Rotate** the chat-exposed service token and QA password.
+2. Provide the **working plaintext** Voice AI / 3CX service bearer that currently authenticates
+   `POST /api/voice-ai/v1/customers/lookup` in production 3CX (prefer Cursor secure env /
+   linked environment secrets — avoid pasting into chat again).
+3. Confirm QA subscriber branch/username/password still valid after password rotation.
+4. Re-run authenticated LIVE_QA.
+
+Until a bearer is accepted (HTTP ≠ 401 `unauthorized` for service token), customer entitlement
+and identity questions remain **PROVISIONAL**.
 
 ---
 
@@ -133,7 +132,7 @@ LIVE_QA contradicts a specific assumption with redacted evidence.
 A1 CODE: READY FOR HUMAN REVIEW
 A1 CI: PASS
 A1 PORTAL CONTRACT: PROVISIONAL
-A1 LIVE QA: BLOCKED — SECRETS NOT INJECTED INTO THIS AGENT VM
+A1 LIVE QA: BLOCKED — SUPPLIED SERVICE TOKEN REJECTED
 A1 PRODUCTION READY: NO
 A1 MERGE: BLOCKED ON LIVE PORTAL QA / OWNER DECISIONS
 ```
