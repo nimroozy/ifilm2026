@@ -10,7 +10,7 @@ A1 MERGE: BLOCKED ON OWNER DECISIONS (credential + identity + locations)
 
 **Draft PR:** https://github.com/nimroozy/ifilm2026/pull/76  
 **Branch:** `cursor/a1-portal-subscriber-auth-4873`  
-**Head SHA:** _(stamped in tip commit)_  
+**Head SHA:** `441403449fbf98d3245efd01950635fc29862bcc`
 
 **Do not merge. Do not deploy. Keep `PORTAL_AUTH_ENABLED=false`.**  
 **Do not start G3 / T1 / player redesign.**  
