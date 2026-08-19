@@ -1,15 +1,17 @@
 # A1 — Portal Voice AI subscriber authentication (iFilm side)
 
 ```text
-A1 CODE: READY FOR HUMAN REVIEW
-A1 PORTAL CONTRACT: LIVE_QA + OWNER A1 V1 DECISIONS APPLIED
-A1 PRODUCTION READY: NO
-A1 MERGE: BLOCKED (credential + deploy approval)
+A1 CODE: COMPLETE
+A1 LIVE_QA: PASS FOR V1 CONTRACT
+A1 CI: pending this tip
+A1 PRODUCTION READY: BLOCKED ONLY ON SECRET ROTATION + STAGING SMOKE
+A1 MERGE: WAIT FOR HUMAN APPROVAL
 ```
 
 **Do not merge. Do not deploy. Keep `PORTAL_AUTH_ENABLED=false` by default.**
 
-See [`A1_PORTAL_AUTH_REPORT.md`](./A1_PORTAL_AUTH_REPORT.md) for LIVE_QA evidence.
+See [`A1_PORTAL_AUTH_REPORT.md`](./A1_PORTAL_AUTH_REPORT.md) for LIVE_QA evidence
+and the production rotation gate.
 
 ## Routes
 
@@ -25,23 +27,24 @@ PORTAL_AUTH_ENABLED=false
 PORTAL_BASE_URL=https://portal.mns.af
 PORTAL_VOICE_AI_PREFIX=/api/voice-ai/v1
 PORTAL_VOICE_AI_TOKEN=
-PORTAL_VOICE_AI_CLIENT=3cx-voice-agent
-PORTAL_REQUEST_SOURCE=3cx_voice
+PORTAL_VOICE_AI_CLIENT=ifilm
+PORTAL_REQUEST_SOURCE=ifilm
 PORTAL_CONNECT_TIMEOUT_SECONDS=3
 PORTAL_READ_TIMEOUT_SECONDS=5
 PORTAL_ENTITLEMENT_CACHE_TTL_SECONDS=900
 SUBSCRIBER_IDENTITY_MODE=disabled
 ```
 
-`PORTAL_VOICE_AI_CLIENT` / `PORTAL_REQUEST_SOURCE` / token are **configurable**. Current
-defaults reuse the existing Voice AI / 3CX-shaped headers for development only.
+`PORTAL_VOICE_AI_TOKEN` is backend-secret-only. Never `VITE_*`. Never log it.
+Never expose it to the browser. Do not store a bearer in repository files.
 
-**Not production-approved:** do not treat 3CX credential sharing as the final A1
-contract unless the owner explicitly approves temporary sharing, or portal adds a
-dedicated iFilm credential (`X-Mobin-Client: ifilm`, dedicated bearer, confirmed
-`request_source`).
+Owner A1 v1 decision: temporary sharing of the Voice AI service bearer between
+3CX and iFilm is approved as **technical debt**, subject to mandatory rotation
+before production. A1.1 requires a dedicated independently revocable iFilm
+service credential.
 
-Never put the token in `VITE_*` or frontend JS. Never commit production secrets.
+LIVE_QA proved `X-Mobin-Client` and `request_source` are not authorization
+boundaries. iFilm defaults are `ifilm` / `ifilm` (metadata only).
 
 ## Locations — A1 v1 owner-approved temporary registry
 
@@ -60,9 +63,11 @@ provider = portal_mns
 external_subject = {BRANCH_CODE}:{customer_number}
 ```
 
+Examples: `KBL:1210000`, `NMZ:1210000`.
+
 `customer_number` is required on verified success (fail closed; no username
-fallback). Same number in Kabul and Nimruz are distinct subjects (`KBL:…` /
-`NMZ:…`). No automatic migration of older test rows.
+fallback). Same number in Kabul and Nimruz are distinct subjects. No automatic
+migration of older test rows.
 
 Local JWT `sub` remains the integer `subscribers.id`.
 

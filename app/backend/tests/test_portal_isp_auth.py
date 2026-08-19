@@ -18,8 +18,8 @@ def _portal_settings(monkeypatch, **extra):
         "subscriber_identity_mode": "portal",
         "portal_auth_enabled": True,
         "portal_voice_ai_token": "test-portal-token-not-real",
-        "portal_voice_ai_client": "3cx-voice-agent",
-        "portal_request_source": "3cx_voice",
+        "portal_voice_ai_client": "ifilm",
+        "portal_request_source": "ifilm",
         "portal_entitlement_cache_ttl_seconds": 900,
         "entitlement_cache_ttl_seconds": 900,
         "portal_login_rate_limit": 20,
@@ -662,7 +662,17 @@ def test_login_sends_canonical_branch_name(client, monkeypatch):
     assert seen["branch"] == "Nimruz"
 
 
-def test_client_sends_3cx_request_source(monkeypatch):
+def test_default_portal_client_source_are_ifilm():
+    from app.core.config import Settings
+
+    settings = Settings.model_construct()
+    assert settings.portal_voice_ai_client == "ifilm"
+    assert settings.portal_request_source == "ifilm"
+    assert settings.portal_auth_enabled is False
+    assert settings.portal_voice_ai_token == ""
+
+
+def test_client_sends_ifilm_request_source(monkeypatch):
     _portal_settings(monkeypatch)
     captured: dict = {}
 
@@ -686,6 +696,6 @@ def test_client_sends_3cx_request_source(monkeypatch):
             http_client=http_client,
         )
     assert result.success is True
-    assert captured["body"]["request_source"] == "3cx_voice"
-    assert captured["headers"]["x-mobin-client"] == "3cx-voice-agent"
+    assert captured["body"]["request_source"] == "ifilm"
+    assert captured["headers"]["x-mobin-client"] == "ifilm"
     assert "pw" not in str(captured["headers"])

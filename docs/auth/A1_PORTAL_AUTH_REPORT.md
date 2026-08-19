@@ -1,16 +1,16 @@
 # A1 — Portal/SAS Subscriber Authentication Report
 
 ```text
-A1 CODE: READY FOR HUMAN REVIEW
+A1 CODE: COMPLETE
+A1 LIVE_QA: PASS FOR V1 CONTRACT
 A1 CI: pending this tip
-A1 PORTAL CONTRACT: LIVE_QA + OWNER A1 V1 DECISIONS APPLIED
-A1 PRODUCTION READY: NO
-A1 MERGE: BLOCKED (credential rotation / dedicated iFilm token + deploy approval)
+A1 PRODUCTION READY: BLOCKED ONLY ON SECRET ROTATION + STAGING SMOKE
+A1 MERGE: WAIT FOR HUMAN APPROVAL
 ```
 
 **Draft PR:** https://github.com/nimroozy/ifilm2026/pull/76  
 **Branch:** `cursor/a1-portal-subscriber-auth-4873`  
-**Head SHA:** `5f82b8bac96af95b891f5557bc19f476d30bdb06`
+**Head SHA:** pending this tip
 
 **Do not merge. Do not deploy. Keep `PORTAL_AUTH_ENABLED=false`.**
 
@@ -26,26 +26,46 @@ Working bearer + dedicated QA subscriber (Kabul). Values never printed.
 | **B** | `X-Mobin-Client: 3cx-voice-agent` + `request_source: ifilm` | 200 | true | true | null | yes |
 | **C** | `X-Mobin-Client: ifilm` + `request_source: ifilm` | 200 | true | true | null | yes |
 
-**Finding:** client header and `request_source` are **not enforced** (metadata only).
-The existing bearer authenticates all three combinations.
+**Finding:** client header and `request_source` are **not authorization
+boundaries** (metadata only). The existing bearer authenticates all three
+combinations.
 
-### Recommended portal headers (not applied as defaults)
+---
 
-**Preferred (not implemented; needs portal-issued dedicated secret):**
+## Owner A1 v1 credential decision
+
+Temporary sharing of the Voice AI service bearer between 3CX and iFilm is
+**approved for A1 v1**, subject to mandatory credential rotation before
+production. This is temporary technical debt.
+
+Long-term A1.1 requirement: dedicated independently revocable iFilm service
+credential.
+
+### Committed iFilm metadata defaults (non-secret)
 
 ```text
-Authorization: Bearer <dedicated iFilm token>
-X-Mobin-Client: ifilm
-request_source: ifilm
+PORTAL_AUTH_ENABLED=false
+PORTAL_VOICE_AI_CLIENT=ifilm
+PORTAL_REQUEST_SOURCE=ifilm
+PORTAL_VOICE_AI_TOKEN=
 ```
 
-**Current code defaults (unchanged):** `3cx-voice-agent` / `3cx_voice` + shared Voice AI
-bearer env var.
+`PORTAL_VOICE_AI_TOKEN` remains backend-secret-only. Never `VITE_*`. Never
+log it. Never expose it to the browser. Do not store the new bearer in
+repository files.
 
-Temporary shared bearer for A1 v1 is **not assumed approved**. If owner later
-approves after **rotation** (token was exposed in chat): backend secret only, never
-`VITE_*`, never logged, `PORTAL_AUTH_ENABLED=false` until deploy approval, and
-record independently revocable iFilm credential as tech debt.
+---
+
+## Credential rotation gate (production enablement BLOCKED)
+
+Owner must confirm all of the following before production:
+
+1. Exposed old Voice AI bearer rotated
+2. QA password rotated
+3. Portal accepts the new bearer
+4. 3CX updated to the new bearer
+5. 3CX regression lookup succeeds
+6. New bearer installed in iFilm production secret environment (not the repo)
 
 ---
 
@@ -57,6 +77,8 @@ record independently revocable iFilm credential as tech debt.
 provider = portal_mns
 external_subject = {BRANCH_CODE}:{customer_number}
 ```
+
+Examples: `KBL:1210000`, `NMZ:1210000`.
 
 Missing `customer.customer_number` on a verified success → fail closed (503,
 no subscriber row). No username fallback for new portal users.
@@ -82,18 +104,22 @@ path fetches `/api/auth/isp/locations` only. Numeric HTML ids rejected at iFilm
 login. Portal calls use canonical **name**. Dynamic `/service-locations` is
 **A1.1 / tech debt**, not an A1 v1 blocker.
 
+Known A1 v1 locations: Kabul/KBL, Kandahar/KDR, Ghazni/GHZ, Nimruz/NMZ,
+Buldak/BLD, Helmand/HLD.
+
 ### Invalid credentials
 
-`verification_failed` (bad user or bad password) → same generic 401
-`invalid_credentials`.
+Portal: HTTP 200, `success=true`, `verified=false`, `code=verification_failed`.
+
+iFilm: generic 401 `invalid_credentials` (no account enumeration).
 
 ---
 
 ## Status
 
 ```text
-A1 CODE: READY FOR HUMAN REVIEW
-A1 PORTAL CONTRACT: LIVE_QA + OWNER A1 V1 DECISIONS APPLIED
-A1 PRODUCTION READY: NO
-A1 MERGE: BLOCKED
+A1 CODE: COMPLETE
+A1 LIVE_QA: PASS FOR V1 CONTRACT
+A1 PRODUCTION READY: BLOCKED ONLY ON SECRET ROTATION + STAGING SMOKE
+A1 MERGE: WAIT FOR HUMAN APPROVAL
 ```

@@ -55,7 +55,7 @@ def lookup_customer(
     url = f"{_voice_ai_base(settings)}/customers/lookup"
     headers = {
         "Authorization": f"Bearer {token}",
-        "X-Mobin-Client": (settings.portal_voice_ai_client or "3cx-voice-agent").strip(),
+        "X-Mobin-Client": (settings.portal_voice_ai_client or "ifilm").strip(),
         "Accept": "application/json",
         "Content-Type": "application/json",
     }
@@ -63,7 +63,7 @@ def lookup_customer(
         "branch": branch,
         "username": username,
         "password": password,
-        "request_source": (settings.portal_request_source or "3cx_voice").strip(),
+        "request_source": (settings.portal_request_source or "ifilm").strip(),
     }
 
     timeout = httpx.Timeout(

@@ -42,16 +42,16 @@ class Settings(BaseSettings):
     subscriber_login_rate_window_seconds: int = 60
 
     # Portal.mns.af Voice AI (A1). Backend-only — never VITE_*.
-    # portal_auth_enabled stays False until live portal QA + owner decisions.
-    # client/request_source defaults are configurable provisional fallbacks — not a
-    # production-approved iFilm credential unless the owner explicitly allows sharing
-    # or portal adds a dedicated ifilm client/bearer/request_source.
+    # portal_auth_enabled stays False. Production enablement is blocked until
+    # owner confirms credential rotation (shared Voice AI bearer is temporary
+    # A1 v1 debt; A1.1 requires a dedicated independently revocable iFilm secret).
+    # Client/source are metadata only (LIVE_QA: not authorization boundaries).
     portal_auth_enabled: bool = False
     portal_base_url: str = "https://portal.mns.af"
     portal_voice_ai_prefix: str = "/api/voice-ai/v1"
     portal_voice_ai_token: str = ""
-    portal_voice_ai_client: str = "3cx-voice-agent"
-    portal_request_source: str = "3cx_voice"
+    portal_voice_ai_client: str = "ifilm"
+    portal_request_source: str = "ifilm"
     portal_connect_timeout_seconds: float = 3.0
     portal_read_timeout_seconds: float = 5.0
     # A1 v1: 15-minute entitlement snapshot TTL when passwordless status is absent.
