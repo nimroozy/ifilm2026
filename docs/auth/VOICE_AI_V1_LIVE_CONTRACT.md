@@ -1,15 +1,17 @@
 # Live contract — `https://portal.mns.af/api/voice-ai/v1`
 
-**Date:** 2026-08-18  
+**Date:** 2026-08-18 (unauthenticated) / **2026-08-19 authenticated LIVE_QA**  
 **Correction:** The first A1 audit searched `/api/integrations/ifilm/*` and concluded portal had no S2S API. That namespace is empty. **This** namespace is the existing partner API (built for the 3CX voice agent).
+
+Authenticated success/error matrix (redacted): `docs/auth/A1_PORTAL_AUTH_REPORT.md`.
 
 **Evidence classes**
 
 | Class | Meaning |
 |-------|---------|
-| **LIVE** | Observed against production portal in this pass (no valid service token used) |
-| **PRIOR_3CX** | Shape/behavior from the original 3CX portal integration (not re-fetched with a live token this pass) |
-| **UNKNOWN** | Requires a dedicated iFilm credential and/or QA subscriber |
+| **LIVE** / **LIVE_QA** | Observed against production portal |
+| **PRIOR_3CX** | Historical 3CX notes — superseded where LIVE_QA exists |
+| **UNKNOWN** | Still untested (e.g. suspended) |
 
 No real 3CX bearer token, no customer password, and no service secret appears in this document.
 
@@ -232,7 +234,11 @@ Subscriber/service fields live under `customer`.
 
 Do **not** build frontend/backend DTOs from a flattened `{ display_name, customer_number, ... }` payload.
 
-Exact string values/enums still require a real QA lookup.
+**LIVE_QA (2026-08-19):** this nested shape is **confirmed**. Observed
+`account_status`: `active`, `expired`. Observed `internet_status`: `offline` on
+both (session state, not entitlement). `expiry_date` is `YYYY-MM-DD`;
+`days_remaining` is int and may be negative. `customer_number` is string and
+branch-scoped (same number in Kabul + Nimruz).
 
 ### PRIOR_3CX validation errors (do not show to iFilm customers)
 
@@ -247,37 +253,31 @@ The 3CX client handled HTTP **400/422**-style validation failures including:
 
 iFilm must **not** surface these distinctions. Customer-facing credential failures stay generic (invalid location / username / password). Logs may store the portal `code` only.
 
-### Proposed iFilm mapping (UNVERIFIED — confirm with QA)
+### LIVE_QA entitlement (2026-08-19)
 
-Login / playback entitlement should require:
+Confirmed require:
 
-1. Envelope `success == true` and `verified == true`
-2. Internet service is usable — derive from **actual** `customer.internet_status` / `customer.account_status` / `customer.expiry_date` after a successful QA lookup
-3. Fail closed if those fields are missing or unrecognized
+1. `success == true` and `verified == true`
+2. `customer.account_status == "active"`
+3. Fail closed on unknown / missing `account_status`
 
-Likely denied (names only, not confirmed):
+**LIVE_QA:** ignore `internet_status` for entitlement (active account was `offline`).
+`account_status=expired` already denies; no extra `expiry_date` gate on the two
+tested accounts. Suspended still **UNKNOWN**.
 
-- suspended / disabled account
-- expired internet
-- `verified=false`
-
-Do **not** ship this mapping as production truth until a dedicated QA account returns a real payload.
+Wrong/invalid credentials: HTTP 200 `success=true`, `verified=false`,
+`code=verification_failed` (generic). Empty branch: HTTP 400 `validation_failed`.
+iFilm must **not** surface portal code distinctions to customers.
 
 ---
 
-## 7. Stable identity (UNKNOWN until QA)
+## 7. Stable identity (LIVE_QA: branch-scoped)
 
-Preferred if `customer_number` is globally unique across SAS branches:
+`customer_number` is **not** globally unique (LIVE_QA: same string in Kabul and Nimruz).
 
 ```text
 provider = portal_mns
-external_subject = <customer_number>
-```
-
-If `customer_number` is only unique **inside** a branch (same number or username can exist in Kabul and Kandahar):
-
-```text
-external_subject = {canonical_branch}:{customer_number}
+external_subject = {canonical_branch_code}:{customer_number}
 ```
 
 Never key iFilm identity on username alone.
