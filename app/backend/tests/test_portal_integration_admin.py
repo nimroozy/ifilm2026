@@ -47,6 +47,19 @@ def test_encrypt_decrypt_roundtrip(integration_master_key):
     assert b"test-portal-token" not in ct
 
 
+def test_openssl_style_fernet_key_roundtrip():
+    """Installer generate_fernet_key format (openssl urlsafe-b64 of 32 bytes) must work."""
+    import base64
+    import os
+
+    raw = os.urandom(32)
+    key = base64.urlsafe_b64encode(raw).decode("ascii")
+    assert len(base64.urlsafe_b64decode(key.encode("ascii"))) == 32
+    Fernet(key.encode("utf-8"))  # must accept
+    ct = encrypt_secret(plaintext="installer-format-token-not-real", master_key=key)
+    assert decrypt_secret(ciphertext=ct, master_key=key) == "installer-format-token-not-real"
+
+
 def test_missing_master_key_blocks_encrypt():
     with pytest.raises(IntegrationSecretsError):
         encrypt_secret(plaintext="x", master_key="")

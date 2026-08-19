@@ -160,8 +160,8 @@ export default function PortalSettingsPage() {
         <Alert variant="destructive">
           <AlertTitle>Token required</AlertTitle>
           <AlertDescription>
-            Portal authentication cannot be enabled without a configured service token. Add a
-            token and run Test Connection before enabling.
+            Portal authentication cannot be enabled without a configured service token. Save a
+            token first, then optionally Test Connection before enabling.
           </AlertDescription>
         </Alert>
       )}

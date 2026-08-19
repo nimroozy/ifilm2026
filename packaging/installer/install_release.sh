@@ -30,6 +30,19 @@ remove_media_categories_hotfix_override() {
 rand_hex() { openssl rand -hex 32; }
 rand_password() { openssl rand -base64 32 | tr -d '/+=' | head -c 40; }
 
+# Fernet keys are urlsafe-base64 encodings of exactly 32 raw bytes (typically 44 chars).
+# Must NOT depend on host Python cryptography — production hosts may only have openssl.
+# Never print or log the returned value.
+generate_fernet_key() {
+  local key decoded_len
+  key="$(openssl rand 32 | openssl base64 -A | tr '+/' '-_' | tr -d '\n\r')" || return 1
+  [[ -n "$key" ]] || return 1
+  # Validate format without cryptography: urlsafe-base64 → exactly 32 bytes.
+  decoded_len="$(printf '%s' "$key" | tr -- '-_' '+/' | openssl base64 -d -A 2>/dev/null | wc -c | tr -d ' ')" || return 1
+  [[ "$decoded_len" == "32" ]] || return 1
+  printf '%s' "$key"
+}
+
 prompt() {
   local var="$1" msg="$2" default="${3:-}"
   if [[ "$NONINTERACTIVE" == "1" ]]; then
@@ -208,7 +221,7 @@ apply_image_digests_from_manifest() {
 }
 
 write_env() {
-  local pg_pass redis_pass jwt playback agent
+  local pg_pass redis_pass jwt playback agent integration_key
   local reuse_db=0 reuse_redis=0
   local existing_env=""
 
@@ -252,8 +265,15 @@ write_env() {
   [[ -n "${jwt:-}" ]] || jwt="$(rand_hex)"
   [[ -n "${playback:-}" ]] || playback="$(rand_hex)"
   [[ -n "${agent:-}" ]] || agent="$(rand_hex)"
-  integration_key="$(read_env_value INTEGRATION_SECRETS_KEY "$existing_env")"
-  [[ -n "${integration_key:-}" ]] || integration_key="$(python3 -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())' 2>/dev/null || rand_hex)"
+  # Preserve existing INTEGRATION_SECRETS_KEY on upgrade (ciphertext depends on it).
+  # First install: generate a valid Fernet key via openssl (no host cryptography).
+  if [[ -n "${existing_env:-}" ]]; then
+    integration_key="$(read_env_value INTEGRATION_SECRETS_KEY "$existing_env")"
+  fi
+  if [[ -z "${integration_key:-}" ]]; then
+    integration_key="$(generate_fernet_key)" \
+      || die "failed to generate a valid INTEGRATION_SECRETS_KEY (openssl Fernet key). Install cannot continue with an invalid encryption key."
+  fi
 
   umask 077
   cat >"$ENV_FILE" <<EOF
