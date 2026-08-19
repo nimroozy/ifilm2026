@@ -112,7 +112,7 @@ jobs:
           # Exact local parity: full pytest suite, zero failures required.
           pytest -q
           alembic heads | tee /tmp/alembic-heads.txt
-          grep -q '023_media_tracks_packaging_v1' /tmp/alembic-heads.txt
+          grep -q '025_integration_configs_v1' /tmp/alembic-heads.txt
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
