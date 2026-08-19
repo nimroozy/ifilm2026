@@ -3,14 +3,14 @@
 ```text
 A1 CODE: COMPLETE
 A1 LIVE_QA: PASS FOR V1 CONTRACT
-A1 CI: pending this tip
+A1 CI: PASS
 A1 PRODUCTION READY: BLOCKED ONLY ON SECRET ROTATION + STAGING SMOKE
 A1 MERGE: WAIT FOR HUMAN APPROVAL
 ```
 
 **Draft PR:** https://github.com/nimroozy/ifilm2026/pull/76  
 **Branch:** `cursor/a1-portal-subscriber-auth-4873`  
-**Head SHA:** pending this tip
+**Head SHA:** `db7c96300f0fc4a79a0dfec207f94f0a5b6d92d3`
 
 **Do not merge. Do not deploy. Keep `PORTAL_AUTH_ENABLED=false`.**
 
