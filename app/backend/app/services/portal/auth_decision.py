@@ -71,7 +71,12 @@ def decide_from_lookup(
     customer: dict | None,
     http_status: int,
 ) -> PortalAuthDecision:
-    """Apply A1 rules: success+verified+account_status==active. Ignore internet_status."""
+    """PROVISIONAL A1 gate: success+verified+account_status==active.
+
+    ``internet_status`` / ``expiry_date`` semantics are unproven — do not treat the
+    current ignore-internet_status behavior as production-approved without live QA.
+    Unknown / non-active account_status remains deny (fail closed).
+    """
     checked_at = datetime.now(UTC)
     loc = resolve_location(branch)
     branch_name = loc.name if loc else branch

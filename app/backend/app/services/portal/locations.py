@@ -1,8 +1,10 @@
-"""Canonical Mobin Net / portal.mns.af service locations for A1.
+"""Service locations for A1 (backend abstraction).
 
-Single source of truth for the customer login location list.
-Replace with a dynamic portal `/service-locations` client later without
-touching frontend copies of this list.
+TEMPORARY FALLBACK / test fixture only — not the final production authority.
+Production A1 still requires a dynamic portal JSON source (preferably
+``GET /api/voice-ai/v1/service-locations``). Keep this module as the single
+backend entry point so a dynamic provider can replace the static list without
+UI or frontend list duplication.
 """
 
 from __future__ import annotations
@@ -64,7 +66,11 @@ def branch_code(branch: str | None) -> str | None:
 
 
 def external_subject_for(*, branch: str, username: str) -> str | None:
-    """Build branch-scoped portal subject: ``{CODE}:{normalized_username}``."""
+    """PROVISIONAL subject: ``{CODE}:{normalized_username}``.
+
+    Not the final stable identity until live portal QA confirms username vs
+    ``customer_number`` semantics (prefer ``customer_number`` forms when proven).
+    """
     code = branch_code(branch)
     user = (username or "").strip()
     if not code or not user:

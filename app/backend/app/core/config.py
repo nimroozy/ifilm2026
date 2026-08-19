@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     subscriber_login_rate_window_seconds: int = 60
 
     # Portal.mns.af Voice AI (A1). Backend-only — never VITE_*.
+    # portal_auth_enabled stays False until live portal QA + owner decisions.
+    # client/request_source defaults are configurable provisional fallbacks — not a
+    # production-approved iFilm credential unless the owner explicitly allows sharing
+    # or portal adds a dedicated ifilm client/bearer/request_source.
     portal_auth_enabled: bool = False
     portal_base_url: str = "https://portal.mns.af"
     portal_voice_ai_prefix: str = "/api/voice-ai/v1"
