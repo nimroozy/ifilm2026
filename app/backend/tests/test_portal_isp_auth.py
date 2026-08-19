@@ -118,6 +118,35 @@ def test_isp_locations_disabled(client, monkeypatch):
     assert resp.status_code == 503
 
 
+def test_expired_offline_login_denied(client, db_session, monkeypatch):
+    """LIVE_QA: expired + internet_status=offline must deny (no username fallback)."""
+    _portal_settings(monkeypatch)
+    monkeypatch.setattr(
+        "app.services.subscriber_auth.lookup_customer",
+        _mock_lookup(
+            _active_customer(
+                account_status="expired",
+                internet_status="offline",
+                expiry_date="2026-08-09",
+                days_remaining=-10,
+                branch="Kabul",
+            )
+        ),
+    )
+    resp = client.post(
+        "/api/auth/isp/login",
+        json={"branch": "Kabul", "username": "1210000", "password": "secret-pass"},
+    )
+    assert resp.status_code == 403
+    assert resp.json()["detail"]["code"] == "service_expired"
+    assert (
+        db_session.query(Subscriber)
+        .filter(Subscriber.identity_provider == PROVIDER_PORTAL)
+        .count()
+        == 0
+    )
+
+
 def test_active_offline_login_succeeds(client, db_session, monkeypatch):
     _portal_settings(monkeypatch)
     monkeypatch.setattr(
@@ -143,18 +172,48 @@ def test_active_offline_login_succeeds(client, db_session, monkeypatch):
     assert user.status == "active"
 
 
-def test_wrong_credentials(client, monkeypatch):
+def test_verification_failed_password_is_generic_401(client, monkeypatch):
+    """LIVE_QA: invalid password → HTTP 200 verification_failed → generic 401."""
     _portal_settings(monkeypatch)
     monkeypatch.setattr(
         "app.services.subscriber_auth.lookup_customer",
         _mock_lookup(
-            {"success": False, "verified": False, "code": "password_rejected"},
-            status_code=422,
+            {
+                "success": True,
+                "verified": False,
+                "code": "verification_failed",
+                "message": "The customer information could not be verified.",
+            },
+            status_code=200,
         ),
     )
     resp = client.post(
         "/api/auth/isp/login",
         json={"branch": "Nimruz", "username": "1210000", "password": "wrong"},
+    )
+    assert resp.status_code == 401
+    assert resp.json()["detail"]["code"] == "invalid_credentials"
+    assert "password" not in resp.json()["detail"]["message"].lower()
+
+
+def test_verification_failed_username_is_same_generic_401(client, monkeypatch):
+    """LIVE_QA: invalid username is indistinguishable from invalid password."""
+    _portal_settings(monkeypatch)
+    monkeypatch.setattr(
+        "app.services.subscriber_auth.lookup_customer",
+        _mock_lookup(
+            {
+                "success": True,
+                "verified": False,
+                "code": "verification_failed",
+                "message": "The customer information could not be verified.",
+            },
+            status_code=200,
+        ),
+    )
+    resp = client.post(
+        "/api/auth/isp/login",
+        json={"branch": "Nimruz", "username": "qa-nonexistent-000000", "password": "x"},
     )
     assert resp.status_code == 401
     assert resp.json()["detail"]["code"] == "invalid_credentials"
@@ -164,7 +223,6 @@ def test_wrong_credentials(client, monkeypatch):
     "status,code",
     [
         ("expired", "service_expired"),
-        ("disabled", "account_disabled"),
         ("unknown", "entitlement_unverified"),
         ("weird_future_status", "entitlement_unverified"),
     ],
@@ -305,9 +363,97 @@ def test_admin_login_unaffected_when_portal_enabled(client, monkeypatch):
     assert resp.status_code == 200
 
 
-def test_external_subject_helper():
-    assert external_subject_for(branch="Nimruz", username="1210000") == "NMZ:1210000"
-    assert external_subject_for(branch="Kabul", username="1210000") == "KBL:1210000"
+def test_external_subject_uses_customer_number():
+    assert external_subject_for(branch="Nimruz", customer_number="1210000") == "NMZ:1210000"
+    assert external_subject_for(branch="Kabul", customer_number="1210000") == "KBL:1210000"
+    assert external_subject_for(branch="KBL", customer_number="1210000") == "KBL:1210000"
+
+
+def test_numeric_location_id_rejected(client, monkeypatch):
+    """Numeric HTML ids are not valid iFilm / S2S branch values."""
+    _portal_settings(monkeypatch)
+
+    def _should_not_call(*args, **kwargs):
+        raise AssertionError("portal lookup must not run for numeric branch id")
+
+    monkeypatch.setattr("app.services.subscriber_auth.lookup_customer", _should_not_call)
+    resp = client.post(
+        "/api/auth/isp/login",
+        json={"branch": "1", "username": "1210000", "password": "secret-pass"},
+    )
+    assert resp.status_code == 401
+    assert resp.json()["detail"]["code"] == "invalid_credentials"
+
+
+def test_missing_customer_number_fail_closed(client, db_session, monkeypatch):
+    """Verified active payload without customer_number must not create a subscriber."""
+    _portal_settings(monkeypatch)
+    body = _active_customer()
+    body["customer"].pop("customer_number", None)
+    monkeypatch.setattr(
+        "app.services.subscriber_auth.lookup_customer",
+        _mock_lookup(body),
+    )
+    resp = client.post(
+        "/api/auth/isp/login",
+        json={"branch": "Nimruz", "username": "1210000", "password": "secret-pass"},
+    )
+    assert resp.status_code == 503
+    assert resp.json()["detail"]["code"] == "provider_unavailable"
+    assert (
+        db_session.query(Subscriber)
+        .filter(Subscriber.identity_provider == PROVIDER_PORTAL)
+        .count()
+        == 0
+    )
+
+
+def test_identity_uses_customer_number_not_username(client, db_session, monkeypatch):
+    """external_subject is {CODE}:{customer_number}, not the typed username."""
+    _portal_settings(monkeypatch)
+    monkeypatch.setattr(
+        "app.services.subscriber_auth.lookup_customer",
+        _mock_lookup(_active_customer(customer_number="9911223", branch="Nimruz")),
+    )
+    resp = client.post(
+        "/api/auth/isp/login",
+        json={"branch": "Nimruz", "username": "typed-username", "password": "x"},
+    )
+    assert resp.status_code == 200
+    user = (
+        db_session.query(Subscriber)
+        .filter(Subscriber.identity_provider == PROVIDER_PORTAL)
+        .one()
+    )
+    assert user.external_subject == "NMZ:9911223"
+    assert user.username == "typed-username"
+
+
+def test_same_customer_number_kbl_and_nmz_are_distinct(client, db_session, monkeypatch):
+    _portal_settings(monkeypatch)
+
+    def payload(*, branch, username, password):
+        return _active_customer(branch=branch, customer_number="1210000")
+
+    monkeypatch.setattr(
+        "app.services.subscriber_auth.lookup_customer",
+        _mock_lookup(payload),
+    )
+    a = client.post(
+        "/api/auth/isp/login",
+        json={"branch": "Nimruz", "username": "1210000", "password": "a"},
+    )
+    b = client.post(
+        "/api/auth/isp/login",
+        json={"branch": "Kabul", "username": "1210000", "password": "a"},
+    )
+    assert a.status_code == 200
+    assert b.status_code == 200
+    subjects = {
+        r.external_subject
+        for r in db_session.query(Subscriber).filter(Subscriber.identity_provider == PROVIDER_PORTAL)
+    }
+    assert subjects == {"NMZ:1210000", "KBL:1210000"}
 
 
 def test_portal_identity_unique_constraint(db_session, client):
@@ -495,6 +641,25 @@ def test_concurrent_first_login_integrity_error_refetch(db_session, client, monk
         .count()
         == 1
     )
+
+
+def test_login_sends_canonical_branch_name(client, monkeypatch):
+    _portal_settings(monkeypatch)
+    seen: dict = {}
+
+    def _fn(settings, *, branch, username, password, http_client=None):
+        seen["branch"] = branch
+        return _mock_lookup(_active_customer(branch="Nimruz"))(
+            settings, branch=branch, username=username, password=password, http_client=http_client
+        )
+
+    monkeypatch.setattr("app.services.subscriber_auth.lookup_customer", _fn)
+    resp = client.post(
+        "/api/auth/isp/login",
+        json={"branch": "NMZ", "username": "1210000", "password": "x"},
+    )
+    assert resp.status_code == 200
+    assert seen["branch"] == "Nimruz"
 
 
 def test_client_sends_3cx_request_source(monkeypatch):

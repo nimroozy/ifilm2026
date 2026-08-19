@@ -2,17 +2,14 @@
 
 ```text
 A1 CODE: READY FOR HUMAN REVIEW
-A1 CI: PASS
-A1 PORTAL CONTRACT: LIVE_QA PARTIAL — SUCCESS PATH CAPTURED
+A1 PORTAL CONTRACT: LIVE_QA + OWNER A1 V1 DECISIONS APPLIED
 A1 PRODUCTION READY: NO
-A1 MERGE: BLOCKED ON OWNER DECISIONS (credential + identity + locations)
+A1 MERGE: BLOCKED (credential + deploy approval)
 ```
 
 **Do not merge. Do not deploy. Keep `PORTAL_AUTH_ENABLED=false` by default.**
 
-This document describes the **current Draft implementation**. Authenticated LIVE_QA
-evidence is in [`A1_PORTAL_AUTH_REPORT.md`](./A1_PORTAL_AUTH_REPORT.md). Code was
-**not** changed to match QA; owner review first.
+See [`A1_PORTAL_AUTH_REPORT.md`](./A1_PORTAL_AUTH_REPORT.md) for LIVE_QA evidence.
 
 ## Routes
 
@@ -46,53 +43,38 @@ dedicated iFilm credential (`X-Mobin-Client: ifilm`, dedicated bearer, confirmed
 
 Never put the token in `VITE_*` or frontend JS. Never commit production secrets.
 
-## Locations — temporary static fallback
+## Locations — A1 v1 owner-approved temporary registry
 
-`GET /api/auth/isp/locations` is served from a **centralized backend** static list
-(test/fallback only). Production A1 still requires a dynamic portal JSON source,
-preferably `GET /api/voice-ai/v1/service-locations` (**LIVE_QA 404**). The backend
-abstraction must remain so a dynamic provider can replace the static source
-**without UI changes**. Do not duplicate the list in frontend code.
+Backend `app/services/portal/locations.py` is the single source (Kabul/KBL,
+Kandahar/KDR, Ghazni/GHZ, Nimruz/NMZ, Buldak/BLD, Helmand/HLD). Frontend
+production UI loads `GET /api/auth/isp/locations` only. Login sends the
+canonical **name** to portal. Numeric HTML ids are rejected.
 
-S2S lookup accepts **name or code** (`Kabul`/`KBL`), not HTML numeric ids (**LIVE_QA**).
+Dynamic `GET /api/voice-ai/v1/service-locations` is **A1.1 / tech debt**
+(LIVE_QA 404), not an A1 v1 blocker.
 
-## Identity — LIVE_QA: branch-scoped `customer_number`
-
-Current Draft implementation (unchanged):
+## Identity — A1 v1 (LIVE_QA + owner)
 
 ```text
 provider = portal_mns
-external_subject = {BRANCH_CODE}:{internet_username}
-```
-
-**LIVE_QA:** `customer_number` is a string and is **not globally unique** (same
-number in Kabul and Nimruz). Preferred contract after owner approval:
-
-```text
 external_subject = {BRANCH_CODE}:{customer_number}
 ```
 
-For the QA subscriber, username == customer_number, so current subjects
-(`KBL:1210000`, `NMZ:1210000`) already match. **Do not auto-migrate.** Never key
-on username or `customer_number` alone.
+`customer_number` is required on verified success (fail closed; no username
+fallback). Same number in Kabul and Nimruz are distinct subjects (`KBL:…` /
+`NMZ:…`). No automatic migration of older test rows.
 
 Local JWT `sub` remains the integer `subscribers.id`.
 
-Migration `024_portal_subscriber_identity_v1` stays in Draft for review.
-
-## Entitlement — LIVE_QA supports current rule; code unchanged
-
-Current Draft rule (unchanged):
+## Entitlement — A1 v1 (LIVE_QA + owner)
 
 ```text
 success && verified && customer.account_status == "active"
 ```
 
-**LIVE_QA:** `account_status` is subscription state (`active` / `expired`).
-`internet_status=offline` on **both** active and expired → session state, ignore
-for entitlement. `expiry_date` is `YYYY-MM-DD` and aligned with `account_status`
-on the two tested accounts — no extra expiry gate added. Suspended / other
-statuses untested; unknown remains deny.
+`internet_status` is session online/offline and does **not** gate access.
+`expiry_date` is display/snapshot only (no independent gate). Unknown
+`account_status` → deny. `expired` → `service_expired`.
 
 No passwordless `/customers/status` yet → **15-minute** entitlement snapshot TTL.
 After TTL, new protected playback is denied until re-login. Password is never stored.

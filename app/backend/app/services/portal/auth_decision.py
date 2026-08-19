@@ -1,4 +1,4 @@
-"""Map portal lookup results to iFilm identity + entitlement (A1)."""
+"""Map portal lookup results to iFilm identity + entitlement (A1 v1)."""
 
 from __future__ import annotations
 
@@ -13,14 +13,10 @@ MSG_INVALID = "Unable to sign in with the provided Internet account."
 MSG_INACTIVE = "Your Internet service is not currently active."
 MSG_UNAVAILABLE = "Authentication service is temporarily unavailable. Please try again."
 
-# Only account_status == "active" grants iFilm access. Fail closed otherwise.
+# LIVE_QA observed account_status: active, expired. Unknown → fail closed.
+# Do not invent extra enum semantics beyond safe deny.
 _DENY_STATUSES = {
     "expired": ("service_expired", MSG_INACTIVE),
-    "disabled": ("account_disabled", MSG_INACTIVE),
-    "suspended": ("account_suspended", MSG_INACTIVE),
-    "inactive": ("account_disabled", MSG_INACTIVE),
-    "disconnected": ("service_inactive", MSG_INACTIVE),
-    "unknown": ("entitlement_unverified", MSG_INACTIVE),
 }
 
 
@@ -62,6 +58,39 @@ def _package_name(customer: dict) -> str | None:
     return None
 
 
+def _customer_number(customer: dict) -> str | None:
+    raw = customer.get("customer_number")
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    return text or None
+
+
+def _invalid(*, checked_at: datetime) -> PortalAuthDecision:
+    identity = IdentityAuthResult(
+        success=False,
+        denial_code="invalid_credentials",
+        safe_reason=MSG_INVALID,
+        source=PROVIDER_PORTAL,
+    )
+    ent = EntitlementResult(
+        allowed=False,
+        account_status="unknown",
+        service_status="unknown",
+        denial_code="invalid_credentials",
+        safe_reason=MSG_INVALID,
+        source=PROVIDER_PORTAL,
+        checked_at=checked_at,
+    )
+    return PortalAuthDecision(
+        identity=identity,
+        entitlement=ent,
+        http_status=401,
+        code="invalid_credentials",
+        detail=MSG_INVALID,
+    )
+
+
 def decide_from_lookup(
     *,
     branch: str,
@@ -71,50 +100,76 @@ def decide_from_lookup(
     customer: dict | None,
     http_status: int,
 ) -> PortalAuthDecision:
-    """PROVISIONAL A1 gate: success+verified+account_status==active.
+    """A1 v1: allow iff success && verified && account_status==active.
 
-    ``internet_status`` / ``expiry_date`` semantics are unproven — do not treat the
-    current ignore-internet_status behavior as production-approved without live QA.
-    Unknown / non-active account_status remains deny (fail closed).
+    Identity requires customer.customer_number (no username fallback).
+    internet_status is session state and does not gate access.
+    expiry_date is display/snapshot metadata only (no independent gate).
     """
     checked_at = datetime.now(UTC)
     loc = resolve_location(branch)
     branch_name = loc.name if loc else branch
-    subject = external_subject_for(branch=branch, username=username)
+    _ = username
 
     if http_status in {400, 422} or not success or not verified or not customer:
+        return _invalid(checked_at=checked_at)
+
+    number = _customer_number(customer)
+    if number is None:
+        # Successful/verified payload without stable identity — fail closed.
         identity = IdentityAuthResult(
             success=False,
-            denial_code="invalid_credentials",
-            safe_reason=MSG_INVALID,
+            denial_code="entitlement_unverified",
+            safe_reason=MSG_UNAVAILABLE,
             source=PROVIDER_PORTAL,
         )
         ent = EntitlementResult(
             allowed=False,
             account_status="unknown",
             service_status="unknown",
-            denial_code="invalid_credentials",
-            safe_reason=MSG_INVALID,
+            denial_code="entitlement_unverified",
+            safe_reason=MSG_UNAVAILABLE,
             source=PROVIDER_PORTAL,
             checked_at=checked_at,
         )
         return PortalAuthDecision(
             identity=identity,
             entitlement=ent,
-            http_status=401,
-            code="invalid_credentials",
-            detail=MSG_INVALID,
+            http_status=503,
+            code="provider_unavailable",
+            detail=MSG_UNAVAILABLE,
         )
 
     account_status = str(customer.get("account_status") or "unknown").strip().lower() or "unknown"
     internet_status = str(customer.get("internet_status") or "unknown").strip().lower() or "unknown"
-    display_name = str(customer.get("display_name") or username).strip() or username
+    display_name = str(customer.get("display_name") or "").strip() or number
     package = _package_name(customer)
     expiry = _parse_expiry(customer.get("expiry_date"))
     cust_branch = str(customer.get("branch") or branch_name).strip() or branch_name
     resolved = resolve_location(cust_branch) or loc
     final_branch = resolved.name if resolved else cust_branch
-    subject = external_subject_for(branch=final_branch, username=username) or subject
+    subject = external_subject_for(branch=final_branch, customer_number=number)
+    if subject is None:
+        return PortalAuthDecision(
+            identity=IdentityAuthResult(
+                success=False,
+                denial_code="entitlement_unverified",
+                safe_reason=MSG_UNAVAILABLE,
+                source=PROVIDER_PORTAL,
+            ),
+            entitlement=EntitlementResult(
+                allowed=False,
+                account_status="unknown",
+                service_status="unknown",
+                denial_code="entitlement_unverified",
+                safe_reason=MSG_UNAVAILABLE,
+                source=PROVIDER_PORTAL,
+                checked_at=checked_at,
+            ),
+            http_status=503,
+            code="provider_unavailable",
+            detail=MSG_UNAVAILABLE,
+        )
 
     if account_status != "active":
         denial, detail = _DENY_STATUSES.get(
@@ -155,7 +210,6 @@ def decide_from_lookup(
             display_expiry=expiry,
         )
 
-    # Active: RADIUS online/offline must not gate iFilm. Snapshot TTL is the recheck gate.
     identity = IdentityAuthResult(
         success=True,
         external_subject=subject,

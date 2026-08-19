@@ -145,7 +145,12 @@ def upsert_subscriber_from_identity(
     settings: Settings,
 ) -> Subscriber:
     provider_name = identity.source
-    external = identity.external_subject or username
+    if provider_name == PROVIDER_PORTAL:
+        external = identity.external_subject
+        if not external:
+            raise ValueError("portal identity requires external_subject from customer_number")
+    else:
+        external = identity.external_subject or username
 
     # Portal (and any external subject): never match by username alone.
     user = None

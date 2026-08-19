@@ -1,10 +1,14 @@
-"""Service locations for A1 (backend abstraction).
+"""Service locations for A1 (backend single source of truth).
 
-TEMPORARY FALLBACK / test fixture only — not the final production authority.
-Production A1 still requires a dynamic portal JSON source (preferably
-``GET /api/voice-ai/v1/service-locations``). Keep this module as the single
-backend entry point so a dynamic provider can replace the static list without
-UI or frontend list duplication.
+A1 v1: owner-approved temporary production registry while portal
+``GET /api/voice-ai/v1/service-locations`` is LIVE_QA 404.
+
+Keep this module as the only list. Frontend must fetch
+``GET /api/auth/isp/locations`` (no duplicated production list).
+A1.1 / tech debt: replace with a dynamic portal JSON provider without UI changes.
+
+S2S / login accept canonical **name** or **code**. Numeric HTML ids are not
+valid Voice AI ``branch`` values.
 """
 
 from __future__ import annotations
@@ -32,7 +36,6 @@ PORTAL_SERVICE_LOCATIONS: tuple[ServiceLocation, ...] = (
 
 _BY_NAME = {loc.name.casefold(): loc for loc in PORTAL_SERVICE_LOCATIONS}
 _BY_CODE = {loc.code.upper(): loc for loc in PORTAL_SERVICE_LOCATIONS}
-_BY_ID = {loc.id: loc for loc in PORTAL_SERVICE_LOCATIONS}
 
 
 def list_active_locations() -> list[ServiceLocation]:
@@ -40,15 +43,12 @@ def list_active_locations() -> list[ServiceLocation]:
 
 
 def resolve_location(branch: str | None) -> ServiceLocation | None:
-    """Resolve a portal branch name, code, or id to a canonical location."""
+    """Resolve a portal branch name or code (not numeric HTML id)."""
     if branch is None:
         return None
     text = str(branch).strip()
-    if not text:
+    if not text or text.isdigit():
         return None
-    by_id = _BY_ID.get(text)
-    if by_id is not None:
-        return by_id
     by_code = _BY_CODE.get(text.upper())
     if by_code is not None:
         return by_code
@@ -65,14 +65,10 @@ def branch_code(branch: str | None) -> str | None:
     return loc.code if loc else None
 
 
-def external_subject_for(*, branch: str, username: str) -> str | None:
-    """PROVISIONAL subject: ``{CODE}:{normalized_username}``.
-
-    Not the final stable identity until live portal QA confirms username vs
-    ``customer_number`` semantics (prefer ``customer_number`` forms when proven).
-    """
+def external_subject_for(*, branch: str, customer_number: str) -> str | None:
+    """A1 v1 subject: ``{BRANCH_CODE}:{customer_number}`` (branch-scoped)."""
     code = branch_code(branch)
-    user = (username or "").strip()
-    if not code or not user:
+    number = (customer_number or "").strip()
+    if not code or not number:
         return None
-    return f"{code}:{user}"
+    return f"{code}:{number}"

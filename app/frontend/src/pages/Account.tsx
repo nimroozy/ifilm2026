@@ -65,6 +65,7 @@ export function LoginPage() {
 
   useEffect(() => {
     if (mockMode) {
+      // Mock/demo only — production locations come solely from GET /auth/isp/locations.
       setLocations([
         { id: '1', name: 'Kabul', code: 'KBL' },
         { id: '2', name: 'Nimruz', code: 'NMZ' },
