@@ -11,14 +11,14 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.models.admin import AdminUser
 from app.models.integration_config import IntegrationConfig
-from app.services.integration_secrets import IntegrationSecretsError, decrypt_secret, encrypt_secret
+from app.services.integration_secrets import IntegrationSecretsError, encrypt_secret
 from app.services.portal.client import probe_portal_connection
 from app.services.portal.config_resolver import (
     PORTAL_PROVIDER,
     invalidate_portal_config_cache,
     resolve_portal_runtime_config,
+    resolve_portal_token,
 )
-from app.services.portal.runtime_config import PortalRuntimeConfig
 from app.services.portal.url_validation import (
     PortalUrlValidationError,
     validate_api_prefix,
@@ -56,14 +56,15 @@ def _get_or_create_row(db: Session) -> IntegrationConfig:
 
 
 def _token_configured(row: IntegrationConfig | None, settings: Settings) -> bool:
-    if row and row.secret_ciphertext:
-        master = (settings.integration_secrets_key or "").strip()
-        if master:
-            try:
-                return bool(decrypt_secret(ciphertext=row.secret_ciphertext, master_key=master).strip())
-            except IntegrationSecretsError:
-                return False
-    return bool((settings.portal_voice_ai_token or "").strip())
+    env_cfg = resolve_portal_runtime_config(None, settings, use_cache=False)
+    if row is None:
+        return env_cfg.token_configured
+    token = resolve_portal_token(
+        secret_ciphertext=row.secret_ciphertext,
+        settings=settings,
+        env_token=env_cfg.token,
+    )
+    return bool(token)
 
 
 def _public_config(row: IntegrationConfig, settings: Settings) -> dict[str, Any]:
@@ -204,44 +205,10 @@ def update_portal_settings(
     return get_portal_settings(db, cfg)
 
 
-def _runtime_from_row(row: IntegrationConfig, settings: Settings) -> PortalRuntimeConfig:
-    invalidate_portal_config_cache()
-    db_cfg = resolve_portal_runtime_config(None, settings, use_cache=False)
-    # Force fresh row reread via commit state
-    data = dict(row.config_json or {})
-    token = ""
-    if row.secret_ciphertext:
-        master = (settings.integration_secrets_key or "").strip()
-        if master:
-            try:
-                token = decrypt_secret(ciphertext=row.secret_ciphertext, master_key=master)
-            except IntegrationSecretsError:
-                token = ""
-    if not token:
-        token = (settings.portal_voice_ai_token or "").strip()
-    return PortalRuntimeConfig(
-        enabled=bool(row.enabled),
-        base_url=str(data.get("base_url") or db_cfg.base_url),
-        api_prefix=str(data.get("api_prefix") or db_cfg.api_prefix),
-        token=token.strip(),
-        client=str(data.get("client") or db_cfg.client),
-        request_source=str(data.get("request_source") or db_cfg.request_source),
-        connect_timeout_seconds=float(data.get("connect_timeout_seconds") or db_cfg.connect_timeout_seconds),
-        read_timeout_seconds=float(data.get("read_timeout_seconds") or db_cfg.read_timeout_seconds),
-        entitlement_cache_ttl_seconds=int(
-            data.get("entitlement_ttl_seconds") or db_cfg.entitlement_cache_ttl_seconds
-        ),
-        source="db",
-    )
-
-
 def test_portal_connection(db: Session, admin: AdminUser, settings: Settings | None = None) -> dict[str, Any]:
     cfg = settings or get_settings()
     row = db.query(IntegrationConfig).filter(IntegrationConfig.provider == PORTAL_PROVIDER).one_or_none()
-    if row is None:
-        runtime = resolve_portal_runtime_config(None, cfg, use_cache=False)
-    else:
-        runtime = _runtime_from_row(row, cfg)
+    runtime = resolve_portal_runtime_config(db, cfg, use_cache=False)
 
     if not runtime.token_configured:
         raise PortalSettingsError("Configure a Portal service token before testing the connection.")

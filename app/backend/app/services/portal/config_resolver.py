@@ -67,6 +67,34 @@ def _coerce_config_field(config: dict[str, Any], key: str, fallback: Any) -> Any
     return config[key]
 
 
+def resolve_portal_token(
+    *,
+    secret_ciphertext: bytes | None,
+    settings: Settings,
+    env_token: str,
+) -> str:
+    """Resolve Portal bearer token with fail-closed rules for DB ciphertext.
+
+    CASE 1 — no DB row: caller uses env (not handled here).
+    CASE 2 — DB row, no ciphertext: env fallback allowed.
+    CASE 3 — DB row, ciphertext decrypts: use DB token.
+    CASE 4 — DB row, ciphertext present but decrypt fails: fail closed (no env fallback).
+    """
+    if not secret_ciphertext:
+        return (env_token or "").strip()
+
+    master = (settings.integration_secrets_key or "").strip()
+    if not master:
+        logger.warning("portal_runtime_missing_integration_secrets_key")
+        return ""
+
+    try:
+        return decrypt_secret(ciphertext=secret_ciphertext, master_key=master).strip()
+    except IntegrationSecretsError:
+        logger.warning("portal_runtime_token_decrypt_unavailable")
+        return ""
+
+
 def resolve_portal_runtime_config(
     db: Session | None,
     settings: Settings | None = None,
@@ -90,20 +118,11 @@ def resolve_portal_runtime_config(
             resolved = env_cfg
         else:
             data = dict(row.config_json or {})
-            token = ""
-            if row.secret_ciphertext:
-                master = (cfg.integration_secrets_key or "").strip()
-                if master:
-                    try:
-                        token = decrypt_secret(ciphertext=row.secret_ciphertext, master_key=master)
-                    except IntegrationSecretsError:
-                        logger.warning("portal_runtime_token_decrypt_unavailable")
-                        token = ""
-                else:
-                    logger.warning("portal_runtime_missing_integration_secrets_key")
-
-            if not token:
-                token = env_cfg.token
+            token = resolve_portal_token(
+                secret_ciphertext=row.secret_ciphertext,
+                settings=cfg,
+                env_token=env_cfg.token,
+            )
 
             resolved = PortalRuntimeConfig(
                 enabled=bool(row.enabled),

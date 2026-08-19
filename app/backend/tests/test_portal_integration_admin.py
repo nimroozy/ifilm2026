@@ -275,3 +275,154 @@ def test_cache_invalidated_on_update(db_session, integration_master_key, monkeyp
     invalidate_portal_config_cache()
     runtime = resolve_portal_runtime_config(db_session, get_settings(), use_cache=False)
     assert runtime.token == "db-token-not-real"
+
+
+def _seed_portal_row(
+    db_session,
+    *,
+    ciphertext: bytes | None = None,
+    enabled: bool = True,
+) -> IntegrationConfig:
+    row = IntegrationConfig(
+        provider=PORTAL_PROVIDER,
+        enabled=enabled,
+        config_json={
+            "base_url": "https://portal.mns.af",
+            "api_prefix": "/api/voice-ai/v1",
+            "client": "ifilm",
+            "request_source": "ifilm",
+            "connect_timeout_seconds": 3,
+            "read_timeout_seconds": 5,
+            "entitlement_ttl_seconds": 900,
+        },
+        secret_ciphertext=ciphertext,
+    )
+    db_session.add(row)
+    db_session.commit()
+    db_session.refresh(row)
+    invalidate_portal_config_cache()
+    return row
+
+
+def test_db_ciphertext_correct_master_uses_db_token(db_session, integration_master_key, monkeypatch):
+    monkeypatch.setenv("PORTAL_VOICE_AI_TOKEN", "env-token-not-real")
+    get_settings.cache_clear()
+    ct = encrypt_secret(plaintext="db-secret-token-not-real", master_key=integration_master_key)
+    _seed_portal_row(db_session, ciphertext=ct)
+    runtime = resolve_portal_runtime_config(db_session, get_settings(), use_cache=False)
+    assert runtime.token == "db-secret-token-not-real"
+    assert runtime.source == "db"
+
+
+def test_db_row_no_ciphertext_env_fallback(db_session, integration_master_key, monkeypatch):
+    monkeypatch.setenv("PORTAL_VOICE_AI_TOKEN", "env-only-token-not-real")
+    get_settings.cache_clear()
+    _seed_portal_row(db_session, ciphertext=None)
+    runtime = resolve_portal_runtime_config(db_session, get_settings(), use_cache=False)
+    assert runtime.token == "env-only-token-not-real"
+
+
+def test_no_db_row_env_fallback(db_session, monkeypatch):
+    monkeypatch.setenv("PORTAL_VOICE_AI_TOKEN", "pure-env-token-not-real")
+    get_settings.cache_clear()
+    runtime = resolve_portal_runtime_config(db_session, get_settings(), use_cache=False)
+    assert runtime.source == "env"
+    assert runtime.token == "pure-env-token-not-real"
+
+
+def test_db_ciphertext_missing_master_key_fail_closed(db_session, integration_master_key, monkeypatch):
+    monkeypatch.setenv("PORTAL_VOICE_AI_TOKEN", "env-must-not-be-used")
+    monkeypatch.delenv("INTEGRATION_SECRETS_KEY", raising=False)
+    get_settings.cache_clear()
+    ct = encrypt_secret(plaintext="db-only-token-not-real", master_key=integration_master_key)
+    _seed_portal_row(db_session, ciphertext=ct)
+    runtime = resolve_portal_runtime_config(db_session, get_settings(), use_cache=False)
+    assert runtime.token == ""
+    assert not runtime.token_configured
+
+
+def test_db_ciphertext_wrong_master_key_fail_closed(db_session, integration_master_key, monkeypatch):
+    monkeypatch.setenv("PORTAL_VOICE_AI_TOKEN", "env-must-not-be-used")
+    get_settings.cache_clear()
+    ct = encrypt_secret(plaintext="db-only-token-not-real", master_key=integration_master_key)
+    _seed_portal_row(db_session, ciphertext=ct)
+    wrong_key = Fernet.generate_key().decode()
+    monkeypatch.setenv("INTEGRATION_SECRETS_KEY", wrong_key)
+    get_settings.cache_clear()
+    runtime = resolve_portal_runtime_config(db_session, get_settings(), use_cache=False)
+    assert runtime.token == ""
+    assert not runtime.token_configured
+
+
+def test_db_corrupted_ciphertext_fail_closed(db_session, integration_master_key, monkeypatch):
+    monkeypatch.setenv("PORTAL_VOICE_AI_TOKEN", "env-must-not-be-used")
+    get_settings.cache_clear()
+    _seed_portal_row(db_session, ciphertext=b"not-valid-fernet-ciphertext")
+    runtime = resolve_portal_runtime_config(db_session, get_settings(), use_cache=False)
+    assert runtime.token == ""
+    assert not runtime.token_configured
+
+
+def test_admin_get_token_configured_false_when_decrypt_fails(
+    client, db_session, integration_master_key, monkeypatch
+):
+    monkeypatch.setenv("PORTAL_VOICE_AI_TOKEN", "env-must-not-be-used")
+    get_settings.cache_clear()
+    ct = encrypt_secret(plaintext="db-only-token-not-real", master_key=integration_master_key)
+    _seed_portal_row(db_session, ciphertext=ct)
+    wrong_key = Fernet.generate_key().decode()
+    monkeypatch.setenv("INTEGRATION_SECRETS_KEY", wrong_key)
+    get_settings.cache_clear()
+    headers = _admin_headers(client, monkeypatch)
+    resp = client.get("/api/admin/integrations/portal", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["token_configured"] is False
+    assert "token" not in resp.json()
+
+
+def test_connection_test_no_env_fallback_when_decrypt_fails(
+    client, db_session, integration_master_key, monkeypatch
+):
+    monkeypatch.setenv("PORTAL_VOICE_AI_TOKEN", "env-must-not-be-used")
+    get_settings.cache_clear()
+    ct = encrypt_secret(plaintext="db-only-token-not-real", master_key=integration_master_key)
+    _seed_portal_row(db_session, ciphertext=ct)
+    wrong_key = Fernet.generate_key().decode()
+    monkeypatch.setenv("INTEGRATION_SECRETS_KEY", wrong_key)
+    get_settings.cache_clear()
+    headers = _admin_headers(client, monkeypatch)
+    probe_called = {"value": False}
+
+    def _probe(_config):
+        probe_called["value"] = True
+        return {"ok": True, "portal_reachable": True, "credential_accepted": True, "http_status": 200, "message": "x"}
+
+    monkeypatch.setattr(svc, "probe_portal_connection", _probe)
+    resp = client.post("/api/admin/integrations/portal/test", headers=headers)
+    assert resp.status_code == 400
+    assert probe_called["value"] is False
+
+
+def test_isp_login_fail_closed_when_db_ciphertext_undecryptable(
+    client, db_session, integration_master_key, monkeypatch
+):
+    monkeypatch.setenv("PORTAL_AUTH_ENABLED", "true")
+    monkeypatch.setenv("PORTAL_VOICE_AI_TOKEN", "env-must-not-be-used")
+    monkeypatch.setenv("SUBSCRIBER_IDENTITY_MODE", "portal")
+    ct = encrypt_secret(plaintext="db-only-token-not-real", master_key=integration_master_key)
+    _seed_portal_row(db_session, ciphertext=ct, enabled=True)
+    wrong_key = Fernet.generate_key().decode()
+    monkeypatch.setenv("INTEGRATION_SECRETS_KEY", wrong_key)
+    get_settings.cache_clear()
+    invalidate_portal_config_cache()
+
+    runtime = resolve_portal_runtime_config(db_session, get_settings(), use_cache=False)
+    assert runtime.token == ""
+    assert not runtime.token_configured
+
+    resp = client.post(
+        "/api/auth/isp/login",
+        json={"branch": "Kabul", "username": "1210000", "password": "secret-pass"},
+    )
+    assert resp.status_code == 503
+    assert resp.json()["detail"]["code"] == "provider_unavailable"
