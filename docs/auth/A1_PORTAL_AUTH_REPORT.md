@@ -11,7 +11,7 @@ A1 MERGE: BLOCKED ON LIVE PORTAL QA / OWNER DECISIONS
 
 **Draft PR:** https://github.com/nimroozy/ifilm2026/pull/76  
 **Branch:** `cursor/a1-portal-subscriber-auth-4873`  
-**Head SHA:** _(stamped in tip commit)_  
+**Head SHA:** `84496ab9c67d17f25ca525c15d7a1e317ec7135e`
 
 **Do not merge. Do not deploy. Keep `PORTAL_AUTH_ENABLED=false`.**  
 **Do not start G3 / T1 / player redesign.**
