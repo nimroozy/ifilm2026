@@ -126,11 +126,9 @@ Both require `ENABLE_OBJECT_STORAGE=true`. Local package remains source of truth
 - Playback delivery can fetch from origin while keeping token gate (**optional read fallback**)
 - Dual-run local + origin with size verification
 
-### Phase 3 — Branch cache registry
-- Node registry, health checks, capacity advertising
-- Pull-through fill + eviction + optional prewarm
-- Authorization: short-lived signed playback assertions verified with public keys
-- Failover: branch → central origin → optional Cloudflare
+### Phase 3 — Branch cache control plane
+- **Implemented (flags OFF):** durable node registry, admin APIs, ES256 edge-grant primitives, shadow routing + central fallback — see `HYBRID_CDN_PHASE3.md`
+- **Deferred:** pull-through fill/eviction/prewarm, live redirects, real enrollment/mTLS, Cloudflare tertiary fallback
 
 ### Phase 4 — Observability & pilot
 - Hit/miss, origin bandwidth, cache fill latency, error budgets

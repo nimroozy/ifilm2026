@@ -172,6 +172,22 @@ class Settings(BaseSettings):
     origin_sync_timeout_seconds: int = 600
     origin_read_timeout_seconds: int = 30
 
+    # Hybrid CDN Phase 3 — branch-cache CONTROL PLANE only (default OFF).
+    # Does not redirect clients or enroll real branch servers.
+    enable_branch_cache_control_plane: bool = False
+    enable_edge_grant_issue: bool = False
+    enable_branch_cache_shadow_routing: bool = False
+    branch_cache_heartbeat_stale_seconds: int = 90
+    branch_cache_min_free_bytes: int = 1_000_000_000  # 1 GiB
+    branch_cache_min_protocol_version: str = "1"
+    edge_grant_issuer: str = "ifilm-central"
+    edge_grant_audience: str = "ifilm-branch-cache"
+    edge_grant_ttl_seconds: int = 120
+    edge_grant_key_id: str = "eg1"
+    # PEM material — never log, never store in DB, never return via APIs except public key JWKS.
+    edge_grant_private_key_pem: str = ""
+    edge_grant_public_key_pem: str = ""
+
     # Watch progress / Continue Watching (Phase 10)
     enable_watch_history: bool = True
     watch_progress_min_seconds: int = 30

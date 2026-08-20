@@ -23,6 +23,9 @@ Report suspected security issues privately to the repository maintainers. Do not
   - `ENABLE_R2_HOT_TIER=false`
   - `ENABLE_ORIGIN_PACKAGE_SYNC=false`
   - `ENABLE_ORIGIN_HLS_READ_FALLBACK=false`
+  - `ENABLE_BRANCH_CACHE_CONTROL_PLANE=false`
+  - `ENABLE_EDGE_GRANT_ISSUE=false`
+  - `ENABLE_BRANCH_CACHE_SHADOW_ROUTING=false`
   - `ENABLE_RADIUS_LOGIN=false`
   - `ENABLE_MEDIA_PROCESSING=false`
   - `ENABLE_HLS_ENCODING=false`
