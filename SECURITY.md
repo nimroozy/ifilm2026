@@ -30,6 +30,10 @@ Report suspected security issues privately to the repository maintainers. Do not
   - `ENABLE_BRANCH_CACHE_PULL_THROUGH=false`
   - `ENABLE_BRANCH_CACHE_LOCAL_SERVE=false`
   - `ENABLE_BRANCH_CACHE_PILOT_LAB=false`
+  - `ENABLE_BRANCH_CACHE_HTTP_SERVICE=false`
+  - `ENABLE_BRANCH_CACHE_HTTP_HEALTH=false`
+  - `ENABLE_BRANCH_CACHE_HTTP_METRICS=false`
+  - `ENABLE_BRANCH_CACHE_HTTP_LAB_HTTPS_ADAPTER=false`
   - `ENABLE_RADIUS_LOGIN=false`
   - `ENABLE_MEDIA_PROCESSING=false`
   - `ENABLE_HLS_ENCODING=false`
