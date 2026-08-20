@@ -624,6 +624,11 @@ export default function HomePage() {
 
   const usedIds = new Set<string>();
   const hasRecShelves = Boolean(recommendations?.shelves?.some((s) => s.shelf_type !== 'editorial_collections' && (s.items?.length ?? 0) > 0));
+  const recHasNewReleases = Boolean(
+    recommendations?.shelves?.some(
+      (s) => s.shelf_type === 'new_releases' && (s.items?.length ?? 0) > 0
+    )
+  );
 
   return (
     <div className="pb-8">
@@ -654,7 +659,7 @@ export default function HomePage() {
             {collectionShelves.map(({ collection, items }) => (
               <ContentRow key={`collection-${collection.id}`} title={collection.title} items={items} />
             ))}
-            {hasRecShelves ? (
+            {hasRecShelves && !recHasNewReleases ? (
               <ContentRow title={t.sections.recentlyAdded} items={newReleases} />
             ) : null}
             <ContentRow title={t.sections.popularMovies} items={data.popular} />
@@ -662,9 +667,9 @@ export default function HomePage() {
             <ContentRow title={t.sections.trending} items={data.trending} />
             <ContentRow title={t.sections.topRated || 'Top Rated'} items={topRated} />
             <ContentRow title={t.sections.action} items={data.actionMovies} />
-            <ContentRow title="Drama" items={dramaMovies} />
+            <ContentRow title={t.sections.drama} items={dramaMovies} />
             <ContentRow title={t.sections.comedy} items={data.comedyMovies} />
-            <ContentRow title="Animation & Family" items={animationFamily} />
+            <ContentRow title={t.sections.animationFamily} items={animationFamily} />
             <ContentRow title={t.sections.afghanMovies} items={data.afghanMovies} />
             <ContentRow
               title={t.sections.persianDubbed}
