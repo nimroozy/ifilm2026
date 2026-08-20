@@ -55,6 +55,7 @@ def control_plane_status(
         "enable_branch_cache_data_plane_sim": bool(cfg.enable_branch_cache_data_plane_sim),
         "enable_branch_cache_pull_through": bool(cfg.enable_branch_cache_pull_through),
         "enable_branch_cache_local_serve": bool(cfg.enable_branch_cache_local_serve),
+        "enable_branch_cache_pilot_lab": bool(cfg.enable_branch_cache_pilot_lab),
         "edge_grant_configured": bool(
             (cfg.edge_grant_public_key_pem or "").strip() and (cfg.edge_grant_key_id or "").strip()
         ),
@@ -70,6 +71,8 @@ def control_plane_status(
         "data_plane_mode": "simulation" if cfg.enable_branch_cache_data_plane_sim else "off",
         "client_redirect_active": False,
         "live_http_origin_fetcher": False,
+        "live_pilot_ready": False,
+        "metrics_endpoint_enabled": False,
     }
 
 

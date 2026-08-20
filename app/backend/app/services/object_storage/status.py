@@ -33,6 +33,7 @@ def safe_storage_status(settings: Settings | None = None) -> dict:
         "enable_branch_cache_data_plane_sim": bool(cfg.enable_branch_cache_data_plane_sim),
         "enable_branch_cache_pull_through": bool(cfg.enable_branch_cache_pull_through),
         "enable_branch_cache_local_serve": bool(cfg.enable_branch_cache_local_serve),
+        "enable_branch_cache_pilot_lab": bool(cfg.enable_branch_cache_pilot_lab),
         "enable_cdn_sync_legacy": bool(cfg.enable_cdn_sync),
         "roles": {
             "local_workspace": {
@@ -72,9 +73,10 @@ def safe_storage_status(settings: Settings | None = None) -> dict:
                 "edge_grant_issue": bool(cfg.enable_edge_grant_issue),
                 "pull_through": bool(cfg.enable_branch_cache_pull_through),
                 "local_serve": bool(cfg.enable_branch_cache_local_serve),
+                "pilot_lab": bool(cfg.enable_branch_cache_pilot_lab),
                 "live_http_origin": False,
                 "note": (
-                    "Phase 4: offline data-plane simulation only; "
+                    "Phase 5: offline capacity/SLO/pilot-gate lab tooling; "
                     "no live branch delivery or client redirects"
                 ),
             },
@@ -86,5 +88,6 @@ def safe_storage_status(settings: Settings | None = None) -> dict:
             "playback_remains_session_authorized": True,
             "branch_cache_default_off": True,
             "branch_data_plane_sim_only": True,
+            "live_pilot_requires_human_and_staging": True,
         },
     }

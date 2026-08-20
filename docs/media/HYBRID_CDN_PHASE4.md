@@ -69,3 +69,7 @@ Before cache/origin I/O, `verify_edge_grant` enforces issuer/audience/node/site/
 ## Pilot readiness
 
 `run_pilot_readiness_report()` exercises cold miss, hit, range, manifest, auth deny, origin outage, and capacity bounds without external systems.
+
+## Next phase
+
+Phase 5 adds offline capacity/SLO/pilot-gate tooling — see `HYBRID_CDN_PHASE5.md` and `HYBRID_CDN_PILOT_RUNBOOK.md`.
