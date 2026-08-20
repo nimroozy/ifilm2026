@@ -199,6 +199,10 @@ class Settings(BaseSettings):
     branch_cache_sim_max_object_bytes: int = 67_108_864  # 64 MiB
     branch_cache_sim_max_concurrent_fills: int = 4
 
+    # Hybrid CDN Phase 5 — offline pilot readiness / capacity / SLO lab (default OFF).
+    # Does not enable live serving, redirects, enrollment, or network origin.
+    enable_branch_cache_pilot_lab: bool = False
+
     # Watch progress / Continue Watching (Phase 10)
     enable_watch_history: bool = True
     watch_progress_min_seconds: int = 30

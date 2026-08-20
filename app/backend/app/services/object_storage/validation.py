@@ -69,6 +69,17 @@ def collect_object_storage_errors(settings: Settings) -> list[str]:
                 "ENABLE_CDN_SYNC must remain false when branch-cache data-plane sim is used"
             )
 
+    # Phase 5 pilot lab tooling (offline only).
+    if settings.enable_branch_cache_pilot_lab and is_prod_like(settings.app_env):
+        errors.append(
+            "ENABLE_BRANCH_CACHE_PILOT_LAB must remain false in staging/production "
+            "(Phase 5 is offline capacity/SLO lab tooling only)"
+        )
+    if settings.enable_branch_cache_pilot_lab and settings.enable_cdn_sync:
+        errors.append(
+            "ENABLE_CDN_SYNC must remain false when branch-cache pilot lab is used"
+        )
+
     if not settings.enable_object_storage:
         if settings.enable_r2_hot_tier:
             errors.append("ENABLE_R2_HOT_TIER requires ENABLE_OBJECT_STORAGE=true")

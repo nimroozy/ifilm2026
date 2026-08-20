@@ -134,7 +134,11 @@ Both require `ENABLE_OBJECT_STORAGE=true`. Local package remains source of truth
 - **Implemented (flags OFF):** offline grant-gated cache engine, local OriginFetcher, atomic fill/single-flight, LRU capacity, prewarm planner, pilot readiness harness — see `HYBRID_CDN_PHASE4.md`
 - **Deferred:** live branch HTTP service, real mTLS origin adapter, client redirects, production compose activation
 
-### Phase 5 — Observability & live pilot
+### Phase 5 — Pilot readiness / capacity / SLO lab
+- **Implemented (flags OFF):** capacity planner, workload simulator, pilot gates, metrics export helper, node health checks, runbook — see `HYBRID_CDN_PHASE5.md` and `HYBRID_CDN_PILOT_RUNBOOK.md`
+- **Deferred:** live pilot authorization, staging cutover, DNS, multi-branch rollout
+
+### Phase 6 — Live single-branch pilot (future)
 - Hit/miss, origin bandwidth, cache fill latency, error budgets
 - Capacity planning worksheets from measured ABR bitrates
 - Single-branch pilot rollout runbook; rollback to origin-only
