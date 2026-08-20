@@ -7,8 +7,12 @@ from pathlib import Path
 from typing import Any
 
 from app.core.config import Settings
-from app.core.runtime import is_prod_like
 from app.services.branch_cache.data_plane.origin import OriginFetcher
+
+
+def _is_prod_like(app_env: str) -> bool:
+    """Local copy to avoid importing app.core.runtime (pulls SQLAlchemy via db_url)."""
+    return (app_env or "").strip().lower() in {"production", "staging", "prod"}
 
 
 class BranchServiceConfigError(ValueError):
@@ -93,7 +97,7 @@ def validate_branch_service_config(cfg: BranchServiceConfig) -> None:
     if cfg.max_header_bytes < 1024 or cfg.max_header_bytes > 65_536:
         raise BranchServiceConfigError("max_header_bytes out of bounds", code="limits")
 
-    if is_prod_like(cfg.settings.app_env):
+    if _is_prod_like(cfg.settings.app_env):
         raise BranchServiceConfigError(
             "branch HTTP service candidate cannot start in staging/production",
             code="prod_forbidden",

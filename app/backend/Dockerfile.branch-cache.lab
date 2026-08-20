@@ -1,0 +1,53 @@
+# Phase 7 — lab/CI-only branch-cache HTTP service image.
+# NOT used by production compose, installer, or release digests.
+# Multi-stage: builders stay out of the runtime layer; no ffmpeg; no embedded secrets.
+
+FROM python:3.12-slim AS builder
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+COPY requirements-branch-cache.txt .
+RUN python -m venv /opt/venv \
+    && /opt/venv/bin/pip install --no-cache-dir --upgrade pip \
+    && /opt/venv/bin/pip install --no-cache-dir -r requirements-branch-cache.txt
+
+FROM python:3.12-slim AS runtime
+
+# Fixed non-root identity (matches staging backend UID/GID convention).
+RUN groupadd --system --gid 10001 ifilm \
+    && useradd --system --uid 10001 --gid ifilm --home-dir /app --shell /usr/sbin/nologin ifilm \
+    && mkdir -p /var/cache/ifilm-branch /var/lib/ifilm-branch-origin /app \
+    && chown -R ifilm:ifilm /var/cache/ifilm-branch /var/lib/ifilm-branch-origin /app
+
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH" \
+    PYTHONPATH=/app \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    ENABLE_BRANCH_CACHE_HTTP_LAB_ARTIFACT=false \
+    ENABLE_BRANCH_CACHE_HTTP_SERVICE=false \
+    ENABLE_BRANCH_CACHE_HTTP_HEALTH=false \
+    ENABLE_BRANCH_CACHE_HTTP_METRICS=false \
+    ENABLE_BRANCH_CACHE_HTTP_LAB_HTTPS_ADAPTER=false \
+    BRANCH_CACHE_CACHE_ROOT=/var/cache/ifilm-branch \
+    BRANCH_CACHE_ORIGIN_ROOT=/var/lib/ifilm-branch-origin \
+    BRANCH_CACHE_BIND_HOST=127.0.0.1 \
+    BRANCH_CACHE_BIND_PORT=8080 \
+    BRANCH_CACHE_ENTRY_MODE=validate
+
+WORKDIR /app
+COPY --chown=ifilm:ifilm app ./app
+COPY --chown=ifilm:ifilm docker/entrypoint.branch-cache.sh /entrypoint.branch-cache.sh
+RUN chmod 755 /entrypoint.branch-cache.sh \
+    && find /app -name '.env' -type f -delete \
+    && rm -rf /var/lib/apt/lists/*
+
+USER 10001:10001
+
+# No EXPOSE / HEALTHCHECK — lab compose uses network_mode:none + validate-only.
+STOPSIGNAL SIGTERM
+ENTRYPOINT ["/entrypoint.branch-cache.sh"]
+CMD []

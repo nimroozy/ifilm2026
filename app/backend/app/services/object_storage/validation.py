@@ -101,6 +101,17 @@ def collect_object_storage_errors(settings: Settings) -> list[str]:
         errors.append(
             "ENABLE_BRANCH_CACHE_HTTP_LAB_HTTPS_ADAPTER must remain false in staging/production"
         )
+    if settings.enable_branch_cache_http_lab_artifact and is_prod_like(settings.app_env):
+        errors.append(
+            "ENABLE_BRANCH_CACHE_HTTP_LAB_ARTIFACT must remain false in staging/production "
+            "(Phase 7 lab/CI container artifact only)"
+        )
+    if settings.enable_branch_cache_http_lab_artifact and not (
+        settings.enable_branch_cache_http_service
+    ):
+        errors.append(
+            "ENABLE_BRANCH_CACHE_HTTP_LAB_ARTIFACT requires ENABLE_BRANCH_CACHE_HTTP_SERVICE=true"
+        )
 
     if not settings.enable_object_storage:
         if settings.enable_r2_hot_tier:

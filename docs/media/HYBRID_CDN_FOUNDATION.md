@@ -140,9 +140,13 @@ Both require `ENABLE_OBJECT_STORAGE=true`. Local package remains source of truth
 
 ### Phase 6 — Branch HTTP service candidate
 - **Implemented (flags OFF):** isolated ASGI factory for lab/TestClient only — see `HYBRID_CDN_PHASE6.md`
-- **Deferred:** real mTLS sockets, compose/systemd activation, enrollment, client redirects
+- **Deferred (partially addressed in Phase 7):** live mTLS, enrollment, client redirects; container activation remains lab-only
 
-### Phase 7 — Staging evaluation (future)
+### Phase 7 — Hardened CI/lab branch-node artifact
+- **Implemented (flags OFF):** `Dockerfile.branch-cache.lab`, validate-only entry, separate lab compose (`network_mode: none`), hardening contract tests — see `HYBRID_CDN_PHASE7.md`
+- **Deferred:** production/staging activation, release digest publication, live networking, enrollment, client redirects, live pilot
+
+### Phase 8 — Staging evaluation (future)
 - Hit/miss, origin bandwidth, cache fill latency, error budgets
 - Capacity planning worksheets from measured ABR bitrates
 - Single-branch pilot rollout runbook; rollback to origin-only
