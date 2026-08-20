@@ -165,6 +165,13 @@ class Settings(BaseSettings):
     cdn_hot_tier_cooldown_days: int = 14
     cdn_hot_tier_promote_views_threshold: int = 0
 
+    # Hybrid CDN Phase 2 — origin package sync + optional HLS read fallback (default OFF).
+    enable_origin_package_sync: bool = False
+    enable_origin_hls_read_fallback: bool = False
+    origin_sync_max_objects: int = 50_000
+    origin_sync_timeout_seconds: int = 600
+    origin_read_timeout_seconds: int = 30
+
     # Watch progress / Continue Watching (Phase 10)
     enable_watch_history: bool = True
     watch_progress_min_seconds: int = 30

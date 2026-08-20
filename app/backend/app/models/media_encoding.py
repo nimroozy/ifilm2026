@@ -107,8 +107,21 @@ class MediaPackage(Base):
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Hybrid CDN Phase 2 — durable origin sync state (local package always retained).
+    origin_sync_status: Mapped[str] = mapped_column(String(32), nullable=False, default="none")
+    origin_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    origin_sync_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    origin_object_prefix: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    origin_sync_attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    origin_bytes_synced: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    origin_object_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     media_asset = relationship("MediaAsset", back_populates="packages")
-    processing_job = relationship("MediaProcessingJob", back_populates="package")
+    processing_job = relationship(
+        "MediaProcessingJob",
+        back_populates="package",
+        foreign_keys="MediaPackage.processing_job_id",
+    )
     renditions = relationship(
         "MediaRendition",
         back_populates="package",

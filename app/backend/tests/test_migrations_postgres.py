@@ -169,7 +169,7 @@ def test_postgresql_migration_succeeds(postgres_url):
     assert "content_requests" in tables
     assert "content_request_events" in tables
     assert "media_tracks" in tables
-    assert version == "025_integration_configs_v1"
+    assert version == "026_origin_package_sync_v1"
 
 
 def test_postgresql_migration_from_previous_revision(postgres_url):
@@ -202,7 +202,7 @@ def test_postgresql_migration_from_previous_revision(postgres_url):
     assert movie_slug == "ordinary-film"
     assert series_slug == "ordinary-show"
     assert null_imdb >= 1
-    assert version == "025_integration_configs_v1"
+    assert version == "026_origin_package_sync_v1"
 
 
 def test_002_to_head_duplicate_and_messy_titles(postgres_url):
@@ -1160,9 +1160,9 @@ def test_alembic_heads_single(postgres_url):
     result = _run_alembic(postgres_url, "heads")
     assert result.returncode == 0, result.stdout + result.stderr
     lines = [ln for ln in (result.stdout + result.stderr).splitlines() if ln.strip()]
-    head_lines = [ln for ln in lines if "025_integration_configs_v1" in ln]
+    head_lines = [ln for ln in lines if "026_origin_package_sync_v1" in ln]
     assert head_lines, result.stdout + result.stderr
-    assert sum(1 for ln in lines if ln.strip().startswith("025_integration_configs_v1")) >= 1
+    assert sum(1 for ln in lines if ln.strip().startswith("026_origin_package_sync_v1")) >= 1
 
 
 def test_media_upload_reliability_migration_roundtrip(postgres_url):
@@ -1211,7 +1211,7 @@ def test_media_upload_reliability_migration_roundtrip(postgres_url):
             )
         }
     engine.dispose()
-    assert version == "025_integration_configs_v1"
+    assert version == "026_origin_package_sync_v1"
     assert "media_admin_events" in tables
     assert "content_translations" in tables
     assert "content_requests" in tables
@@ -1316,7 +1316,7 @@ def test_content_requests_migration_roundtrip(postgres_url):
             )
         }
     engine.dispose()
-    assert version == "025_integration_configs_v1"
+    assert version == "026_origin_package_sync_v1"
     assert "content_requests" in tables
     assert "media_tracks" in tables
 
@@ -1390,7 +1390,7 @@ def test_media_tracks_migration_roundtrip(postgres_url):
             )
         }
     engine.dispose()
-    assert version == "025_integration_configs_v1"
+    assert version == "026_origin_package_sync_v1"
     assert "media_tracks" in tables
     assert "source_media_asset_id" in cols
 
@@ -1546,19 +1546,19 @@ def test_portal_identity_migration_024_roundtrip(postgres_url):
     assert "uq_subscribers_provider_subject" in idx
 
 
-def test_fresh_database_reaches_025(postgres_url):
+def test_fresh_database_reaches_026(postgres_url):
     _reset_schema(postgres_url)
     result = _run_alembic(postgres_url, "upgrade", "head")
     assert result.returncode == 0, result.stdout + result.stderr
     heads = _run_alembic(postgres_url, "heads")
     assert heads.returncode == 0
-    assert "025_integration_configs_v1" in (heads.stdout + heads.stderr)
+    assert "026_origin_package_sync_v1" in (heads.stdout + heads.stderr)
     current = _run_alembic(postgres_url, "current")
     assert current.returncode == 0
-    assert "025_integration_configs_v1" in (current.stdout + current.stderr)
+    assert "026_origin_package_sync_v1" in (current.stdout + current.stderr)
     history = _run_alembic(postgres_url, "history")
     assert history.returncode == 0
-    assert "025_integration_configs_v1" in (history.stdout + history.stderr)
+    assert "026_origin_package_sync_v1" in (history.stdout + history.stderr)
 
 
 def test_integration_configs_migration_025_roundtrip(postgres_url):
@@ -1607,3 +1607,75 @@ def test_integration_configs_migration_025_roundtrip(postgres_url):
     engine.dispose()
     assert version == "024_portal_subscriber_identity_v1"
     assert "integration_configs" not in tables
+
+
+def test_origin_package_sync_migration_026_roundtrip(postgres_url):
+    """025 → 026: origin sync columns on media_packages + target_package_id on jobs."""
+    _reset_schema(postgres_url)
+    assert _run_alembic(postgres_url, "upgrade", "025_integration_configs_v1").returncode == 0
+
+    up = _run_alembic(postgres_url, "upgrade", "026_origin_package_sync_v1")
+    assert up.returncode == 0, up.stdout + up.stderr
+
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        pkg_cols = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='media_packages'"
+                )
+            )
+        }
+        job_cols = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='media_processing_jobs'"
+                )
+            )
+        }
+    engine.dispose()
+    assert version == "026_origin_package_sync_v1"
+    assert {
+        "origin_sync_status",
+        "origin_synced_at",
+        "origin_sync_error",
+        "origin_object_prefix",
+        "origin_sync_attempt",
+        "origin_bytes_synced",
+        "origin_object_count",
+    } <= pkg_cols
+    assert "target_package_id" in job_cols
+
+    down = _run_alembic(postgres_url, "downgrade", "025_integration_configs_v1")
+    assert down.returncode == 0, down.stdout + down.stderr
+
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        pkg_cols = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='media_packages'"
+                )
+            )
+        }
+        job_cols = {
+            row[0]
+            for row in conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='media_processing_jobs'"
+                )
+            )
+        }
+    engine.dispose()
+    assert version == "025_integration_configs_v1"
+    assert "origin_sync_status" not in pkg_cols
+    assert "target_package_id" not in job_cols

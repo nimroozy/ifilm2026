@@ -115,7 +115,7 @@ jobs:
       - name: Alembic heads
         run: |
           alembic heads | tee /tmp/alembic-heads.txt
-          grep -q '025_integration_configs_v1' /tmp/alembic-heads.txt
+          grep -q '026_origin_package_sync_v1' /tmp/alembic-heads.txt
 
       - name: Alembic upgrade on empty PostgreSQL database
         run: |
