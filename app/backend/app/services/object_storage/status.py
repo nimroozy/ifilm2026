@@ -30,6 +30,9 @@ def safe_storage_status(settings: Settings | None = None) -> dict:
         "enable_branch_cache_control_plane": bool(cfg.enable_branch_cache_control_plane),
         "enable_edge_grant_issue": bool(cfg.enable_edge_grant_issue),
         "enable_branch_cache_shadow_routing": bool(cfg.enable_branch_cache_shadow_routing),
+        "enable_branch_cache_data_plane_sim": bool(cfg.enable_branch_cache_data_plane_sim),
+        "enable_branch_cache_pull_through": bool(cfg.enable_branch_cache_pull_through),
+        "enable_branch_cache_local_serve": bool(cfg.enable_branch_cache_local_serve),
         "enable_cdn_sync_legacy": bool(cfg.enable_cdn_sync),
         "roles": {
             "local_workspace": {
@@ -62,13 +65,17 @@ def safe_storage_status(settings: Settings | None = None) -> dict:
             },
             "branch_cache": {
                 "control_plane": bool(cfg.enable_branch_cache_control_plane),
-                "data_plane_active": False,
+                "data_plane_sim": bool(cfg.enable_branch_cache_data_plane_sim),
+                "data_plane_active": bool(cfg.enable_branch_cache_data_plane_sim),
                 "client_redirect_active": False,
                 "shadow_routing": bool(cfg.enable_branch_cache_shadow_routing),
                 "edge_grant_issue": bool(cfg.enable_edge_grant_issue),
+                "pull_through": bool(cfg.enable_branch_cache_pull_through),
+                "local_serve": bool(cfg.enable_branch_cache_local_serve),
+                "live_http_origin": False,
                 "note": (
-                    "Phase 3 control plane: registry + grants + shadow routing; "
-                    "no live branch delivery"
+                    "Phase 4: offline data-plane simulation only; "
+                    "no live branch delivery or client redirects"
                 ),
             },
         },
@@ -78,5 +85,6 @@ def safe_storage_status(settings: Settings | None = None) -> dict:
             "permanent_public_movie_urls": False,
             "playback_remains_session_authorized": True,
             "branch_cache_default_off": True,
+            "branch_data_plane_sim_only": True,
         },
     }

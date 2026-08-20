@@ -73,5 +73,8 @@ Routing selects only enabled, healthy, non-draining, protocol-compatible, capaci
 ## Capacity planning
 Use `capacity_bytes` / `used_bytes` and `BRANCH_CACHE_MIN_FREE_BYTES` to keep headroom for ABR ladders. Counters avoid per-subscriber / per-URL cardinality.
 
+## Next phase
+Offline data-plane simulation is documented in `HYBRID_CDN_PHASE4.md` (stacked after this control plane).
+
 ## Quarantine
 Legacy `app/services/cdn_sync.py` and `/admin/cdn/*` remain experimental and unsigned — do not revive for branch delivery.

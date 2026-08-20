@@ -26,6 +26,9 @@ Report suspected security issues privately to the repository maintainers. Do not
   - `ENABLE_BRANCH_CACHE_CONTROL_PLANE=false`
   - `ENABLE_EDGE_GRANT_ISSUE=false`
   - `ENABLE_BRANCH_CACHE_SHADOW_ROUTING=false`
+  - `ENABLE_BRANCH_CACHE_DATA_PLANE_SIM=false`
+  - `ENABLE_BRANCH_CACHE_PULL_THROUGH=false`
+  - `ENABLE_BRANCH_CACHE_LOCAL_SERVE=false`
   - `ENABLE_RADIUS_LOGIN=false`
   - `ENABLE_MEDIA_PROCESSING=false`
   - `ENABLE_HLS_ENCODING=false`

@@ -52,6 +52,9 @@ def control_plane_status(
         "enable_branch_cache_control_plane": bool(cfg.enable_branch_cache_control_plane),
         "enable_edge_grant_issue": bool(cfg.enable_edge_grant_issue),
         "enable_branch_cache_shadow_routing": bool(cfg.enable_branch_cache_shadow_routing),
+        "enable_branch_cache_data_plane_sim": bool(cfg.enable_branch_cache_data_plane_sim),
+        "enable_branch_cache_pull_through": bool(cfg.enable_branch_cache_pull_through),
+        "enable_branch_cache_local_serve": bool(cfg.enable_branch_cache_local_serve),
         "edge_grant_configured": bool(
             (cfg.edge_grant_public_key_pem or "").strip() and (cfg.edge_grant_key_id or "").strip()
         ),
@@ -63,8 +66,10 @@ def control_plane_status(
         "min_protocol_version": cfg.branch_cache_min_protocol_version,
         "legacy_cdn_sync_enabled": bool(cfg.enable_cdn_sync),
         "counters": metrics.snapshot(),
-        "data_plane_active": False,
+        "data_plane_active": bool(cfg.enable_branch_cache_data_plane_sim),
+        "data_plane_mode": "simulation" if cfg.enable_branch_cache_data_plane_sim else "off",
         "client_redirect_active": False,
+        "live_http_origin_fetcher": False,
     }
 
 
