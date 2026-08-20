@@ -645,7 +645,6 @@ def test_mtls_origin_logs_never_leak_identifiers(tmp_path: Path, caplog: pytest.
             with pytest.raises(DataPlaneError):
                 fetcher.fetch(asset_id=asset, package_id=package, relative_path="720p/missing.ts")
         text = "\n".join(r.getMessage() for r in caplog.records)
-        text_lower = text.lower()
         # Must not appear at any captured level:
         for forbidden in (
             asset,
