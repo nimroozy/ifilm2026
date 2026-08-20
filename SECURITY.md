@@ -21,6 +21,8 @@ Report suspected security issues privately to the repository maintainers. Do not
   - `ENABLE_CDN_SYNC=false`
   - `ENABLE_OBJECT_STORAGE=false`
   - `ENABLE_R2_HOT_TIER=false`
+  - `ENABLE_ORIGIN_PACKAGE_SYNC=false`
+  - `ENABLE_ORIGIN_HLS_READ_FALLBACK=false`
   - `ENABLE_RADIUS_LOGIN=false`
   - `ENABLE_MEDIA_PROCESSING=false`
   - `ENABLE_HLS_ENCODING=false`

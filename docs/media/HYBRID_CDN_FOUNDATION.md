@@ -110,10 +110,21 @@ Assumptions for planning (replace with measured rates):
 
 ## Later phases
 
+## Phase 2 — Origin cutover (optional flags)
+
+See also stacked PR docs in this file's Later phases section.
+
+| Flag | Default | Behavior |
+|------|---------|----------|
+| `ENABLE_ORIGIN_PACKAGE_SYNC` | `false` | After local HLS promote/activate, enqueue idempotent `origin_sync` job |
+| `ENABLE_ORIGIN_HLS_READ_FALLBACK` | `false` | On local miss, serve playlist/segment bytes from origin after session auth |
+
+Both require `ENABLE_OBJECT_STORAGE=true`. Local package remains source of truth for publishing readiness; sync failure never un-activates playback.
+
 ### Phase 2 — Origin cutover
-- Post-promote upload of package trees to central origin
-- Playback delivery can fetch from origin while keeping token gate
-- Dual-run local + origin with checksum verification
+- Post-promote upload of package trees to central origin (**implemented behind flags**)
+- Playback delivery can fetch from origin while keeping token gate (**optional read fallback**)
+- Dual-run local + origin with size verification
 
 ### Phase 3 — Branch cache registry
 - Node registry, health checks, capacity advertising

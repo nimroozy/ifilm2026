@@ -25,6 +25,8 @@ def safe_storage_status(settings: Settings | None = None) -> dict:
     return {
         "enable_object_storage": bool(cfg.enable_object_storage),
         "enable_r2_hot_tier": bool(cfg.enable_r2_hot_tier),
+        "enable_origin_package_sync": bool(cfg.enable_origin_package_sync),
+        "enable_origin_hls_read_fallback": bool(cfg.enable_origin_hls_read_fallback),
         "enable_cdn_sync_legacy": bool(cfg.enable_cdn_sync),
         "roles": {
             "local_workspace": {

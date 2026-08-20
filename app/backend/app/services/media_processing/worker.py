@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.db.session import SessionLocal, get_engine
-from app.models.media_processing import JOB_TYPE_ENCODE_HLS, JOB_TYPE_PROBE
+from app.models.media_processing import JOB_TYPE_ENCODE_HLS, JOB_TYPE_ORIGIN_SYNC, JOB_TYPE_PROBE
 from app.services.media_processing.ffmpeg import binary_available, resolve_binary
 from app.services.media_processing.jobs import (
     claim_next_job,
@@ -116,6 +116,47 @@ def run_once(db: Session, *, settings: Settings, worker_id: str) -> bool:
         from app.services.media_processing.encode_job import execute_encode_hls_job
 
         execute_encode_hls_job(db, settings=settings, job=job)
+    elif job.job_type == JOB_TYPE_ORIGIN_SYNC:
+        from app.services.object_storage.package_sync import (
+            OriginSyncError,
+            execute_origin_sync_job,
+            origin_package_sync_enabled,
+        )
+
+        if not origin_package_sync_enabled(settings):
+            fail_or_retry(
+                db,
+                settings=settings,
+                job=job,
+                error_code="feature_disabled",
+                message="Origin package sync is disabled",
+                transient=False,
+            )
+            db.commit()
+            return True
+        try:
+            execute_origin_sync_job(db, job, settings=settings)
+        except OriginSyncError as exc:
+            fail_or_retry(
+                db,
+                settings=settings,
+                job=job,
+                error_code=exc.code,
+                message=str(exc),
+                transient=True,
+            )
+            db.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("origin_sync_job_failed job_id=%s", job.id)
+            fail_or_retry(
+                db,
+                settings=settings,
+                job=job,
+                error_code="origin_sync_error",
+                message=type(exc).__name__,
+                transient=True,
+            )
+            db.commit()
     else:
         logger.error("Unsupported job type %s for job %s", job.job_type, job.id)
         fail_or_retry(

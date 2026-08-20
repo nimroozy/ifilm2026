@@ -16,6 +16,7 @@ from app.models.media_assets import MediaAsset, new_uuid, utcnow
 from app.models.media_processing import (
     ACTIVE_JOB_STATUSES,
     JOB_TYPE_ENCODE_HLS,
+    JOB_TYPE_ORIGIN_SYNC,
     JOB_TYPE_PROBE,
     TERMINAL_JOB_STATUSES,
     MediaProcessingJob,
@@ -542,17 +543,34 @@ def _fail_or_retry(
             f"Retry scheduled in {delay}s",
             {"attempt": job.attempt_count, "max_attempts": job.max_attempts},
         )
-        if job.media_asset:
+        if job.job_type != JOB_TYPE_ORIGIN_SYNC and job.media_asset:
             job.media_asset.processing_status = "retry_wait"
             db.add(job.media_asset)
+        if job.job_type == JOB_TYPE_ORIGIN_SYNC and job.target_package_id:
+            from app.models.media_encoding import MediaPackage
+
+            package = db.get(MediaPackage, job.target_package_id)
+            if package is not None:
+                package.origin_sync_status = "pending"
+                package.origin_sync_error = _clip(message)
+                db.add(package)
     else:
         job.status = "failed"
         job.finished_at = utcnow()
         job.current_step = "failed"
         add_job_event(db, job, "failed", job.error_message)
-        if job.media_asset:
+        if job.job_type != JOB_TYPE_ORIGIN_SYNC and job.media_asset:
             job.media_asset.processing_status = "failed"
             db.add(job.media_asset)
+        if job.job_type == JOB_TYPE_ORIGIN_SYNC and job.target_package_id:
+            from app.models.media_encoding import MediaPackage
+
+            package = db.get(MediaPackage, job.target_package_id)
+            if package is not None:
+                # Never un-activate the local package on origin sync failure.
+                package.origin_sync_status = "failed"
+                package.origin_sync_error = _clip(message)
+                db.add(package)
     db.add(job)
 
 

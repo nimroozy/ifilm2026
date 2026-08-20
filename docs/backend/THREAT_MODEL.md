@@ -54,3 +54,4 @@ default OFF. See `docs/media/HYBRID_CDN_FOUNDATION.md`.
 - Legacy CDN sync (`ENABLE_CDN_SYNC`) trusts configured node endpoints without a mature authenticity model — keep disabled; do not build hybrid CDN on it.
 - Object-storage credentials, when configured, must never be exposed via APIs, frontend, or logs (`safe_storage_status` is secret-free).
 - Optional R2 hot tier must remain capacity-capped; mirroring the full library defeats cost and security goals.
+- Phase 2 origin sync/read-fallback must stay flag-gated; sync failure must not revoke local package activation; read fallback must not bypass playback session tokens.

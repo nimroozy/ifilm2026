@@ -22,6 +22,10 @@ def collect_object_storage_errors(settings: Settings) -> list[str]:
     if not settings.enable_object_storage:
         if settings.enable_r2_hot_tier:
             errors.append("ENABLE_R2_HOT_TIER requires ENABLE_OBJECT_STORAGE=true")
+        if settings.enable_origin_package_sync:
+            errors.append("ENABLE_ORIGIN_PACKAGE_SYNC requires ENABLE_OBJECT_STORAGE=true")
+        if settings.enable_origin_hls_read_fallback:
+            errors.append("ENABLE_ORIGIN_HLS_READ_FALLBACK requires ENABLE_OBJECT_STORAGE=true")
         return errors
 
     provider = (settings.media_origin_provider or "local").strip().lower()
