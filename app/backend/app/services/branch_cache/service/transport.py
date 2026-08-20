@@ -7,11 +7,19 @@ from typing import Protocol
 from urllib.parse import urlparse
 
 from app.services.branch_cache.data_plane.errors import CODE_ORIGIN, DataPlaneError
+from app.services.branch_cache.data_plane.mtls_origin import MtLsHttpsOriginFetcher
 from app.services.branch_cache.data_plane.origin import (
     LocalDirOriginFetcher,
     OriginFetcher,
     OriginObject,
 )
+
+__all__ = [
+    "DeferredHttpsOriginTransport",
+    "FixedOriginTransport",
+    "InjectedLocalOriginTransport",
+    "MtLsHttpsOriginFetcher",
+]
 
 
 class FixedOriginTransport(Protocol):

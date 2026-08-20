@@ -17,8 +17,8 @@
 - SBOM/provenance **hooks documented** (Syft/Trivy/signing placeholders); not added to production release digests
 
 **Deferred**
-- Real deployment, production/staging activation, live networking / mTLS sockets
-- Node enrollment, public port, DNS/Cloudflare/R2/MinIO/Ceph, client redirects, live pilot
+- Real deployment, production/staging activation, live networking / mTLS sockets (Phase 8 packages mTLS offline; live activation still deferred)
+- Node enrollment live issuance, public port, DNS/Cloudflare/R2/MinIO/Ceph, client redirects, live pilot
 - Publishing the lab image via `release.yml` / installer digests
 
 ## Flags (all default false)

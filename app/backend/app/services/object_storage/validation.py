@@ -113,6 +113,26 @@ def collect_object_storage_errors(settings: Settings) -> list[str]:
             "ENABLE_BRANCH_CACHE_HTTP_LAB_ARTIFACT requires ENABLE_BRANCH_CACHE_HTTP_SERVICE=true"
         )
 
+    # Phase 8 mTLS staging-candidate (offline/loopback package; not live activation).
+    if settings.enable_branch_cache_http_mtls_staging_candidate and is_prod_like(
+        settings.app_env
+    ):
+        errors.append(
+            "ENABLE_BRANCH_CACHE_HTTP_MTLS_STAGING_CANDIDATE must remain false in "
+            "staging/production until a separate explicit deployment step"
+        )
+    if settings.enable_branch_cache_http_mtls_staging_candidate and not (
+        settings.enable_branch_cache_http_service
+    ):
+        errors.append(
+            "ENABLE_BRANCH_CACHE_HTTP_MTLS_STAGING_CANDIDATE requires "
+            "ENABLE_BRANCH_CACHE_HTTP_SERVICE=true"
+        )
+    if settings.enable_branch_cache_http_mtls_staging_candidate and settings.enable_cdn_sync:
+        errors.append(
+            "ENABLE_CDN_SYNC must remain false when mTLS staging-candidate is used"
+        )
+
     if not settings.enable_object_storage:
         if settings.enable_r2_hot_tier:
             errors.append("ENABLE_R2_HOT_TIER requires ENABLE_OBJECT_STORAGE=true")

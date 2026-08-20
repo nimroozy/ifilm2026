@@ -146,7 +146,11 @@ Both require `ENABLE_OBJECT_STORAGE=true`. Local package remains source of truth
 - **Implemented (flags OFF):** `Dockerfile.branch-cache.lab`, validate-only entry, separate lab compose (`network_mode: none`), hardening contract tests — see `HYBRID_CDN_PHASE7.md`
 - **Deferred:** production/staging activation, release digest publication, live networking, enrollment, client redirects, live pilot
 
-### Phase 8 — Staging evaluation (future)
+### Phase 8 — mTLS staging-candidate package
+- **Implemented (flags OFF):** strict mTLS origin fetcher, fixed-origin allowlist, enrollment manifest, staging gates, loopback PKI harness, separate staging-candidate compose — see `HYBRID_CDN_PHASE8.md` and `HYBRID_CDN_STAGING_CANDIDATE_RUNBOOK.md`
+- **Deferred:** live staging/production activation, VPS/DNS/cloud access, operator credential issuance, client redirects, live pilot
+
+### Phase 9 — Staging evaluation / pilot evidence (future)
 - Hit/miss, origin bandwidth, cache fill latency, error budgets
 - Capacity planning worksheets from measured ABR bitrates
 - Single-branch pilot rollout runbook; rollback to origin-only
