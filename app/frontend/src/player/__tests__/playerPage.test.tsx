@@ -39,6 +39,7 @@ describe('PlayerPage routing', () => {
       </MemoryRouter>
     );
     await waitFor(() => expect(screen.getByTestId('mock-video-player')).toHaveTextContent('movie'));
+    await waitFor(() => expect(document.title).toBe('Test Movie · iFilm'));
   });
 
   it('requires auth', async () => {

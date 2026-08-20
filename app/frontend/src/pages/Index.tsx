@@ -37,8 +37,10 @@ import { cn } from '@/lib/utils';
 type HomeCatalog = Awaited<ReturnType<typeof fetchHomeCatalog>>;
 
 function HomeLoading() {
+  const { t } = useLang();
   return (
-    <div className="space-y-8" data-testid="home-loading" aria-busy="true">
+    <div className="space-y-8" data-testid="home-loading" role="status" aria-live="polite" aria-busy="true">
+      <span className="sr-only">{t.common?.loading ?? 'Loading'} iFilm</span>
       <Skeleton
         className="ifilm-skeleton h-[min(62vh,640px)] w-full rounded-none md:h-[min(78vh,820px)]"
         data-testid="home-hero-skeleton"
