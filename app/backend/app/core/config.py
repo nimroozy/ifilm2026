@@ -203,6 +203,13 @@ class Settings(BaseSettings):
     # Does not enable live serving, redirects, enrollment, or network origin.
     enable_branch_cache_pilot_lab: bool = False
 
+    # Hybrid CDN Phase 6 — isolated branch HTTP service candidate (default OFF).
+    # Not mounted in the central app; not activated by production compose.
+    enable_branch_cache_http_service: bool = False
+    enable_branch_cache_http_health: bool = False
+    enable_branch_cache_http_metrics: bool = False
+    enable_branch_cache_http_lab_https_adapter: bool = False
+
     # Watch progress / Continue Watching (Phase 10)
     enable_watch_history: bool = True
     watch_progress_min_seconds: int = 30

@@ -138,7 +138,11 @@ Both require `ENABLE_OBJECT_STORAGE=true`. Local package remains source of truth
 - **Implemented (flags OFF):** capacity planner, workload simulator, pilot gates, metrics export helper, node health checks, runbook — see `HYBRID_CDN_PHASE5.md` and `HYBRID_CDN_PILOT_RUNBOOK.md`
 - **Deferred:** live pilot authorization, staging cutover, DNS, multi-branch rollout
 
-### Phase 6 — Live single-branch pilot (future)
+### Phase 6 — Branch HTTP service candidate
+- **Implemented (flags OFF):** isolated ASGI factory for lab/TestClient only — see `HYBRID_CDN_PHASE6.md`
+- **Deferred:** real mTLS sockets, compose/systemd activation, enrollment, client redirects
+
+### Phase 7 — Staging evaluation (future)
 - Hit/miss, origin bandwidth, cache fill latency, error budgets
 - Capacity planning worksheets from measured ABR bitrates
 - Single-branch pilot rollout runbook; rollback to origin-only

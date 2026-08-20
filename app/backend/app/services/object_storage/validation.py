@@ -80,6 +80,28 @@ def collect_object_storage_errors(settings: Settings) -> list[str]:
             "ENABLE_CDN_SYNC must remain false when branch-cache pilot lab is used"
         )
 
+    # Phase 6 isolated HTTP service candidate (offline / lab only).
+    if settings.enable_branch_cache_http_service and is_prod_like(settings.app_env):
+        errors.append(
+            "ENABLE_BRANCH_CACHE_HTTP_SERVICE must remain false in staging/production "
+            "(Phase 6 is an offline ASGI candidate; no production container)"
+        )
+    if settings.enable_branch_cache_http_service and settings.enable_cdn_sync:
+        errors.append(
+            "ENABLE_CDN_SYNC must remain false when branch-cache HTTP service is used"
+        )
+    if settings.enable_branch_cache_http_lab_https_adapter and not (
+        settings.enable_branch_cache_http_service
+    ):
+        errors.append(
+            "ENABLE_BRANCH_CACHE_HTTP_LAB_HTTPS_ADAPTER requires "
+            "ENABLE_BRANCH_CACHE_HTTP_SERVICE=true"
+        )
+    if settings.enable_branch_cache_http_lab_https_adapter and is_prod_like(settings.app_env):
+        errors.append(
+            "ENABLE_BRANCH_CACHE_HTTP_LAB_HTTPS_ADAPTER must remain false in staging/production"
+        )
+
     if not settings.enable_object_storage:
         if settings.enable_r2_hot_tier:
             errors.append("ENABLE_R2_HOT_TIER requires ENABLE_OBJECT_STORAGE=true")

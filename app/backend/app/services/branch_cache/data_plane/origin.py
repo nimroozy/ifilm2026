@@ -73,17 +73,19 @@ class LocalDirOriginFetcher:
 
     def _resolve(self, *, asset_id: str, package_id: str, relative_path: str) -> Path:
         rel = normalize_relative_path(relative_path)
-        # Layout: {root}/{asset_id}/{package_id}/{rel}
-        candidate = (self.root / asset_id / package_id / rel).resolve()
+        # Walk components without following symlinks, then confine under root.
+        cur = self.root
+        for part in (asset_id, package_id, *Path(rel).parts):
+            if part in {"", ".", ".."}:
+                raise DataPlaneError("origin path rejected", code=CODE_ORIGIN)
+            cur = cur / part
+            if cur.is_symlink():
+                raise DataPlaneError("origin symlink rejected", code=CODE_ORIGIN)
         try:
+            candidate = cur.resolve(strict=False)
             candidate.relative_to(self.root)
         except ValueError as exc:
             raise DataPlaneError("origin path escapes root", code=CODE_ORIGIN) from exc
-        cur = candidate
-        while cur != self.root and cur != cur.parent:
-            if cur.is_symlink():
-                raise DataPlaneError("origin symlink rejected", code=CODE_ORIGIN)
-            cur = cur.parent
         return candidate
 
     def exists(self, *, asset_id: str, package_id: str, relative_path: str) -> bool:

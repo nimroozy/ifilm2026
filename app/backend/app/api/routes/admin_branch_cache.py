@@ -56,6 +56,7 @@ def control_plane_status(
         "enable_branch_cache_pull_through": bool(cfg.enable_branch_cache_pull_through),
         "enable_branch_cache_local_serve": bool(cfg.enable_branch_cache_local_serve),
         "enable_branch_cache_pilot_lab": bool(cfg.enable_branch_cache_pilot_lab),
+        "enable_branch_cache_http_service": bool(cfg.enable_branch_cache_http_service),
         "edge_grant_configured": bool(
             (cfg.edge_grant_public_key_pem or "").strip() and (cfg.edge_grant_key_id or "").strip()
         ),
@@ -73,6 +74,7 @@ def control_plane_status(
         "live_http_origin_fetcher": False,
         "live_pilot_ready": False,
         "metrics_endpoint_enabled": False,
+        "http_service_mounted_in_central_app": False,
     }
 
 
