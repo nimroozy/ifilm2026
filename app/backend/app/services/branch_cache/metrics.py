@@ -15,6 +15,19 @@ _COUNTERS: dict[str, int] = {
     "edge_grants_issued": 0,
     "edge_grants_verified_ok": 0,
     "edge_grants_verified_fail": 0,
+    # Phase 4 data-plane simulation (bounded cardinality).
+    "dp_hit": 0,
+    "dp_miss": 0,
+    "dp_fill_ok": 0,
+    "dp_fill_fail": 0,
+    "dp_coalesced": 0,
+    "dp_evicted": 0,
+    "dp_fallback": 0,
+    "dp_auth_fail": 0,
+    "dp_bytes_origin": 0,
+    "dp_bytes_served": 0,
+    "dp_prewarm_ok": 0,
+    "dp_prewarm_fail": 0,
 }
 
 

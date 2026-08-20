@@ -130,7 +130,11 @@ Both require `ENABLE_OBJECT_STORAGE=true`. Local package remains source of truth
 - **Implemented (flags OFF):** durable node registry, admin APIs, ES256 edge-grant primitives, shadow routing + central fallback — see `HYBRID_CDN_PHASE3.md`
 - **Deferred:** pull-through fill/eviction/prewarm, live redirects, real enrollment/mTLS, Cloudflare tertiary fallback
 
-### Phase 4 — Observability & pilot
+### Phase 4 — Branch cache data-plane simulation
+- **Implemented (flags OFF):** offline grant-gated cache engine, local OriginFetcher, atomic fill/single-flight, LRU capacity, prewarm planner, pilot readiness harness — see `HYBRID_CDN_PHASE4.md`
+- **Deferred:** live branch HTTP service, real mTLS origin adapter, client redirects, production compose activation
+
+### Phase 5 — Observability & live pilot
 - Hit/miss, origin bandwidth, cache fill latency, error budgets
 - Capacity planning worksheets from measured ABR bitrates
 - Single-branch pilot rollout runbook; rollback to origin-only

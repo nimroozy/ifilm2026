@@ -45,6 +45,30 @@ def collect_object_storage_errors(settings: Settings) -> list[str]:
                 "ENABLE_CDN_SYNC must remain false when branch-cache control plane is used"
             )
 
+    # Phase 4 data-plane simulation flags (offline only).
+    if settings.enable_branch_cache_pull_through and not settings.enable_branch_cache_data_plane_sim:
+        errors.append(
+            "ENABLE_BRANCH_CACHE_PULL_THROUGH requires ENABLE_BRANCH_CACHE_DATA_PLANE_SIM=true"
+        )
+    if settings.enable_branch_cache_local_serve and not settings.enable_branch_cache_data_plane_sim:
+        errors.append(
+            "ENABLE_BRANCH_CACHE_LOCAL_SERVE requires ENABLE_BRANCH_CACHE_DATA_PLANE_SIM=true"
+        )
+    if settings.enable_branch_cache_data_plane_sim:
+        if not (settings.edge_grant_public_key_pem or "").strip():
+            errors.append(
+                "EDGE_GRANT_PUBLIC_KEY_PEM is required when ENABLE_BRANCH_CACHE_DATA_PLANE_SIM=true"
+            )
+        if is_prod_like(settings.app_env):
+            errors.append(
+                "ENABLE_BRANCH_CACHE_DATA_PLANE_SIM must remain false in staging/production "
+                "(Phase 4 is offline simulation only; no live branch data-plane)"
+            )
+        if settings.enable_cdn_sync:
+            errors.append(
+                "ENABLE_CDN_SYNC must remain false when branch-cache data-plane sim is used"
+            )
+
     if not settings.enable_object_storage:
         if settings.enable_r2_hot_tier:
             errors.append("ENABLE_R2_HOT_TIER requires ENABLE_OBJECT_STORAGE=true")

@@ -188,6 +188,17 @@ class Settings(BaseSettings):
     edge_grant_private_key_pem: str = ""
     edge_grant_public_key_pem: str = ""
 
+    # Hybrid CDN Phase 4 — offline branch-cache DATA-PLANE simulation (default OFF).
+    # No live redirects, no production container, no real origin HTTP.
+    enable_branch_cache_data_plane_sim: bool = False
+    enable_branch_cache_pull_through: bool = False
+    enable_branch_cache_local_serve: bool = False
+    branch_cache_sim_root: str = ""
+    branch_cache_sim_high_watermark_bytes: int = 50_000_000_000
+    branch_cache_sim_low_watermark_bytes: int = 40_000_000_000
+    branch_cache_sim_max_object_bytes: int = 67_108_864  # 64 MiB
+    branch_cache_sim_max_concurrent_fills: int = 4
+
     # Watch progress / Continue Watching (Phase 10)
     enable_watch_history: bool = True
     watch_progress_min_seconds: int = 30
