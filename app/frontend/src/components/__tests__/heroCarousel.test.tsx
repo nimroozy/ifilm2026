@@ -43,11 +43,13 @@ function renderHero(featured: CatalogMovie[]) {
 describe('HeroCarousel G1 manual navigation', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    window.localStorage.setItem('ifilm.locale', 'en');
   });
 
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
+    window.localStorage.setItem('ifilm.locale', 'en');
   });
 
   it('does not auto-advance slides (no timer)', () => {
@@ -102,10 +104,34 @@ describe('HeroCarousel G1 manual navigation', () => {
     expect(screen.getAllByTestId('watchlist-toggle').length).toBeGreaterThan(0);
   });
 
-  it('keeps hero actions on one compact row for My List icon affordance', () => {
+  it('keeps hero actions wrappable so mobile RTL labels are not truncated', () => {
     renderHero([movie({ id: 1, title: 'Alpha' }), movie({ id: 2, title: 'Beta' })]);
-    expect(screen.getByTestId('hero-actions')).toBeTruthy();
-    expect(screen.getByTestId('hero-play')).toBeTruthy();
-    expect(screen.getByTestId('hero-more-info')).toBeTruthy();
+    const actions = screen.getByTestId('hero-actions');
+    expect(actions.className).toMatch(/flex-wrap/);
+    expect(screen.getByTestId('hero-play').querySelector('span')?.className || '').not.toMatch(
+      /\btruncate\b/
+    );
+    expect(screen.getByTestId('hero-more-info').querySelector('span')?.className || '').not.toMatch(
+      /\btruncate\b/
+    );
+  });
+
+  it('marks synopsis for automatic text direction', () => {
+    renderHero([movie({ id: 1, title: 'Alpha', description: 'English synopsis with فارسی' })]);
+    expect(screen.getByTestId('hero-synopsis')).toHaveAttribute('dir', 'auto');
+  });
+
+  it('localizes demo-clip CTA label', () => {
+    window.localStorage.setItem('ifilm.locale', 'fa');
+    renderHero([
+      movie({
+        id: 1,
+        title: 'Demo Film',
+        playable: false,
+        hasPlayablePackage: false,
+        hasDemoClip: true,
+      }),
+    ]);
+    expect(screen.getByTestId('hero-play')).toHaveTextContent('پخش کلیپ دمو');
   });
 });

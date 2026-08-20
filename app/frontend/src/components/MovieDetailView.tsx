@@ -359,11 +359,11 @@ export function MovieDetailView({
                         variant="play"
                         className="gap-2"
                         onClick={() => goPlay(false)}
-                        aria-label={`Play demo clip for ${movie.title}`}
+                        aria-label={`${t.hero.playDemoClip} — ${movie.title}`}
                         data-testid="movie-demo-button"
                       >
                         <Play className="h-5 w-5 fill-current" />
-                        Play Demo Clip
+                        {t.hero.playDemoClip}
                       </Button>
                     ) : null}
                     <WatchlistButton movieId={movie.id} />

@@ -4,6 +4,8 @@ import { cn } from '@/lib/utils';
 import { DemoBadge, QualityBadge, RatingBadge } from '@/design-system/Badges';
 import { mediaSizes, surfaces } from '@/design-system/tokens';
 import { sizedArtworkUrl } from '@/lib/imageUrls';
+import { useLang } from '@/components/CustomerLayout';
+import { translations } from '@/data/translations';
 
 export type MediaCardVariant = 'poster' | 'landscape';
 
@@ -49,6 +51,10 @@ function sizeClass(variant: MediaCardVariant, size: 'sm' | 'md' | 'lg') {
   return mediaSizes.posterMd;
 }
 
+function labelWithTitle(template: string, title: string): string {
+  return template.replace('{title}', title);
+}
+
 function stop(event: MouseEvent) {
   event.preventDefault();
   event.stopPropagation();
@@ -82,6 +88,8 @@ export function MediaCard({
   priority = false,
   'data-testid': testId = 'media-card',
 }: MediaCardProps) {
+  const { t } = useLang();
+  const cardCopy = t.card ?? translations.en.card;
   const aspect = variant === 'landscape' ? 'aspect-video' : 'aspect-[2/3]';
   const intrinsic =
     variant === 'landscape'
@@ -170,9 +178,9 @@ export function MediaCard({
             {showPlay ? (
               <button
                 type="button"
-                aria-label={`Play ${title}`}
+                aria-label={labelWithTitle(cardCopy.play, title)}
                 data-testid="media-card-play"
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md"
+                className="flex min-h-11 min-w-11 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md"
                 onClick={(event) => {
                   stop(event);
                   playHandler?.();
@@ -184,9 +192,9 @@ export function MediaCard({
             {onMyList ? (
               <button
                 type="button"
-                aria-label={`My List ${title}`}
+                aria-label={labelWithTitle(cardCopy.myList, title)}
                 data-testid="media-card-mylist"
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/25 bg-white/10 text-white backdrop-blur-sm"
+                className="flex min-h-11 min-w-11 items-center justify-center rounded-full border border-white/25 bg-white/10 text-white backdrop-blur-sm"
                 onClick={(event) => {
                   stop(event);
                   onMyList();
@@ -198,9 +206,9 @@ export function MediaCard({
             {onActivate ? (
               <button
                 type="button"
-                aria-label={`Details ${title}`}
+                aria-label={labelWithTitle(cardCopy.details, title)}
                 data-testid="media-card-details"
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/25 bg-white/10 text-white backdrop-blur-sm"
+                className="flex min-h-11 min-w-11 items-center justify-center rounded-full border border-white/25 bg-white/10 text-white backdrop-blur-sm"
                 onClick={(event) => {
                   stop(event);
                   onActivate();

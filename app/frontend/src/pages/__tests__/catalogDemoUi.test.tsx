@@ -120,7 +120,7 @@ describe('demo catalog movie UI', () => {
 
     renderMovieDetails();
 
-    expect(await screen.findByRole('button', { name: /Play demo clip for TMDB Demo Title/i })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Play Demo Clip — TMDB Demo Title/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Watch trailer for TMDB Demo Title/i })).toBeInTheDocument();
     expect(screen.queryByTestId('movie-unavailable')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Watch Full Movie/i })).not.toBeInTheDocument();

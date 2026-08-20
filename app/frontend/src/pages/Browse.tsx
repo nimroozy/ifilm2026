@@ -145,6 +145,14 @@ export function MoviesPage({ audience = 'all' }: { audience?: 'all' | 'children'
     setSearchParams(params, { replace: true });
   }
 
+  const hasActiveFilters = Boolean(search.trim()) || genre !== 'all' || sort !== 'newest';
+
+  function clearFilters() {
+    setSearch('');
+    setSort('newest');
+    onGenreChange('all');
+  }
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -219,7 +227,11 @@ export function MoviesPage({ audience = 'all' }: { audience?: 'all' | 'children'
             />
           </div>
           <Select value={genre} onValueChange={onGenreChange}>
-            <SelectTrigger className="w-[140px] bg-card border-border" data-testid="movies-genre-filter">
+            <SelectTrigger
+              className="w-[140px] bg-card border-border"
+              data-testid="movies-genre-filter"
+              aria-label={t.browse.genreFilter}
+            >
               <SelectValue placeholder={t.common.filter} />
             </SelectTrigger>
             <SelectContent>
@@ -232,21 +244,39 @@ export function MoviesPage({ audience = 'all' }: { audience?: 'all' | 'children'
             </SelectContent>
           </Select>
           <Select value={sort} onValueChange={setSort}>
-            <SelectTrigger className="w-[140px] bg-card border-border">
+            <SelectTrigger
+              className="w-[140px] bg-card border-border"
+              data-testid="movies-sort-filter"
+              aria-label={t.browse.sortFilter}
+            >
               <SelectValue placeholder={t.common.sort} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="newest">Newest</SelectItem>
-              <SelectItem value="rating">Rating</SelectItem>
-              <SelectItem value="popular">Popular</SelectItem>
-              <SelectItem value="title">Title</SelectItem>
+              <SelectItem value="newest">{t.browse.sortNewest}</SelectItem>
+              <SelectItem value="rating">{t.browse.sortRating}</SelectItem>
+              <SelectItem value="popular">{t.browse.sortPopular}</SelectItem>
+              <SelectItem value="title">{t.browse.sortTitle}</SelectItem>
             </SelectContent>
           </Select>
           <div className="flex gap-1">
-            <Button variant={view === 'grid' ? 'default' : 'outline'} size="icon" onClick={() => setView('grid')}>
+            <Button
+              variant={view === 'grid' ? 'default' : 'outline'}
+              size="icon"
+              className="min-h-11 min-w-11"
+              onClick={() => setView('grid')}
+              aria-label={t.browse.gridView}
+              data-testid="movies-view-grid"
+            >
               <Grid className="h-4 w-4" />
             </Button>
-            <Button variant={view === 'list' ? 'default' : 'outline'} size="icon" onClick={() => setView('list')}>
+            <Button
+              variant={view === 'list' ? 'default' : 'outline'}
+              size="icon"
+              className="min-h-11 min-w-11"
+              onClick={() => setView('list')}
+              aria-label={t.browse.listView}
+              data-testid="movies-view-list"
+            >
               <List className="h-4 w-4" />
             </Button>
           </div>
@@ -257,8 +287,18 @@ export function MoviesPage({ audience = 'all' }: { audience?: 'all' | 'children'
         ) : error ? (
           <PageError message={error} onRetry={load} />
         ) : items.length === 0 ? (
-          <div className="text-center py-20 text-muted-foreground">
+          <div className="text-center py-20 text-muted-foreground" data-testid="movies-no-results">
             <p className="text-lg">{t.search.noResults}</p>
+            {hasActiveFilters ? (
+              <Button
+                variant="secondary"
+                className="mt-4"
+                onClick={clearFilters}
+                data-testid="movies-clear-filters"
+              >
+                {t.browse.clearFilters}
+              </Button>
+            ) : null}
           </div>
         ) : view === 'grid' ? (
           <div className={mediaGridClass}>
@@ -381,7 +421,11 @@ export function SeriesPage() {
             />
           </div>
           <Select value={genre} onValueChange={setGenre}>
-            <SelectTrigger className="w-[140px] bg-card border-border">
+            <SelectTrigger
+              className="w-[140px] bg-card border-border"
+              data-testid="series-genre-filter"
+              aria-label={t.browse.genreFilter}
+            >
               <SelectValue placeholder={t.common.filter} />
             </SelectTrigger>
             <SelectContent>
@@ -400,8 +444,21 @@ export function SeriesPage() {
         ) : error ? (
           <PageError message={error} onRetry={load} />
         ) : items.length === 0 ? (
-          <div className="text-center py-20 text-muted-foreground">
+          <div className="text-center py-20 text-muted-foreground" data-testid="series-no-results">
             <p className="text-lg">{t.search.noResults}</p>
+            {Boolean(search.trim()) || genre !== 'all' ? (
+              <Button
+                variant="secondary"
+                className="mt-4"
+                onClick={() => {
+                  setSearch('');
+                  setGenre('all');
+                }}
+                data-testid="series-clear-filters"
+              >
+                {t.browse.clearFilters}
+              </Button>
+            ) : null}
           </div>
         ) : (
           <div className={mediaGridClass}>
