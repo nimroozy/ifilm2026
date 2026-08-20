@@ -18,6 +18,8 @@ Legacy coarse keys from the foundation seed remain supported with a narrow map:
 | `processing.manage` | `processing.manage`, `processing` |
 | `streaming.read` | `streaming.read`, `streaming.manage`, `streaming` |
 | `streaming.manage` | `streaming.manage`, `streaming` |
+| `cdn.read` | `cdn.read`, `cdn.manage`, `cdn` |
+| `cdn.manage` | `cdn.manage`, `cdn` |
 | `catalog.read` | `catalog.read` (exact; movies.read / series.read do not grant workflow reads) |
 | `catalog.edit` | `catalog.edit` |
 | `catalog.review` | `catalog.review` |
@@ -63,6 +65,8 @@ PERMISSION_ALIASES: dict[str, frozenset[str]] = {
     "processing.manage": frozenset({"processing.manage", "processing"}),
     "streaming.read": frozenset({"streaming.read", "streaming.manage", "streaming"}),
     "streaming.manage": frozenset({"streaming.manage", "streaming"}),
+    "cdn.read": frozenset({"cdn.read", "cdn.manage", "cdn"}),
+    "cdn.manage": frozenset({"cdn.manage", "cdn"}),
 }
 
 

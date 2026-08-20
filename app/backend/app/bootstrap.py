@@ -51,6 +51,8 @@ SUPER_PERMISSIONS = [
     "streaming.manage",
     "encoding",
     "cdn",
+    "cdn.read",
+    "cdn.manage",
     "users",
     "branches",
     "reports",

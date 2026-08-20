@@ -1,5 +1,6 @@
 from app.models.admin import AdminRole, AdminUser
 from app.models.app_settings import AppSetting
+from app.models.branch_cache import BranchCacheNode
 from app.models.cdn import Branch, CDNNode, CDNSyncJob
 from app.models.collections import Collection, CollectionItem
 from app.models.content import Episode, Genre, Movie, Season, Series
@@ -28,6 +29,7 @@ __all__ = [
     "AdminUser",
     "AppSetting",
     "Branch",
+    "BranchCacheNode",
     "CDNNode",
     "CDNSyncJob",
     "Collection",

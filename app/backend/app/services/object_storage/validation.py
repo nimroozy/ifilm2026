@@ -19,6 +19,32 @@ def collect_object_storage_errors(settings: Settings) -> list[str]:
             "(experimental edge sync is not a signed branch-cache protocol)"
         )
 
+    # Phase 3 control-plane flag dependencies (independent of object storage).
+    if settings.enable_edge_grant_issue and not settings.enable_branch_cache_control_plane:
+        errors.append("ENABLE_EDGE_GRANT_ISSUE requires ENABLE_BRANCH_CACHE_CONTROL_PLANE=true")
+    if (
+        settings.enable_branch_cache_shadow_routing
+        and not settings.enable_branch_cache_control_plane
+    ):
+        errors.append(
+            "ENABLE_BRANCH_CACHE_SHADOW_ROUTING requires ENABLE_BRANCH_CACHE_CONTROL_PLANE=true"
+        )
+    if settings.enable_edge_grant_issue:
+        if not (settings.edge_grant_private_key_pem or "").strip():
+            errors.append(
+                "EDGE_GRANT_PRIVATE_KEY_PEM is required when ENABLE_EDGE_GRANT_ISSUE=true"
+            )
+        if not (settings.edge_grant_public_key_pem or "").strip():
+            errors.append("EDGE_GRANT_PUBLIC_KEY_PEM is required when ENABLE_EDGE_GRANT_ISSUE=true")
+        ttl = int(settings.edge_grant_ttl_seconds or 0)
+        if ttl < 15 or ttl > 300:
+            errors.append("EDGE_GRANT_TTL_SECONDS must be between 15 and 300")
+    if is_prod_like(settings.app_env) and settings.enable_branch_cache_control_plane:
+        if settings.enable_cdn_sync:
+            errors.append(
+                "ENABLE_CDN_SYNC must remain false when branch-cache control plane is used"
+            )
+
     if not settings.enable_object_storage:
         if settings.enable_r2_hot_tier:
             errors.append("ENABLE_R2_HOT_TIER requires ENABLE_OBJECT_STORAGE=true")

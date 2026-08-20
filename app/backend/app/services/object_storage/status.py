@@ -27,6 +27,9 @@ def safe_storage_status(settings: Settings | None = None) -> dict:
         "enable_r2_hot_tier": bool(cfg.enable_r2_hot_tier),
         "enable_origin_package_sync": bool(cfg.enable_origin_package_sync),
         "enable_origin_hls_read_fallback": bool(cfg.enable_origin_hls_read_fallback),
+        "enable_branch_cache_control_plane": bool(cfg.enable_branch_cache_control_plane),
+        "enable_edge_grant_issue": bool(cfg.enable_edge_grant_issue),
+        "enable_branch_cache_shadow_routing": bool(cfg.enable_branch_cache_shadow_routing),
         "enable_cdn_sync_legacy": bool(cfg.enable_cdn_sync),
         "roles": {
             "local_workspace": {
@@ -58,8 +61,15 @@ def safe_storage_status(settings: Settings | None = None) -> dict:
                 "promote_views_threshold": int(cfg.cdn_hot_tier_promote_views_threshold),
             },
             "branch_cache": {
-                "implemented": False,
-                "note": "Phase 2+: pull-through caches with verification-only public keys",
+                "control_plane": bool(cfg.enable_branch_cache_control_plane),
+                "data_plane_active": False,
+                "client_redirect_active": False,
+                "shadow_routing": bool(cfg.enable_branch_cache_shadow_routing),
+                "edge_grant_issue": bool(cfg.enable_edge_grant_issue),
+                "note": (
+                    "Phase 3 control plane: registry + grants + shadow routing; "
+                    "no live branch delivery"
+                ),
             },
         },
         "policy": {
@@ -67,5 +77,6 @@ def safe_storage_status(settings: Settings | None = None) -> dict:
             "cloudflare_stream_default_delivery": False,
             "permanent_public_movie_urls": False,
             "playback_remains_session_authorized": True,
+            "branch_cache_default_off": True,
         },
     }
