@@ -82,6 +82,8 @@ describe('HeroCarousel G1 manual navigation', () => {
       movie({ id: 1, title: 'Logo Film', logoUrl: '/logo.png' }),
     ]);
     expect(screen.getByTestId('hero-title-logo')).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 1, name: 'Logo Film' })).toBeTruthy();
+    expect(screen.getByTestId('hero-title-logo')).toHaveAttribute('alt', '');
     expect(screen.queryByTestId('hero-title-text')).toBeNull();
 
     rerender(
@@ -95,6 +97,16 @@ describe('HeroCarousel G1 manual navigation', () => {
     );
     expect(screen.getByTestId('hero-title-text')).toHaveTextContent('Text Film');
     expect(screen.queryByTestId('hero-title-logo')).toBeNull();
+  });
+
+  it('gives every slide selector a mobile-sized touch target', () => {
+    renderHero([
+      movie({ id: 1, title: 'Alpha' }),
+      movie({ id: 2, title: 'Beta' }),
+    ]);
+    for (const tab of screen.getAllByRole('tab')) {
+      expect(tab).toHaveClass('h-11', 'w-11');
+    }
   });
 
   it('shows My List control (watchlist when authenticated in mock mode)', () => {
