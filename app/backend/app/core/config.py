@@ -140,6 +140,31 @@ class Settings(BaseSettings):
     enable_hls_encoding: bool = False
     enable_local_streaming: bool = False
 
+    # Hybrid CDN / object storage Phase 1 — defaults OFF.
+    # Local MEDIA_ROOT remains the active workspace until cutover.
+    # Experimental ENABLE_CDN_SYNC is unrelated and must stay false in prod.
+    enable_object_storage: bool = False
+    media_origin_provider: str = "local"  # local | s3_compatible
+    media_origin_endpoint_url: str = ""
+    media_origin_region: str = "us-east-1"
+    media_origin_bucket: str = ""
+    media_origin_access_key_id: str = ""
+    media_origin_secret_access_key: str = ""
+    media_origin_force_path_style: bool = True  # MinIO / Ceph RGW
+    media_object_key_prefix: str = "ifilm"
+
+    # Optional Cloudflare R2 hot tier (S3-compatible). Never required; never mirrors full library.
+    enable_r2_hot_tier: bool = False
+    r2_endpoint_url: str = ""
+    r2_bucket: str = ""
+    r2_region: str = "auto"
+    r2_access_key_id: str = ""
+    r2_secret_access_key: str = ""
+    # Policy knobs (no destructive automation in Phase 1).
+    cdn_hot_tier_max_titles: int = 0
+    cdn_hot_tier_cooldown_days: int = 14
+    cdn_hot_tier_promote_views_threshold: int = 0
+
     # Watch progress / Continue Watching (Phase 10)
     enable_watch_history: bool = True
     watch_progress_min_seconds: int = 30
@@ -259,6 +284,9 @@ class Settings(BaseSettings):
         self.subscriber_identity_mode = (
             self.subscriber_identity_mode or "disabled"
         ).strip().lower()
+        self.media_origin_provider = (self.media_origin_provider or "local").strip().lower()
+        if self.media_origin_provider not in {"local", "s3_compatible"}:
+            raise ValueError("MEDIA_ORIGIN_PROVIDER must be local or s3_compatible")
         self.csp_mode = (self.csp_mode or "").strip().lower()
         if self.csp_mode and self.csp_mode not in {"production", "development"}:
             raise ValueError("CSP_MODE must be production, development, or empty")

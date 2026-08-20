@@ -11,9 +11,11 @@ In-scope for this foundation hardening pass:
 
 Out of scope / unfinished:
 
-- Real media encoding integrity
-- CDN trust boundaries in production
+- Full CDN trust boundaries for branch pull-through caches (Phase 2+)
 - Full SAS Radius deployment hardening
+
+Hybrid object-storage Phase 1 adds a provider-neutral origin interface with flags
+default OFF. See `docs/media/HYBRID_CDN_FOUNDATION.md`.
 
 ## Assets
 
@@ -48,5 +50,7 @@ Out of scope / unfinished:
 
 - Live Radius integration is unverified.
 - Placeholder encoding can be mistaken for real HLS output if flags are enabled prematurely.
-- Static `/media` mount has no per-object authorization.
-- CDN sync currently trusts configured node endpoints without a mature authenticity model.
+- Static `/media` mount has no per-object authorization (removed from public serving; do not reintroduce).
+- Legacy CDN sync (`ENABLE_CDN_SYNC`) trusts configured node endpoints without a mature authenticity model — keep disabled; do not build hybrid CDN on it.
+- Object-storage credentials, when configured, must never be exposed via APIs, frontend, or logs (`safe_storage_status` is secret-free).
+- Optional R2 hot tier must remain capacity-capped; mirroring the full library defeats cost and security goals.

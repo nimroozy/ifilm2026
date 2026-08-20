@@ -30,6 +30,10 @@ def _settings(**kwargs) -> Settings:
         "radius_enabled": True,
         "radius_entitlement_mapping_enabled": False,
         "radius_mock_users": [],
+        # Isolate from conftest ENABLE_CDN_SYNC=true; prod-like envs must keep legacy sync off.
+        "enable_cdn_sync": False,
+        "enable_object_storage": False,
+        "enable_r2_hot_tier": False,
         "_env_file": None,
     }
     base.update(kwargs)
@@ -302,6 +306,7 @@ def test_default_provider_mode_is_disabled(monkeypatch):
     monkeypatch.setenv("ENABLE_RADIUS_LOGIN", "false")
     monkeypatch.setenv("SUBSCRIBER_IDENTITY_MODE", "disabled")
     monkeypatch.setenv("RADIUS_ENTITLEMENT_MAPPING_ENABLED", "false")
+    monkeypatch.setenv("ENABLE_CDN_SYNC", "false")
     settings = Settings(
         app_env="production",
         jwt_secret="production-grade-jwt-secret-value-32",
@@ -313,6 +318,9 @@ def test_default_provider_mode_is_disabled(monkeypatch):
         radius_entitlement_mapping_enabled=False,
         radius_enabled=False,
         radius_mode="live",
+        enable_cdn_sync=False,
+        enable_object_storage=False,
+        enable_r2_hot_tier=False,
         _env_file=None,
     )
     assert settings.subscriber_identity_mode == "disabled"
