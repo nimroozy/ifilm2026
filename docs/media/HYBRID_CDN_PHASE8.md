@@ -38,6 +38,7 @@ Phase 6/7 HTTP/lab flags remain false in production compose and installer.
 | Certs mounted, never generated/baked | Private keys stay operator-controlled |
 | Enrollment manifest is fingerprints + paths only | No PEM/private material in git or APIs |
 | Staging gates ≠ deployment | Human approval + separate deploy step required |
+| Origin access logs | Stable `event=` + `correlation_id=` + truncated one-way `object_ref=` hash only — never raw asset/package/path, host, URL, PEM, grant, or exception text |
 
 ## Runbook (package → future deploy)
 

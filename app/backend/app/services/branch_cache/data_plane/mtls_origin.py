@@ -10,6 +10,7 @@ import hashlib
 import ipaddress
 import logging
 import ssl
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -36,6 +37,29 @@ from app.services.branch_cache.data_plane.origin_allowlist import (
 )
 
 logger = logging.getLogger("app.branch_cache.mtls_origin")
+
+
+def _correlation_id() -> str:
+    return uuid.uuid4().hex[:16]
+
+
+def _object_ref_hash(*, asset_id: str, package_id: str, relative_path: str) -> str:
+    """One-way truncated hash of the normalized non-secret object identity.
+
+    Never log the raw asset/package/path. Hash input is the cache-style key only.
+    """
+    key = f"{asset_id}/{package_id}/{relative_path}"
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
+
+
+def _safe_fetch_log(*, event: str, correlation_id: str, object_ref_hash: str) -> None:
+    """Emit a stable, non-sensitive origin fetch event line."""
+    logger.info(
+        "event=%s correlation_id=%s object_ref=%s",
+        event,
+        correlation_id,
+        object_ref_hash,
+    )
 
 
 class MtLsOriginConfigError(ValueError):
@@ -258,45 +282,84 @@ class MtLsHttpsOriginFetcher:
     def fetch(self, *, asset_id: str, package_id: str, relative_path: str) -> OriginObject:
         rel = normalize_relative_path(relative_path)
         url = self._object_url(asset_id=asset_id, package_id=package_id, relative_path=rel)
-        # Log only host + object identity — never full URL with query (none expected).
-        logger.info(
-            "mtls_origin_fetch host=%s asset=%s package=%s path=%s",
-            self.endpoint.host,
-            asset_id,
-            package_id,
-            rel,
-        )
+        cid = _correlation_id()
+        ref = _object_ref_hash(asset_id=asset_id, package_id=package_id, relative_path=rel)
+        _safe_fetch_log(event="mtls_origin_fetch", correlation_id=cid, object_ref_hash=ref)
         try:
             with self._client.stream("GET", url) as resp:
                 if resp.is_redirect or resp.status_code in {301, 302, 303, 307, 308}:
+                    _safe_fetch_log(
+                        event="mtls_origin_redirect_refused",
+                        correlation_id=cid,
+                        object_ref_hash=ref,
+                    )
                     raise DataPlaneError("origin redirects forbidden", code=CODE_ORIGIN)
                 if resp.status_code == 404:
+                    _safe_fetch_log(
+                        event="mtls_origin_miss",
+                        correlation_id=cid,
+                        object_ref_hash=ref,
+                    )
                     raise DataPlaneError("origin object missing", code=CODE_ORIGIN)
                 if resp.status_code >= 400:
+                    _safe_fetch_log(
+                        event="mtls_origin_error",
+                        correlation_id=cid,
+                        object_ref_hash=ref,
+                    )
                     raise DataPlaneError("origin unavailable", code=CODE_ORIGIN)
                 cl = resp.headers.get("content-length")
                 if cl is not None:
                     try:
                         if int(cl) > self.max_body_bytes:
+                            _safe_fetch_log(
+                                event="mtls_origin_oversize",
+                                correlation_id=cid,
+                                object_ref_hash=ref,
+                            )
                             raise DataPlaneError("object exceeds size limit", code=CODE_OVERSIZE)
-                    except ValueError as exc:
-                        raise DataPlaneError("invalid content-length", code=CODE_ORIGIN) from exc
+                    except ValueError:
+                        _safe_fetch_log(
+                            event="mtls_origin_error",
+                            correlation_id=cid,
+                            object_ref_hash=ref,
+                        )
+                        raise DataPlaneError("invalid content-length", code=CODE_ORIGIN) from None
                 chunks: list[bytes] = []
                 total = 0
                 for chunk in resp.iter_bytes():
                     total += len(chunk)
                     if total > self.max_body_bytes:
+                        _safe_fetch_log(
+                            event="mtls_origin_oversize",
+                            correlation_id=cid,
+                            object_ref_hash=ref,
+                        )
                         raise DataPlaneError("object exceeds size limit", code=CODE_OVERSIZE)
                     chunks.append(chunk)
                 data = b"".join(chunks)
-        except httpx.TimeoutException as exc:
-            raise DataPlaneError("origin timeout", code=CODE_TIMEOUT) from exc
-        except httpx.HTTPError as exc:
-            raise DataPlaneError("origin unavailable", code=CODE_ORIGIN) from exc
+        except DataPlaneError:
+            raise
+        except httpx.TimeoutException:
+            _safe_fetch_log(
+                event="mtls_origin_timeout",
+                correlation_id=cid,
+                object_ref_hash=ref,
+            )
+            raise DataPlaneError("origin timeout", code=CODE_TIMEOUT) from None
+        except httpx.HTTPError:
+            # Do not log exception strings — they may embed URLs.
+            _safe_fetch_log(
+                event="mtls_origin_error",
+                correlation_id=cid,
+                object_ref_hash=ref,
+            )
+            raise DataPlaneError("origin unavailable", code=CODE_ORIGIN) from None
 
         digest = hashlib.sha256(data).hexdigest()
         ctype = resp.headers.get("content-type") or content_type_for(rel)
         etag = resp.headers.get("etag") or f'W/"{digest[:16]}"'
+        _safe_fetch_log(event="mtls_origin_ok", correlation_id=cid, object_ref_hash=ref)
         return OriginObject(
             key=f"{asset_id}/{package_id}/{rel}",
             data=data,

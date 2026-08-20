@@ -612,6 +612,72 @@ def test_asgi_http_service_with_mtls_origin_and_drain(tmp_path: Path):
         server.shutdown()
 
 
+def test_mtls_origin_logs_never_leak_identifiers(tmp_path: Path, caplog: pytest.LogCaptureFixture):
+    import logging
+
+    from app.services.branch_cache.data_plane.mtls_origin import _object_ref_hash
+
+    pki = generate_test_pki(tmp_path / "pki")
+    origin_root = tmp_path / "origin"
+    _seed_origin(origin_root)
+    server, base, _ = _start_mtls_origin(pki, origin_root)
+    asset = "asset-secret-42"
+    package = "pkg-secret-99"
+    rel = "720p/seg_000.ts"
+    # Unique identifiable strings that must never appear in logs.
+    (origin_root / asset / package / "720p").mkdir(parents=True)
+    (origin_root / asset / package / rel).write_bytes(b"SEGMENTDATA" * 64)
+    expected_ref = _object_ref_hash(asset_id=asset, package_id=package, relative_path=rel)
+    try:
+        fetcher = MtLsHttpsOriginFetcher(
+            endpoint_url=base,
+            client_cert_path=pki.client_cert,
+            client_key_path=pki.client_key,
+            ca_bundle_path=pki.ca_cert,
+            enable_mtls_staging_candidate=True,
+            allow_loopback_for_tests=True,
+            app_env="test",
+        )
+        with caplog.at_level(logging.DEBUG, logger="app.branch_cache.mtls_origin"):
+            obj = fetcher.fetch(asset_id=asset, package_id=package, relative_path=rel)
+            assert obj.size_bytes > 0
+            # Force an error path that previously might have logged exception text.
+            with pytest.raises(DataPlaneError):
+                fetcher.fetch(asset_id=asset, package_id=package, relative_path="720p/missing.ts")
+        text = "\n".join(r.getMessage() for r in caplog.records)
+        text_lower = text.lower()
+        # Must not appear at any captured level:
+        for forbidden in (
+            asset,
+            package,
+            rel,
+            "720p/",
+            base,
+            "https://",
+            "BEGIN ",
+            "PRIVATE KEY",
+            "CERTIFICATE",
+            "Authorization",
+            "Bearer ",
+            str(pki.client_cert),
+            str(pki.client_key),
+            pki.client_fingerprint_sha256,
+        ):
+            assert forbidden not in text, f"leaked {forbidden!r} in logs: {text}"
+        assert "event=mtls_origin_fetch" in text
+        assert "correlation_id=" in text
+        assert f"object_ref={expected_ref}" in text
+        assert "host=" not in text
+        assert "asset=" not in text
+        assert "package=" not in text
+        assert " path=" not in text and not any(
+            m.startswith("path=") for m in text.replace("object_ref=", "").split()
+        )
+        fetcher.close()
+    finally:
+        server.shutdown()
+
+
 def test_central_stream_unchanged(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("ENABLE_BRANCH_CACHE_HTTP_MTLS_STAGING_CANDIDATE", "false")
     from app.core.config import get_settings
