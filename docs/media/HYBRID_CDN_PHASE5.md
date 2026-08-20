@@ -3,7 +3,7 @@
 **Status:** Flag-gated; defaults **OFF**  
 **Stacked on:** `cursor/hybrid-cdn-phase4-cache-dataplane-sim-4873` (PR #84)  
 **Branch:** `cursor/hybrid-cdn-phase5-pilot-readiness-4873`  
-**Dependency order:** #81 → #82 → #83 → #84 → #85 → Phase 6 (HTTP candidate)
+**Dependency order:** #81 → #82 → #83 → #84 → #85 → #86 → Phase 7
 
 ## Boundary
 

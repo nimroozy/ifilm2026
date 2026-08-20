@@ -1,6 +1,6 @@
 # Hybrid CDN — single-branch pilot runbook (lab → future staging)
 
-**Dependency order:** #81 → #82 → #83 → #84 → #85 → Phase 6 (HTTP candidate)  
+**Dependency order:** #81 → #82 → #83 → #84 → #85 → #86 → Phase 7 (lab artifact)  
 **Status:** Documentation only. No live pilot is authorized by this file alone.
 
 ## Preconditions

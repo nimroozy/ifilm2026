@@ -3,7 +3,7 @@
 **Status:** Flag-gated; defaults **OFF**  
 **Stacked on:** `cursor/hybrid-cdn-phase5-pilot-readiness-4873` (PR #85)  
 **Branch:** `cursor/hybrid-cdn-phase6-branch-service-candidate-4873`  
-**Dependency order:** #81 → #82 → #83 → #84 → #85 → Phase 6
+**Dependency order:** #81 → #82 → #83 → #84 → #85 → #86 → Phase 7
 
 ## Boundary
 
@@ -17,8 +17,8 @@
 - Startup validation forbidding private signing keys, Portal/SAS, broad roots, prod activation
 
 **Deferred**
-- Real mTLS sockets, systemd/container, production/staging compose activation
-- Node enrollment, DNS/Cloudflare/R2/MinIO/Ceph, client redirects, live pilot
+- Real mTLS sockets, production/staging compose activation, enrollment, client redirects, live pilot
+- (Container lab artifact moved to Phase 7 — still not production-activated)
 
 ## Flags (all default false)
 

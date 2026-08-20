@@ -209,6 +209,8 @@ class Settings(BaseSettings):
     enable_branch_cache_http_health: bool = False
     enable_branch_cache_http_metrics: bool = False
     enable_branch_cache_http_lab_https_adapter: bool = False
+    # Phase 7 — CI/lab container artifact entrypoint gate (default OFF).
+    enable_branch_cache_http_lab_artifact: bool = False
 
     # Watch progress / Continue Watching (Phase 10)
     enable_watch_history: bool = True

@@ -1,0 +1,64 @@
+# LAB-ONLY branch-cache artifact compose (Phase 7).
+#
+# Completely separate from packaging/compose/docker-compose.production.yml.
+# Defaults: network_mode: none, no ports, read-only root, cap_drop ALL,
+# no-new-privileges, non-root, dedicated cache volume, validate-only entry.
+#
+# Never activated by the installer. Do not merge into production compose.
+#
+# Future fixed mTLS origin networking requires a separately reviewed staging phase.
+
+name: ifilm-branch-cache-lab
+
+services:
+  branch-cache-lab:
+    build:
+      context: ../../app/backend
+      dockerfile: Dockerfile.branch-cache.lab
+    image: ifilm-branch-cache-lab:local
+    user: "10001:10001"
+    read_only: true
+    network_mode: "none"
+    # Intentionally no `ports:` — do not publish to the host.
+    security_opt:
+      - no-new-privileges:true
+      # AppArmor/seccomp: use host defaults; document docker-default seccomp.
+    cap_drop:
+      - ALL
+    environment:
+      APP_ENV: development
+      ENABLE_BRANCH_CACHE_HTTP_LAB_ARTIFACT: "true"
+      ENABLE_BRANCH_CACHE_HTTP_SERVICE: "true"
+      ENABLE_BRANCH_CACHE_HTTP_HEALTH: "false"
+      ENABLE_BRANCH_CACHE_HTTP_METRICS: "false"
+      ENABLE_BRANCH_CACHE_HTTP_LAB_HTTPS_ADAPTER: "false"
+      BRANCH_CACHE_ENTRY_MODE: validate
+      BRANCH_CACHE_NODE_ID: lab-node-1
+      BRANCH_CACHE_SITE_ID: lab-site
+      BRANCH_CACHE_CACHE_ROOT: /var/cache/ifilm-branch
+      BRANCH_CACHE_ORIGIN_ROOT: /var/lib/ifilm-branch-origin
+      BRANCH_CACHE_BIND_HOST: "127.0.0.1"
+      EDGE_GRANT_PUBLIC_KEY_FILE: /run/ifilm/public.pem
+      EDGE_GRANT_KEY_ID: lab
+    volumes:
+      - branch_cache_data:/var/cache/ifilm-branch
+      - ./lab-fixtures/origin:/var/lib/ifilm-branch-origin:ro
+      - ./lab-fixtures/public.pem:/run/ifilm/public.pem:ro
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+          pids: 256
+    # No privileged, no host network, no docker.sock, no /var/run mounts.
+    restart: "no"
+    labels:
+      ifilm.compose.profile: lab-only
+      ifilm.branch_cache.phase: "7"
+      ifilm.branch_cache.activation: never-default
+
+volumes:
+  branch_cache_data:
+    name: ifilm-branch-cache-lab-data

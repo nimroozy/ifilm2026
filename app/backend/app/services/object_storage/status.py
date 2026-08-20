@@ -35,6 +35,7 @@ def safe_storage_status(settings: Settings | None = None) -> dict:
         "enable_branch_cache_local_serve": bool(cfg.enable_branch_cache_local_serve),
         "enable_branch_cache_pilot_lab": bool(cfg.enable_branch_cache_pilot_lab),
         "enable_branch_cache_http_service": bool(cfg.enable_branch_cache_http_service),
+        "enable_branch_cache_http_lab_artifact": bool(cfg.enable_branch_cache_http_lab_artifact),
         "enable_cdn_sync_legacy": bool(cfg.enable_cdn_sync),
         "roles": {
             "local_workspace": {
@@ -76,11 +77,12 @@ def safe_storage_status(settings: Settings | None = None) -> dict:
                 "local_serve": bool(cfg.enable_branch_cache_local_serve),
                 "pilot_lab": bool(cfg.enable_branch_cache_pilot_lab),
                 "http_service_candidate": bool(cfg.enable_branch_cache_http_service),
+                "http_lab_artifact": bool(cfg.enable_branch_cache_http_lab_artifact),
                 "http_service_mounted_in_central_app": False,
                 "live_http_origin": False,
                 "note": (
-                    "Phase 6: isolated ASGI branch-service candidate for tests/lab only; "
-                    "not mounted in central app; no live origin or client redirects"
+                    "Phase 6/7: isolated ASGI branch-service + CI/lab container artifact; "
+                    "not in production compose; no live origin or client redirects"
                 ),
             },
         },
@@ -93,5 +95,6 @@ def safe_storage_status(settings: Settings | None = None) -> dict:
             "branch_data_plane_sim_only": True,
             "live_pilot_requires_human_and_staging": True,
             "branch_http_service_not_in_production_compose": True,
+            "branch_lab_artifact_not_in_release_digests": True,
         },
     }
