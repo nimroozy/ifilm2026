@@ -133,6 +133,18 @@ def collect_object_storage_errors(settings: Settings) -> list[str]:
             "ENABLE_CDN_SYNC must remain false when mTLS staging-candidate is used"
         )
 
+    # Phase 9 one-node staging deploy apply gate (plan/render is offline; apply stays off).
+    if settings.enable_branch_cache_one_node_staging_deploy and is_prod_like(settings.app_env):
+        errors.append(
+            "ENABLE_BRANCH_CACHE_ONE_NODE_STAGING_DEPLOY must remain false in "
+            "staging/production; Phase 9 is plan/render only"
+        )
+    if settings.enable_branch_cache_one_node_staging_deploy:
+        errors.append(
+            "ENABLE_BRANCH_CACHE_ONE_NODE_STAGING_DEPLOY must remain false until a "
+            "separately reviewed remote-apply mechanism exists"
+        )
+
     if not settings.enable_object_storage:
         if settings.enable_r2_hot_tier:
             errors.append("ENABLE_R2_HOT_TIER requires ENABLE_OBJECT_STORAGE=true")

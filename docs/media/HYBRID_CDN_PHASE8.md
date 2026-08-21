@@ -59,3 +59,5 @@ Keep flags false. Do not reference staging-candidate compose from installer. Dra
 - Operator-issued mTLS CA + client cert/key (fingerprints matching manifest)
 - Staging host time sync + disk capacity evidence
 - Explicit human approval record for a future deploy change
+
+Phase 9 adds an offline **one-node staging deploy package** (inventory/preflight/render/firewall/canary/rollback plans only) stacked on this PR — still no live apply.

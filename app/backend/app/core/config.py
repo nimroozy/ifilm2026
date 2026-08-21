@@ -213,6 +213,8 @@ class Settings(BaseSettings):
     enable_branch_cache_http_lab_artifact: bool = False
     # Phase 8 — mTLS staging-candidate origin adapter (default OFF; loopback tests only unless reviewed).
     enable_branch_cache_http_mtls_staging_candidate: bool = False
+    # Phase 9: one-node staging deploy apply gate (plan/render always available; apply stays off).
+    enable_branch_cache_one_node_staging_deploy: bool = False
 
     # Watch progress / Continue Watching (Phase 10)
     enable_watch_history: bool = True

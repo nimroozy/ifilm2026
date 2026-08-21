@@ -36,6 +36,7 @@ Report suspected security issues privately to the repository maintainers. Do not
   - `ENABLE_BRANCH_CACHE_HTTP_LAB_HTTPS_ADAPTER=false`
   - `ENABLE_BRANCH_CACHE_HTTP_LAB_ARTIFACT=false`
   - `ENABLE_BRANCH_CACHE_HTTP_MTLS_STAGING_CANDIDATE=false`
+  - `ENABLE_BRANCH_CACHE_ONE_NODE_STAGING_DEPLOY=false`
   - `ENABLE_RADIUS_LOGIN=false`
   - `ENABLE_MEDIA_PROCESSING=false`
   - `ENABLE_HLS_ENCODING=false`
