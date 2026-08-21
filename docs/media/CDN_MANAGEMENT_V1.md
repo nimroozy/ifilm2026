@@ -4,11 +4,11 @@
 
 The admin control plane manages three independent concerns:
 
-1. Cloudflare R2 is an optional private hot tier in the existing `object_storage` architecture. Its access and secret keys are Fernet-encrypted with `INTEGRATION_SECRETS_KEY`; APIs return only `credentials_configured`.
+1. Cloudflare R2 is an optional private hot tier in the existing `object_storage` architecture, and can also publish **public artwork/trailers** when `ENABLE_ARTWORK_CDN_SYNC` is on (see `docs/media/ARTWORK_CDN_R2.md`). Access and secret keys are Fernet-encrypted with `INTEGRATION_SECRETS_KEY`; APIs return only `credentials_configured`, plus non-secret fields `public_base_url` and `artwork_cdn_enabled`.
 2. `managed_cdn_nodes` stores Main CDN and Cache inventory, desired cache limits, safe lifecycle state and secret-free health metrics. SSH passwords or private keys are encrypted in a dedicated binary column and never returned.
 3. `cdn_prefix_routes` maps canonical IPv4/IPv6 CIDRs to preferred nodes. Selection sorts by prefix length descending, priority ascending, then node name. When no enabled, healthy route applies, the logical default Main CDN is selected.
 
-Protected playback remains in the existing streaming/branch-cache path. Storage credentials are never sent to browsers. Edge delivery continues to use short-lived, package/path-bound signed grants. `ENABLE_CDN_SYNC` remains false in production and `cdn_sync.py` is not used.
+Protected playback remains in the existing streaming/branch-cache path. Storage credentials are never sent to browsers. Edge delivery continues to use short-lived, package/path-bound signed grants. `ENABLE_CDN_SYNC` remains false in production and `cdn_sync.py` is not used. Full movies are never published to the public artwork CDN base URL.
 
 ## API summary
 

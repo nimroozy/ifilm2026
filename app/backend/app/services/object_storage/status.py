@@ -25,6 +25,7 @@ def safe_storage_status(settings: Settings | None = None) -> dict:
     return {
         "enable_object_storage": bool(cfg.enable_object_storage),
         "enable_r2_hot_tier": bool(cfg.enable_r2_hot_tier),
+        "enable_artwork_cdn_sync": bool(cfg.enable_artwork_cdn_sync),
         "enable_origin_package_sync": bool(cfg.enable_origin_package_sync),
         "enable_origin_hls_read_fallback": bool(cfg.enable_origin_hls_read_fallback),
         "enable_branch_cache_control_plane": bool(cfg.enable_branch_cache_control_plane),
@@ -72,6 +73,20 @@ def safe_storage_status(settings: Settings | None = None) -> dict:
                 "cooldown_days": int(cfg.cdn_hot_tier_cooldown_days),
                 "promote_views_threshold": int(cfg.cdn_hot_tier_promote_views_threshold),
             },
+            "artwork_cdn": {
+                "enabled": bool(cfg.enable_artwork_cdn_sync),
+                "provider": "r2" if cfg.enable_artwork_cdn_sync else None,
+                "public_base_host": _endpoint_host(cfg.artwork_cdn_public_base_url)
+                if cfg.enable_artwork_cdn_sync
+                else None,
+                "r2_endpoint_host": _endpoint_host(cfg.r2_endpoint_url)
+                if cfg.enable_artwork_cdn_sync and (cfg.r2_endpoint_url or "").strip()
+                else None,
+                "bucket_configured": bool((cfg.r2_bucket or "").strip())
+                if cfg.enable_artwork_cdn_sync
+                else False,
+                "movies_remain_local": True,
+            },
             "branch_cache": {
                 "control_plane": bool(cfg.enable_branch_cache_control_plane),
                 "data_plane_sim": bool(cfg.enable_branch_cache_data_plane_sim),
@@ -98,6 +113,7 @@ def safe_storage_status(settings: Settings | None = None) -> dict:
             "cloudflare_stream_default_delivery": False,
             "permanent_public_movie_urls": False,
             "playback_remains_session_authorized": True,
+            "artwork_cdn_public_images_ok": True,
             "branch_cache_default_off": True,
             "branch_data_plane_sim_only": True,
             "live_pilot_requires_human_and_staging": True,

@@ -857,8 +857,29 @@ export const adminApi = {
   async createCDNRoute(payload: { cidr: string; node_id: string; priority: number; enabled: boolean }): Promise<CDNPrefixRouteDto> { return (await adminHttp.post('/admin/cdn-management/routes', payload)).data; },
 };
 
-export type R2SettingsDto = { enabled: boolean; endpoint_url: string; account_id?: string | null; bucket: string; region: string; credentials_configured: boolean; updated_at?: string | null };
-export type R2SettingsPayload = { enabled: boolean; endpoint_url: string; account_id?: string; bucket: string; region: string; access_key_id?: string; secret_access_key?: string; remove_credentials?: boolean };
+export type R2SettingsDto = {
+  enabled: boolean;
+  endpoint_url: string;
+  account_id?: string | null;
+  bucket: string;
+  region: string;
+  public_base_url?: string;
+  artwork_cdn_enabled?: boolean;
+  credentials_configured: boolean;
+  updated_at?: string | null;
+};
+export type R2SettingsPayload = {
+  enabled: boolean;
+  endpoint_url: string;
+  account_id?: string;
+  bucket: string;
+  region: string;
+  public_base_url?: string;
+  artwork_cdn_enabled?: boolean;
+  access_key_id?: string;
+  secret_access_key?: string;
+  remove_credentials?: boolean;
+};
 export type ManagedCDNNodeDto = { id: string; name: string; role: 'main'|'cache'; host: string; ssh_port: number; ssh_username: string; credential_type: string; credential_configured: boolean; branch?: string; location?: string; notes?: string; enabled: boolean; draining: boolean; is_default: boolean; cache_limit_bytes?: number; disk_total_bytes?: number; disk_free_bytes?: number; cached_objects: number; cached_titles: number; hit_rate?: number; bandwidth_bytes: number; rtt_ms?: number; software_version?: string; health_status: string; provision_status: string; last_sync_at?: string; last_heartbeat_at?: string };
 export type ManagedCDNNodeCreatedDto = { node: ManagedCDNNodeDto; heartbeat_token: string | null };
 export type ManagedCDNNodePayload = { name: string; role: 'main'|'cache'; host: string; ssh_port: number; ssh_username: string; credential_type: 'password'|'private_key'; credential: string; branch?: string; location?: string; notes?: string; enabled: boolean; is_default: boolean; cache_limit_bytes: number };
