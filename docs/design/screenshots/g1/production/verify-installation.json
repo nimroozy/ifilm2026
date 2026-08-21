@@ -1,0 +1,81 @@
+{
+  "ok": true,
+  "installed_version": "1.15.0",
+  "release_manifest_verified": true,
+  "configured_digests_match": true,
+  "running_digests_match": true,
+  "migration_head": "023_media_tracks_packaging_v1",
+  "health_status": "healthy",
+  "update_channel": "stable",
+  "rollback_target": "1.14.3",
+  "digest_mismatch": false,
+  "digest_summary": {
+    "backend": "3ffd035e171e",
+    "frontend": "c32aed59752f",
+    "running_backend": "3ffd035e171e",
+    "running_frontend": "c32aed59752f"
+  },
+  "checks": [
+    {
+      "name": "current_symlink",
+      "passed": true,
+      "detail": "current release link"
+    },
+    {
+      "name": "release_metadata",
+      "passed": true,
+      "detail": "release-manifest.json"
+    },
+    {
+      "name": "manifest_version",
+      "passed": true,
+      "detail": "1.15.0"
+    },
+    {
+      "name": "signed_manifest",
+      "passed": true,
+      "detail": "digests present in release metadata"
+    },
+    {
+      "name": "env_image_refs",
+      "passed": true,
+      "detail": "immutable digests"
+    },
+    {
+      "name": "compose_image_refs",
+      "passed": true,
+      "detail": "compose config digests"
+    },
+    {
+      "name": "running_image_digests",
+      "passed": true,
+      "detail": "containers inspected"
+    },
+    {
+      "name": "digest_consistency",
+      "passed": true,
+      "detail": "manifest=env=compose=running"
+    },
+    {
+      "name": "migration_head",
+      "passed": true,
+      "detail": "023_media_tracks_packaging_v1"
+    },
+    {
+      "name": "service_health",
+      "passed": true,
+      "detail": "ready"
+    },
+    {
+      "name": "update_channel",
+      "passed": true,
+      "detail": "stable"
+    },
+    {
+      "name": "compose_duplicates",
+      "passed": true,
+      "detail": "no duplicate managed containers"
+    }
+  ],
+  "checked_at": "2026-08-09T11:53:09.161945Z"
+}
