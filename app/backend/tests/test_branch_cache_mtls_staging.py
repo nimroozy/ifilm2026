@@ -5,11 +5,11 @@ from __future__ import annotations
 import json
 import logging
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Iterator
 from unittest.mock import MagicMock
 
 import httpx
