@@ -51,10 +51,12 @@
 | Inventory `extra=forbid` | Reject unknown fields |
 | Immutable `sha256:` digest only | No mutable tags |
 | Hostname + pinned reviewed IPv4 | Detect DNS rebinding / multi-A |
+| Origin **server** cert SAN exact match | Fail closed; unrelated/non-empty SAN never passes |
+| Client cert: clientAuth EKU + expected identity | Split from origin host identity |
 | Bind `127.0.0.1`, UID 10001 | No public bind / no root |
+| Placeholder SBOM/provenance/approval/signature | Non-empty placeholders fail readiness / `plan_success` |
 | Plan never mutates host | Fail closed without apply mechanism |
 | Firewall/canary/rollback are documents | Operator review required |
-| Signing signature placeholder `REQUIRED:` | Incomplete inputs refuse plan success |
 
 ## Remaining live deployment inputs
 
