@@ -1150,9 +1150,9 @@ def test_alembic_heads_single(postgres_url):
     result = _run_alembic(postgres_url, "heads")
     assert result.returncode == 0, result.stdout + result.stderr
     lines = [ln for ln in (result.stdout + result.stderr).splitlines() if ln.strip()]
-    head_lines = [ln for ln in lines if "027_branch_cache_control_plane_v1" in ln]
+    head_lines = [ln for ln in lines if "029_cdn_security_hardening_v1" in ln]
     assert head_lines, result.stdout + result.stderr
-    assert sum(1 for ln in lines if ln.strip().startswith("027_branch_cache_control_plane_v1")) >= 1
+    assert sum(1 for ln in lines if ln.strip().startswith("029_cdn_security_hardening_v1")) >= 1
 
 
 def test_media_upload_reliability_migration_roundtrip(postgres_url):
