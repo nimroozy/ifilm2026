@@ -25,6 +25,7 @@ ACTIVE_JOB_STATUSES = frozenset({"queued", "running", "retry_wait"})
 TERMINAL_JOB_STATUSES = frozenset({"completed", "failed", "cancelled"})
 JOB_TYPE_PROBE = "probe"
 JOB_TYPE_ENCODE_HLS = "encode_hls"
+JOB_TYPE_ORIGIN_SYNC = "origin_sync"
 
 
 class MediaProcessingJob(Base):
@@ -61,6 +62,21 @@ class MediaProcessingJob(Base):
                 "status IN ('queued', 'running', 'retry_wait') AND job_type = 'encode_hls'"
             ),
         ),
+        # At most one active origin sync job per package.
+        Index(
+            "uq_media_processing_active_origin_sync",
+            "target_package_id",
+            "job_type",
+            unique=True,
+            sqlite_where=text(
+                "status IN ('queued', 'running', 'retry_wait') AND job_type = 'origin_sync' "
+                "AND target_package_id IS NOT NULL"
+            ),
+            postgresql_where=text(
+                "status IN ('queued', 'running', 'retry_wait') AND job_type = 'origin_sync' "
+                "AND target_package_id IS NOT NULL"
+            ),
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
@@ -78,6 +94,7 @@ class MediaProcessingJob(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     worker_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    target_package_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     queued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -92,7 +109,12 @@ class MediaProcessingJob(Base):
     )
 
     media_asset = relationship("MediaAsset", back_populates="processing_jobs")
-    package = relationship("MediaPackage", back_populates="processing_job", uselist=False)
+    package = relationship(
+        "MediaPackage",
+        back_populates="processing_job",
+        foreign_keys="MediaPackage.processing_job_id",
+        uselist=False,
+    )
     events = relationship(
         "MediaProcessingJobEvent",
         back_populates="job",

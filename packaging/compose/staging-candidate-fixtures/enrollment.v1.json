@@ -1,0 +1,26 @@
+{
+  "schema_version": "ifilm.branch_node.enrollment.v1",
+  "node_id": "staging-node-1",
+  "site_id": "staging-site",
+  "environment": "staging-candidate",
+  "origin_allowlist": [
+    {
+      "https_base_url": "https://origin.example.internal:8443",
+      "host_fingerprint_note": "replace-after-review"
+    }
+  ],
+  "public_trust": {
+    "edge_grant_public_key_fingerprint_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "edge_grant_key_id": "staging",
+    "mtls_ca_bundle_fingerprint_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "mtls_client_cert_fingerprint_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+    "ca_bundle_mount_path": "/run/ifilm/certs/ca-bundle.pem",
+    "client_cert_mount_path": "/run/ifilm/certs/client.crt",
+    "client_key_mount_path": "/run/ifilm/certs/client.key",
+    "edge_grant_public_key_mount_path": "/run/ifilm/certs/edge-grant-public.pem"
+  },
+  "resource_limits": {},
+  "client_redirect_active": false,
+  "live_pilot_ready": false,
+  "notes": "Example non-secret enrollment manifest. Fingerprints are placeholders."
+}

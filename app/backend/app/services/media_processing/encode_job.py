@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
@@ -55,6 +57,8 @@ from app.services.media_processing.track_packaging import (
 from app.services.media_processing.validation import validate_hls_package
 from app.services.storage import media_root, relative_media_path
 from app.services.streaming.activation import activate_or_fail_encode
+
+logger = logging.getLogger(__name__)
 
 
 def _clip(message: str | None) -> str | None:
@@ -587,6 +591,20 @@ def execute_encode_hls_job(
         db.add(job)
         db.commit()
         db.refresh(job)
+        # Phase 2: enqueue optional origin sync in a separate transaction.
+        # Local package remains active even if enqueue/sync fails.
+        try:
+            from app.services.object_storage.package_sync import enqueue_origin_package_sync
+
+            pkg = db.get(MediaPackage, package_id)
+            if pkg is not None:
+                enqueue_origin_package_sync(db, package=pkg, settings=settings)
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "origin_package_sync_enqueue_failed package_id=%s encode_job_id=%s",
+                package_id,
+                job.id,
+            )
         return job
 
     except (EncodeCancelledError, ProbeCancelledError) as exc:

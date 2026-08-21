@@ -1,4 +1,10 @@
-"""Experimental CDN edge synchronization (not production-ready)."""
+"""Experimental CDN edge synchronization (not production-ready).
+
+QUARANTINED — do not extend this module for hybrid CDN / object storage.
+Phase 1 durable origin lives in ``app.services.object_storage``. Branch
+pull-through caches require a signed verification-only protocol (later phase).
+Keep ENABLE_CDN_SYNC=false in staging/production.
+"""
 
 from __future__ import annotations
 

@@ -88,6 +88,15 @@ jobs:
       - name: Compose worker profile safety (no legacy ARQ in prod)
         run: python3 packaging/tests/test_compose_worker_profiles.py -v
 
+      - name: Branch-cache lab artifact hardening contract (Phase 7)
+        run: python3 packaging/tests/test_branch_cache_lab_artifact.py -v
+
+      - name: Branch-cache mTLS staging-candidate contract (Phase 8)
+        run: python3 packaging/tests/test_branch_cache_staging_candidate.py -v
+
+      - name: Branch-cache one-node staging deploy contract (Phase 9)
+        run: python3 packaging/tests/test_branch_cache_one_node_staging.py -v
+
       - name: Nginx stream token log redaction contract
         run: python3 packaging/tests/test_nginx_log_redaction.py -v
 

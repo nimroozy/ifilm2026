@@ -39,6 +39,8 @@ Stream
 | Publish | `backend-api` + `publishing-worker` | Catalog workflow / due scheduled publish |
 | Stream | `backend-api` (+ nginx) | `POST /api/playback/sessions` → `/api/stream/{token}/…` |
 
+**Object storage / hybrid CDN:** Phase 1 foundation + Phase 2 optional origin sync/read-fallback (`docs/media/HYBRID_CDN_FOUNDATION.md`, `docs/media/HYBRID_CDN_PHASE2.md`). Flags default off; encode still promotes local `MEDIA_ROOT` first. Experimental `ENABLE_CDN_SYNC` remains quarantined.
+
 **Compose workers (production / staging):**
 
 | Service | Docker profile | Role |

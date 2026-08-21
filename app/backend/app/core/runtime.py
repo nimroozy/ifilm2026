@@ -221,6 +221,10 @@ def collect_runtime_errors(settings: Settings) -> list[str]:
         if not settings.radius_mock_users:
             errors.append("RADIUS_MODE=mock requires RADIUS_MOCK_USERS fixture configuration")
 
+    from app.services.object_storage.validation import collect_object_storage_errors
+
+    errors.extend(collect_object_storage_errors(settings))
+
     return errors
 
 

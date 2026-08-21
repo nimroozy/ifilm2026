@@ -140,6 +140,82 @@ class Settings(BaseSettings):
     enable_hls_encoding: bool = False
     enable_local_streaming: bool = False
 
+    # Hybrid CDN / object storage Phase 1 — defaults OFF.
+    # Local MEDIA_ROOT remains the active workspace until cutover.
+    # Experimental ENABLE_CDN_SYNC is unrelated and must stay false in prod.
+    enable_object_storage: bool = False
+    media_origin_provider: str = "local"  # local | s3_compatible
+    media_origin_endpoint_url: str = ""
+    media_origin_region: str = "us-east-1"
+    media_origin_bucket: str = ""
+    media_origin_access_key_id: str = ""
+    media_origin_secret_access_key: str = ""
+    media_origin_force_path_style: bool = True  # MinIO / Ceph RGW
+    media_object_key_prefix: str = "ifilm"
+
+    # Optional Cloudflare R2 hot tier (S3-compatible). Never required; never mirrors full library.
+    enable_r2_hot_tier: bool = False
+    r2_endpoint_url: str = ""
+    r2_bucket: str = ""
+    r2_region: str = "auto"
+    r2_access_key_id: str = ""
+    r2_secret_access_key: str = ""
+    # Policy knobs (no destructive automation in Phase 1).
+    cdn_hot_tier_max_titles: int = 0
+    cdn_hot_tier_cooldown_days: int = 14
+    cdn_hot_tier_promote_views_threshold: int = 0
+
+    # Hybrid CDN Phase 2 — origin package sync + optional HLS read fallback (default OFF).
+    enable_origin_package_sync: bool = False
+    enable_origin_hls_read_fallback: bool = False
+    origin_sync_max_objects: int = 50_000
+    origin_sync_timeout_seconds: int = 600
+    origin_read_timeout_seconds: int = 30
+
+    # Hybrid CDN Phase 3 — branch-cache CONTROL PLANE only (default OFF).
+    # Does not redirect clients or enroll real branch servers.
+    enable_branch_cache_control_plane: bool = False
+    enable_edge_grant_issue: bool = False
+    enable_branch_cache_shadow_routing: bool = False
+    branch_cache_heartbeat_stale_seconds: int = 90
+    branch_cache_min_free_bytes: int = 1_000_000_000  # 1 GiB
+    branch_cache_min_protocol_version: str = "1"
+    edge_grant_issuer: str = "ifilm-central"
+    edge_grant_audience: str = "ifilm-branch-cache"
+    edge_grant_ttl_seconds: int = 120
+    edge_grant_key_id: str = "eg1"
+    # PEM material — never log, never store in DB, never return via APIs except public key JWKS.
+    edge_grant_private_key_pem: str = ""
+    edge_grant_public_key_pem: str = ""
+
+    # Hybrid CDN Phase 4 — offline branch-cache DATA-PLANE simulation (default OFF).
+    # No live redirects, no production container, no real origin HTTP.
+    enable_branch_cache_data_plane_sim: bool = False
+    enable_branch_cache_pull_through: bool = False
+    enable_branch_cache_local_serve: bool = False
+    branch_cache_sim_root: str = ""
+    branch_cache_sim_high_watermark_bytes: int = 50_000_000_000
+    branch_cache_sim_low_watermark_bytes: int = 40_000_000_000
+    branch_cache_sim_max_object_bytes: int = 67_108_864  # 64 MiB
+    branch_cache_sim_max_concurrent_fills: int = 4
+
+    # Hybrid CDN Phase 5 — offline pilot readiness / capacity / SLO lab (default OFF).
+    # Does not enable live serving, redirects, enrollment, or network origin.
+    enable_branch_cache_pilot_lab: bool = False
+
+    # Hybrid CDN Phase 6 — isolated branch HTTP service candidate (default OFF).
+    # Not mounted in the central app; not activated by production compose.
+    enable_branch_cache_http_service: bool = False
+    enable_branch_cache_http_health: bool = False
+    enable_branch_cache_http_metrics: bool = False
+    enable_branch_cache_http_lab_https_adapter: bool = False
+    # Phase 7 — CI/lab container artifact entrypoint gate (default OFF).
+    enable_branch_cache_http_lab_artifact: bool = False
+    # Phase 8 — mTLS staging-candidate origin adapter (default OFF; loopback tests only unless reviewed).
+    enable_branch_cache_http_mtls_staging_candidate: bool = False
+    # Phase 9: one-node staging deploy apply gate (plan/render always available; apply stays off).
+    enable_branch_cache_one_node_staging_deploy: bool = False
+
     # Watch progress / Continue Watching (Phase 10)
     enable_watch_history: bool = True
     watch_progress_min_seconds: int = 30
@@ -259,6 +335,9 @@ class Settings(BaseSettings):
         self.subscriber_identity_mode = (
             self.subscriber_identity_mode or "disabled"
         ).strip().lower()
+        self.media_origin_provider = (self.media_origin_provider or "local").strip().lower()
+        if self.media_origin_provider not in {"local", "s3_compatible"}:
+            raise ValueError("MEDIA_ORIGIN_PROVIDER must be local or s3_compatible")
         self.csp_mode = (self.csp_mode or "").strip().lower()
         if self.csp_mode and self.csp_mode not in {"production", "development"}:
             raise ValueError("CSP_MODE must be production, development, or empty")

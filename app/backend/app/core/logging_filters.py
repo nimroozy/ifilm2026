@@ -34,6 +34,9 @@ _SECRET_QUERY_KEYS = frozenset(
         "password",
         "secret",
         "client_secret",
+        "edge_grant",
+        "grant",
+        "enrollment_token",
     }
 )
 
