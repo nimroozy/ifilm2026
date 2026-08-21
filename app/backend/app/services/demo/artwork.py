@@ -148,4 +148,21 @@ def ensure_placeholder_pair(
     write_rgb_png(root / poster_rel, 300, 450, rgb, title)
     write_rgb_png(root / backdrop_rel, 1280, 720, rgb, title)
     base = public_base_url.rstrip("/")
-    return f"{base}/artwork/{poster_rel}", f"{base}/artwork/{backdrop_rel}", [poster_rel, backdrop_rel]
+    poster_url = f"{base}/artwork/{poster_rel}"
+    backdrop_url = f"{base}/artwork/{backdrop_rel}"
+    try:
+        from app.services.object_storage.artwork_cdn import try_publish_artwork_file
+
+        cdn_poster = try_publish_artwork_file(
+            relative_path=poster_rel, source=root / poster_rel, settings=settings
+        )
+        cdn_backdrop = try_publish_artwork_file(
+            relative_path=backdrop_rel, source=root / backdrop_rel, settings=settings
+        )
+        if cdn_poster:
+            poster_url = cdn_poster
+        if cdn_backdrop:
+            backdrop_url = cdn_backdrop
+    except Exception:  # noqa: BLE001 — keep local demo URLs on CDN failure
+        pass
+    return poster_url, backdrop_url, [poster_rel, backdrop_rel]

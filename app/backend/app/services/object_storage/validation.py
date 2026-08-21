@@ -145,6 +145,35 @@ def collect_object_storage_errors(settings: Settings) -> list[str]:
             "separately reviewed remote-apply mechanism exists"
         )
 
+    # Artwork CDN (R2 public images/trailers) — independent of MinIO/AWS origin.
+    if settings.enable_artwork_cdn_sync:
+        base = (settings.artwork_cdn_public_base_url or "").strip()
+        if base:
+            parsed_base = urlparse(base)
+            if parsed_base.scheme != "https" or not parsed_base.hostname:
+                errors.append("ARTWORK_CDN_PUBLIC_BASE_URL must be an absolute https URL")
+        r2_fields = [
+            (settings.r2_endpoint_url or "").strip(),
+            (settings.r2_bucket or "").strip(),
+            (settings.r2_access_key_id or "").strip(),
+            (settings.r2_secret_access_key or "").strip(),
+        ]
+        present = [bool(v) for v in r2_fields]
+        if any(present) and not all(present):
+            errors.append(
+                "R2_ENDPOINT_URL, R2_BUCKET, R2_ACCESS_KEY_ID, and R2_SECRET_ACCESS_KEY "
+                "must all be set together for artwork CDN"
+            )
+        if all(present):
+            parsed = urlparse(r2_fields[0])
+            if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+                errors.append("R2_ENDPOINT_URL must be an absolute http(s) URL")
+            if not base:
+                errors.append(
+                    "ARTWORK_CDN_PUBLIC_BASE_URL is required when ENABLE_ARTWORK_CDN_SYNC=true "
+                    "with env R2 credentials"
+                )
+
     if not settings.enable_object_storage:
         if settings.enable_r2_hot_tier:
             errors.append("ENABLE_R2_HOT_TIER requires ENABLE_OBJECT_STORAGE=true")
