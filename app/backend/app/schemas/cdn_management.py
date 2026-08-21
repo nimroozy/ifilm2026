@@ -11,6 +11,9 @@ class R2SettingsIn(BaseModel):
     account_id: str | None = Field(default=None, max_length=128)
     bucket: str = Field(min_length=1, max_length=255)
     region: str = Field(default="auto", max_length=64)
+    # Public Cloudflare custom domain (or r2.dev) for posters/backdrops/trailers.
+    public_base_url: str | None = Field(default=None, max_length=512)
+    artwork_cdn_enabled: bool = False
     access_key_id: str | None = Field(default=None, max_length=512)
     secret_access_key: str | None = Field(default=None, max_length=2048)
     remove_credentials: bool = False

@@ -20,10 +20,21 @@ class StorageObjectKind(StrEnum):
     PACKAGE = "packages"
     POSTER = "posters"
     BACKDROP = "backdrops"
+    LOGO = "logos"
+    STILL = "stills"
     TRAILER = "trailers"
     SUBTITLE = "subtitles"
     AUDIO = "audio"
     TEMP = "temp"
+
+
+ARTWORK_KIND_MAP = {
+    "poster": StorageObjectKind.POSTER,
+    "backdrop": StorageObjectKind.BACKDROP,
+    "logo": StorageObjectKind.LOGO,
+    "still": StorageObjectKind.STILL,
+    "trailer": StorageObjectKind.TRAILER,
+}
 
 
 def _require_safe(segment: str, *, field: str) -> str:
@@ -77,6 +88,8 @@ class ObjectKeyBuilder:
         if kind not in {
             StorageObjectKind.POSTER,
             StorageObjectKind.BACKDROP,
+            StorageObjectKind.LOGO,
+            StorageObjectKind.STILL,
             StorageObjectKind.TRAILER,
         }:
             raise ValueError(f"Unsupported artwork kind: {kind}")
@@ -86,6 +99,29 @@ class ObjectKeyBuilder:
             kind.value,
             _require_safe(asset_id, field="asset_id"),
             _require_safe(stored_filename, field="stored_filename"),
+        )
+
+    def artwork_relative_key(self, *, relative_path: str) -> str:
+        """Map an ARTWORK_ROOT-relative path to an immutable object key.
+
+        Example: ``posters/tmdb-poster-1-abc.jpg`` → ``ifilm/v1/posters/tmdb-poster-1-abc.jpg``
+        (asset_id omitted; filename is already unique / content-addressed).
+        """
+        rel = (relative_path or "").replace("\\", "/").strip().lstrip("/")
+        if not rel or ".." in rel.split("/"):
+            raise ValueError("Unsafe artwork relative_path")
+        parts = rel.split("/")
+        if len(parts) != 2:
+            raise ValueError("Artwork relative_path must be {kind_dir}/{filename}")
+        kind_dir, filename = parts
+        kind = next((k for k in ARTWORK_KIND_MAP.values() if k.value == kind_dir), None)
+        if kind is None:
+            raise ValueError(f"Unsupported artwork directory: {kind_dir}")
+        return self._join(
+            self.prefix,
+            self.layout_version,
+            kind.value,
+            _require_safe(filename, field="stored_filename"),
         )
 
     def sidecar_key(

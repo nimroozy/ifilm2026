@@ -165,6 +165,11 @@ class Settings(BaseSettings):
     cdn_hot_tier_cooldown_days: int = 14
     cdn_hot_tier_promote_views_threshold: int = 0
 
+    # Public artwork / trailer CDN via Cloudflare R2 (no MinIO/AWS required).
+    # Movies/HLS stay local until ENABLE_ORIGIN_PACKAGE_SYNC is separately enabled.
+    enable_artwork_cdn_sync: bool = False
+    artwork_cdn_public_base_url: str = ""
+
     # Hybrid CDN Phase 2 — origin package sync + optional HLS read fallback (default OFF).
     enable_origin_package_sync: bool = False
     enable_origin_hls_read_fallback: bool = False
