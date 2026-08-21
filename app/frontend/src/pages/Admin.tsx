@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Film, Tv, Upload, Cpu, Server, Users, GitBranch, BarChart3, Settings, Menu, X, ChevronDown, Activity, HardDrive, Eye, AlertTriangle, CheckCircle, XCircle, Clock, TrendingUp, Play, Pause, RotateCcw, Trash2, Plus, Edit, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -9,8 +9,12 @@ import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { adminApi, type ManagedCDNNodeDto, type CDNPrefixRouteDto } from '@/lib/adminApi';
 import { useLang } from '@/components/CustomerLayout';
-import { movies, series, cdnNodes, branches, users, encodingJobs, adminRoles, systemAlerts } from '@/data/mockData';
+import { movies, series, branches, users, encodingJobs, adminRoles, systemAlerts } from '@/data/mockData';
 
 // ============ ADMIN LAYOUT ============
 export default function AdminPage() {
@@ -361,34 +365,49 @@ function EncodingSection() {
 
 // ============ CDN MANAGEMENT ============
 function CDNSection() {
+  const [nodes, setNodes] = useState<ManagedCDNNodeDto[]>([]);
+  const [routes, setRoutes] = useState<CDNPrefixRouteDto[]>([]);
+  const [error, setError] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ name: '', role: 'cache' as 'main'|'cache', host: '', ssh_port: 22, ssh_username: 'root', credential_type: 'password' as 'password'|'private_key', credential: '', location: '', branch: '', notes: '', cache_limit_gb: 500, is_default: false });
+  const [route, setRoute] = useState({ cidr: '', node_id: '', priority: 100 });
+  const refresh = () => Promise.all([adminApi.listCDNNodes(), adminApi.listCDNRoutes()]).then(([n, r]) => { setNodes(n); setRoutes(r); }).catch(e => setError(e?.response?.data?.detail || 'Unable to load CDN management. Sign in with CDN permission.'));
+  useEffect(() => { void refresh(); }, []);
+  const addNode = async () => { setError(''); try { await adminApi.createCDNNode({ ...form, enabled: true, cache_limit_bytes: form.cache_limit_gb * 1024 ** 3 }); setShowForm(false); setForm({ ...form, name: '', host: '', credential: '', notes: '' }); await refresh(); } catch (e: any) { setError(e?.response?.data?.detail || 'Unable to add server'); } };
+  const action = async (node: ManagedCDNNodeDto, name: string) => { if (!window.confirm(`${name} ${node.name}? This action is recorded and may change the server.`)) return; await adminApi.cdnNodeAction(node.id, name); await refresh(); };
+  const addRoute = async () => { try { await adminApi.createCDNRoute({ ...route, enabled: true }); setRoute({ cidr: '', node_id: '', priority: 100 }); await refresh(); } catch (e: any) { setError(e?.response?.data?.detail || 'Unable to add route'); } };
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {cdnNodes.map(node => (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between"><div><h2 className="text-xl font-semibold">CDN Servers</h2><p className="text-sm text-muted-foreground">Main origins, branch caches, health and safe provisioning.</p></div><Button onClick={() => setShowForm(!showForm)}><Plus className="h-4 w-4 mr-2" />Add server</Button></div>
+      {error && <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+      {showForm && <Card><CardHeader><CardTitle className="text-base">New Debian 13 CDN server</CardTitle></CardHeader><CardContent className="grid gap-4 md:grid-cols-2">
+        <div><Label>Name</Label><Input value={form.name} onChange={e => setForm({...form, name:e.target.value})} placeholder="Nimruz Cache" /></div>
+        <div><Label>Role</Label><Select value={form.role} onValueChange={(v:'main'|'cache')=>setForm({...form,role:v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="main">Main CDN</SelectItem><SelectItem value="cache">Cache</SelectItem></SelectContent></Select></div>
+        <div><Label>IP or hostname</Label><Input value={form.host} onChange={e=>setForm({...form,host:e.target.value})} placeholder="cdn-nimruz.example.com" /></div>
+        <div><Label>SSH port</Label><Input type="number" value={form.ssh_port} onChange={e=>setForm({...form,ssh_port:Number(e.target.value)})} /></div>
+        <div><Label>SSH username</Label><Input value={form.ssh_username} onChange={e=>setForm({...form,ssh_username:e.target.value})} /></div>
+        <div><Label>Credential</Label><Select value={form.credential_type} onValueChange={(v:'password'|'private_key')=>setForm({...form,credential_type:v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="private_key">Private key (recommended)</SelectItem><SelectItem value="password">Password (bootstrap only)</SelectItem></SelectContent></Select></div>
+        <div className="md:col-span-2"><Label>{form.credential_type === 'private_key' ? 'SSH private key' : 'SSH password'}</Label><Textarea value={form.credential} onChange={e=>setForm({...form,credential:e.target.value})} className="font-mono" /><p className="text-xs text-muted-foreground mt-1">Encrypted before storage and never returned to this page.</p></div>
+        <div><Label>Location / branch</Label><Input value={form.location} onChange={e=>setForm({...form,location:e.target.value})} placeholder="Nimruz" /></div>
+        <div><Label>Movie cache limit (GB)</Label><Input type="number" value={form.cache_limit_gb} onChange={e=>setForm({...form,cache_limit_gb:Number(e.target.value)})} /></div>
+        <div className="md:col-span-2 flex items-center gap-2"><Switch checked={form.is_default} onCheckedChange={v=>setForm({...form,is_default:v})} disabled={form.role !== 'main'} /><Label>Default Main CDN fallback</Label></div>
+        <div className="md:col-span-2 flex justify-end gap-2"><Button variant="outline" onClick={()=>setShowForm(false)}>Cancel</Button><Button onClick={addNode}>Save server</Button></div>
+      </CardContent></Card>}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        {nodes.map(node => (
           <Card key={node.id} className="bg-card border-border">
             <CardContent className="pt-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-medium text-foreground">{node.name}</h3>
-                <Badge variant={node.status === 'online' ? 'default' : node.status === 'maintenance' ? 'secondary' : 'destructive'} className="text-xs">
-                  {node.status}
-                </Badge>
+                <div className="flex gap-2"><Badge variant="outline">{node.role === 'main' ? 'Main CDN' : 'Cache'}</Badge><Badge variant={node.health_status === 'online' ? 'default' : 'secondary'}>{node.health_status}</Badge></div>
               </div>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-muted-foreground">Location</span><span className="text-foreground">{node.location}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Viewers</span><span className="text-foreground">{node.currentViewers}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Storage</span><span className="text-foreground">{Math.round(node.storageUsed / 1000)}TB / {Math.round(node.storageCapacity / 1000)}TB</span></div>
-                <div>
-                  <div className="flex justify-between text-xs mb-1"><span className="text-muted-foreground">Network</span><span>{node.networkUsage}%</span></div>
-                  <Progress value={node.networkUsage} className="h-1.5" />
-                </div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Cache Hit</span><span className="text-foreground">{node.cacheHitRate}%</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Health</span><span className={node.healthScore >= 90 ? 'text-green-500' : node.healthScore >= 70 ? 'text-yellow-500' : 'text-destructive'}>{node.healthScore}%</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Last Sync</span><span className="text-foreground text-xs">{node.lastSync}</span></div>
-              </div>
+              <div className="grid grid-cols-2 gap-2 text-sm"><span className="text-muted-foreground">Host</span><span>{node.host}:{node.ssh_port}</span><span className="text-muted-foreground">Location</span><span>{node.location || '—'}</span><span className="text-muted-foreground">Provisioning</span><span>{node.provision_status}</span><span className="text-muted-foreground">Disk free</span><span>{node.disk_free_bytes ? `${(node.disk_free_bytes/1024**3).toFixed(1)} GB` : 'Awaiting heartbeat'}</span><span className="text-muted-foreground">Cache objects / hit</span><span>{node.cached_objects.toLocaleString()} / {node.hit_rate ?? '—'}%</span><span className="text-muted-foreground">Version / RTT</span><span>{node.software_version || '—'} / {node.rtt_ms ?? '—'} ms</span></div>
+              <div className="flex flex-wrap gap-2 mt-4"><Button size="sm" variant="outline" onClick={()=>action(node,'provision')}>Provision</Button><Button size="sm" variant="outline" onClick={()=>action(node,'upgrade')}>Upgrade</Button><Button size="sm" variant="outline" onClick={()=>action(node,'drain')}>Drain</Button><Button size="sm" variant="outline" onClick={()=>action(node,'clear-cache')}>Clear cache</Button><Button size="sm" variant="destructive" onClick={()=>action(node,'disable')}>Disable</Button></div>
             </CardContent>
           </Card>
         ))}
       </div>
+      <Card><CardHeader><CardTitle className="text-base">IP-prefix routing</CardTitle><p className="text-sm text-muted-foreground">Longest prefix wins, then lowest priority number; otherwise the default Main CDN is used.</p></CardHeader><CardContent className="space-y-4"><div className="grid gap-3 md:grid-cols-4"><Input placeholder="103.126.4.0/24" value={route.cidr} onChange={e=>setRoute({...route,cidr:e.target.value})}/><Select value={route.node_id} onValueChange={v=>setRoute({...route,node_id:v})}><SelectTrigger><SelectValue placeholder="Preferred server" /></SelectTrigger><SelectContent>{nodes.map(n=><SelectItem key={n.id} value={n.id}>{n.name}</SelectItem>)}</SelectContent></Select><Input type="number" value={route.priority} onChange={e=>setRoute({...route,priority:Number(e.target.value)})}/><Button onClick={addRoute}>Add routing rule</Button></div><Table><TableHeader><TableRow><TableHead>Prefix</TableHead><TableHead>Preferred server</TableHead><TableHead>Priority</TableHead><TableHead>Status</TableHead></TableRow></TableHeader><TableBody>{routes.map(r=><TableRow key={r.id}><TableCell className="font-mono">{r.cidr}</TableCell><TableCell>{r.node_name}</TableCell><TableCell>{r.priority}</TableCell><TableCell><Badge variant={r.enabled?'default':'secondary'}>{r.enabled?'Enabled':'Disabled'}</Badge></TableCell></TableRow>)}</TableBody></Table></CardContent></Card>
     </div>
   );
 }
@@ -504,6 +523,10 @@ function ReportsSection() {
 
 // ============ SETTINGS ============
 function SettingsSection() {
+  const [r2, setR2] = useState({ enabled: false, endpoint_url: '', account_id: '', bucket: '', region: 'auto', access_key_id: '', secret_access_key: '', credentials_configured: false });
+  const [message, setMessage] = useState('');
+  useEffect(() => { adminApi.getR2().then(v => setR2({...r2, ...v, account_id:v.account_id || ''})).catch(()=>setMessage('Sign in with Settings permission to manage R2.')); }, []);
+  const saveR2 = async () => { try { const saved = await adminApi.updateR2(r2); setR2({...r2, ...saved, access_key_id:'', secret_access_key:''}); setMessage('R2 settings saved securely.'); } catch (e:any) { setMessage(e?.response?.data?.detail || 'Unable to save R2 settings'); } };
   const settingsGroups = [
     { title: 'General', items: ['Platform Name', 'Default Language', 'Maintenance Mode'] },
     { title: 'Playback', items: ['Default Quality', 'Auto-play', 'Skip Intro Duration', 'Buffer Size'] },
@@ -514,6 +537,16 @@ function SettingsSection() {
 
   return (
     <div className="space-y-6">
+      <Card className="bg-card border-border"><CardHeader><CardTitle className="text-base">Cloudflare R2 hot tier</CardTitle><p className="text-sm text-muted-foreground">Optional private object-storage tier. Playback still requires iFilm entitlement and short-lived signed grants.</p></CardHeader><CardContent className="grid gap-4 md:grid-cols-2">
+        <div className="md:col-span-2 flex items-center justify-between rounded-lg border p-3"><div><Label>Enable R2 hot tier</Label><p className="text-xs text-muted-foreground">Credentials are encrypted and never returned.</p></div><Switch checked={r2.enabled} onCheckedChange={v=>setR2({...r2,enabled:v})}/></div>
+        <div><Label>HTTPS endpoint</Label><Input value={r2.endpoint_url} onChange={e=>setR2({...r2,endpoint_url:e.target.value})} placeholder="https://ACCOUNT.r2.cloudflarestorage.com" /></div>
+        <div><Label>Account ID</Label><Input value={r2.account_id} onChange={e=>setR2({...r2,account_id:e.target.value})} autoComplete="off" /></div>
+        <div><Label>Bucket</Label><Input value={r2.bucket} onChange={e=>setR2({...r2,bucket:e.target.value})} /></div>
+        <div><Label>Region</Label><Input value={r2.region} onChange={e=>setR2({...r2,region:e.target.value})} /></div>
+        <div><Label>Access key ID {r2.credentials_configured && '(leave blank to keep existing)'}</Label><Input type="password" value={r2.access_key_id} onChange={e=>setR2({...r2,access_key_id:e.target.value})} autoComplete="new-password" /></div>
+        <div><Label>Secret access key</Label><Input type="password" value={r2.secret_access_key} onChange={e=>setR2({...r2,secret_access_key:e.target.value})} autoComplete="new-password" /></div>
+        <div className="md:col-span-2 flex items-center justify-between"><span className="text-sm text-muted-foreground">{message || (r2.credentials_configured ? 'Credentials configured' : 'Credentials not configured')}</span><Button onClick={saveR2}>Save R2 settings</Button></div>
+      </CardContent></Card>
       {settingsGroups.map(group => (
         <Card key={group.title} className="bg-card border-border">
           <CardHeader><CardTitle className="text-base">{group.title}</CardTitle></CardHeader>

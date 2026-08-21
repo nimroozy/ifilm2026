@@ -115,7 +115,7 @@ jobs:
       - name: Alembic heads
         run: |
           alembic heads | tee /tmp/alembic-heads.txt
-          grep -q '027_branch_cache_control_plane_v1' /tmp/alembic-heads.txt
+          grep -q '029_cdn_security_hardening_v1' /tmp/alembic-heads.txt
 
       - name: Alembic upgrade on empty PostgreSQL database
         run: |
