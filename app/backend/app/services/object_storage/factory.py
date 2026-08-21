@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlalchemy.orm import Session
+
 from app.core.config import Settings, get_settings
 from app.services.object_storage.local import LocalFilesystemStorage
 from app.services.object_storage.protocol import ObjectStorage
@@ -52,18 +54,25 @@ def get_central_origin_storage(settings: Settings | None = None) -> ObjectStorag
     raise ValueError(f"Unsupported MEDIA_ORIGIN_PROVIDER: {provider}")
 
 
-def get_hot_tier_storage(settings: Settings | None = None) -> ObjectStorage | None:
+def get_hot_tier_storage(
+    settings: Settings | None = None, db: Session | None = None
+) -> ObjectStorage | None:
     """Optional R2/hot CDN tier. Returns None when disabled (default)."""
     cfg = settings or get_settings()
-    if not cfg.enable_object_storage or not cfg.enable_r2_hot_tier:
+    runtime = None
+    if db is not None:
+        from app.services.cdn_management import resolve_r2_runtime
+
+        runtime = resolve_r2_runtime(db, cfg)
+    if runtime is None and (not cfg.enable_object_storage or not cfg.enable_r2_hot_tier):
         return None
     return S3CompatibleStorage(
         S3CompatibleConfig(
-            endpoint_url=cfg.r2_endpoint_url,
-            bucket=cfg.r2_bucket,
-            region=cfg.r2_region or "auto",
-            access_key_id=cfg.r2_access_key_id,
-            secret_access_key=cfg.r2_secret_access_key,
+            endpoint_url=(runtime or {}).get("endpoint_url", cfg.r2_endpoint_url),
+            bucket=(runtime or {}).get("bucket", cfg.r2_bucket),
+            region=(runtime or {}).get("region", cfg.r2_region or "auto"),
+            access_key_id=(runtime or {}).get("access_key_id", cfg.r2_access_key_id),
+            secret_access_key=(runtime or {}).get("secret_access_key", cfg.r2_secret_access_key),
             force_path_style=False,
             provider_kind=StorageProviderKind.R2,
             role=StorageRole.HOT_CDN,

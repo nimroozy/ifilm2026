@@ -71,6 +71,7 @@ const navGroups: NavGroup[] = [
     label: 'System',
     items: [
       { to: '/admin/settings/portal', label: 'Portal', icon: Globe },
+      { to: '/admin/settings/r2', label: 'Cloudflare R2', icon: Globe },
       { to: '/admin/system/updates', label: 'Updates', icon: ArrowUpCircle },
     ],
   },

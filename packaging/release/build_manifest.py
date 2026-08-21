@@ -28,9 +28,7 @@ def sha256_file(path: Path) -> str:
 
 def git_sha() -> str:
     try:
-        return (
-            subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-        )
+        return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     except Exception:  # noqa: BLE001
         return "unknown"
 
@@ -40,7 +38,7 @@ def main() -> int:
     parser.add_argument("--version", required=True)
     parser.add_argument("--channel", default="stable")
     parser.add_argument("--archive", required=True, type=Path)
-    parser.add_argument("--migration-head", default="027_branch_cache_control_plane_v1")
+    parser.add_argument("--migration-head", default="028_cdn_management_v1")
     parser.add_argument("--minimum-version", default="0.1.0")
     parser.add_argument("--rollback-supported", action="store_true", default=True)
     parser.add_argument("--database-backup-required", action="store_true", default=True)
@@ -61,7 +59,9 @@ def main() -> int:
     digests: dict[str, str] = {}
     for item in args.image_digest:
         if "=" not in item:
-            print(f"invalid --image-digest (expected name=ref): {item}", file=sys.stderr)
+            print(
+                f"invalid --image-digest (expected name=ref): {item}", file=sys.stderr
+            )
             return 2
         key, value = item.split("=", 1)
         digests[key.strip()] = value.strip()
@@ -100,7 +100,9 @@ def main() -> int:
         "checksum": sha256_file(archive),
     }
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    args.out.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     print(args.out)
     return 0
 

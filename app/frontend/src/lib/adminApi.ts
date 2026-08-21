@@ -847,7 +847,21 @@ export const adminApi = {
     const { data } = await adminHttp.post<PortalConnectionTestDto>('/admin/integrations/portal/test');
     return data;
   },
+
+  async getR2(): Promise<R2SettingsDto> { return (await adminHttp.get('/admin/cdn-management/r2')).data; },
+  async updateR2(payload: R2SettingsPayload): Promise<R2SettingsDto> { return (await adminHttp.put('/admin/cdn-management/r2', payload)).data; },
+  async listCDNNodes(): Promise<ManagedCDNNodeDto[]> { return (await adminHttp.get('/admin/cdn-management/nodes')).data; },
+  async createCDNNode(payload: ManagedCDNNodePayload): Promise<ManagedCDNNodeDto> { return (await adminHttp.post('/admin/cdn-management/nodes', payload)).data; },
+  async cdnNodeAction(id: string, action: string) { return (await adminHttp.post(`/admin/cdn-management/nodes/${id}/actions/${action}`, { confirm: true })).data; },
+  async listCDNRoutes(): Promise<CDNPrefixRouteDto[]> { return (await adminHttp.get('/admin/cdn-management/routes')).data; },
+  async createCDNRoute(payload: { cidr: string; node_id: string; priority: number; enabled: boolean }): Promise<CDNPrefixRouteDto> { return (await adminHttp.post('/admin/cdn-management/routes', payload)).data; },
 };
+
+export type R2SettingsDto = { enabled: boolean; endpoint_url: string; account_id?: string | null; bucket: string; region: string; credentials_configured: boolean; updated_at?: string | null };
+export type R2SettingsPayload = { enabled: boolean; endpoint_url: string; account_id?: string; bucket: string; region: string; access_key_id?: string; secret_access_key?: string; remove_credentials?: boolean };
+export type ManagedCDNNodeDto = { id: string; name: string; role: 'main'|'cache'; host: string; ssh_port: number; ssh_username: string; credential_type: string; credential_configured: boolean; branch?: string; location?: string; notes?: string; enabled: boolean; draining: boolean; is_default: boolean; cache_limit_bytes?: number; disk_total_bytes?: number; disk_free_bytes?: number; cached_objects: number; cached_titles: number; hit_rate?: number; bandwidth_bytes: number; rtt_ms?: number; software_version?: string; health_status: string; provision_status: string; last_sync_at?: string; last_heartbeat_at?: string };
+export type ManagedCDNNodePayload = { name: string; role: 'main'|'cache'; host: string; ssh_port: number; ssh_username: string; credential_type: 'password'|'private_key'; credential: string; branch?: string; location?: string; notes?: string; enabled: boolean; is_default: boolean; cache_limit_bytes: number };
+export type CDNPrefixRouteDto = { id: string; cidr: string; prefix_length: number; node_id: string; node_name?: string; priority: number; enabled: boolean };
 
 export type PortalIntegrationDto = {
   enabled: boolean;

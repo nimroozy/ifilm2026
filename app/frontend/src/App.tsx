@@ -107,6 +107,8 @@ const MediaProcessingJobsPage = lazy(() => import('@/pages/admin/MediaProcessing
 const PlaybackSessionsPage = lazy(() => import('@/pages/admin/PlaybackSessionsPage'));
 const SystemUpdatesPage = lazy(() => import('@/pages/admin/SystemUpdatesPage'));
 const PortalSettingsPage = lazy(() => import('@/pages/admin/PortalSettingsPage'));
+const R2SettingsPage = lazy(() => import('@/pages/admin/R2SettingsPage'));
+const CDNManagementPage = lazy(() => import('@/pages/admin/CDNManagementPage'));
 const TmdbToolsPage = lazy(() => import('@/pages/admin/TmdbToolsPage'));
 const AdminPlaceholderPage = lazy(() => import('@/pages/admin/AdminPlaceholderPage'));
 const RecommendationsInspectPage = lazy(() =>
@@ -272,8 +274,9 @@ const router = createBrowserRouter([
           { path: 'media/:assetId', element: <LazyPage><MediaAssetDetailPage /></LazyPage> },
           { path: 'system/updates', element: <LazyPage><SystemUpdatesPage /></LazyPage> },
           { path: 'settings/portal', element: <LazyPage><PortalSettingsPage /></LazyPage> },
+          { path: 'settings/r2', element: <LazyPage><R2SettingsPage /></LazyPage> },
           { path: 'tools/encoding', element: <LazyPage><AdminPlaceholderPage section="encoding" /></LazyPage> },
-          { path: 'tools/cdn', element: <LazyPage><AdminPlaceholderPage section="cdn" /></LazyPage> },
+          { path: 'tools/cdn', element: <LazyPage><CDNManagementPage /></LazyPage> },
           { path: 'tools/users', element: <LazyPage><AdminPlaceholderPage section="users" /></LazyPage> },
         ],
       },

@@ -169,7 +169,7 @@ def test_postgresql_migration_succeeds(postgres_url):
     assert "content_requests" in tables
     assert "content_request_events" in tables
     assert "media_tracks" in tables
-    assert version == "027_branch_cache_control_plane_v1"
+    assert version == "028_cdn_management_v1"
 
 
 def test_postgresql_migration_from_previous_revision(postgres_url):
@@ -202,7 +202,7 @@ def test_postgresql_migration_from_previous_revision(postgres_url):
     assert movie_slug == "ordinary-film"
     assert series_slug == "ordinary-show"
     assert null_imdb >= 1
-    assert version == "027_branch_cache_control_plane_v1"
+    assert version == "028_cdn_management_v1"
 
 
 def test_002_to_head_duplicate_and_messy_titles(postgres_url):
@@ -783,9 +783,7 @@ def test_publishing_workflow_migration_roundtrip(postgres_url):
         movie_cols = {
             row[0]
             for row in conn.execute(
-                text(
-                    "SELECT column_name FROM information_schema.columns WHERE table_name='movies'"
-                )
+                text("SELECT column_name FROM information_schema.columns WHERE table_name='movies'")
             )
         }
         season_cols = {
@@ -826,9 +824,7 @@ def test_publishing_workflow_migration_roundtrip(postgres_url):
         movie_cols = {
             row[0]
             for row in conn.execute(
-                text(
-                    "SELECT column_name FROM information_schema.columns WHERE table_name='movies'"
-                )
+                text("SELECT column_name FROM information_schema.columns WHERE table_name='movies'")
             )
         }
         season_cols = {
@@ -985,10 +981,7 @@ def test_external_media_playability_migration_roundtrip(postgres_url):
         movie_cols = {
             row[0]
             for row in conn.execute(
-                text(
-                    "SELECT column_name FROM information_schema.columns "
-                    "WHERE table_name='movies'"
-                )
+                text("SELECT column_name FROM information_schema.columns WHERE table_name='movies'")
             )
         }
         session_nullable = conn.execute(
@@ -1039,10 +1032,7 @@ def test_external_media_playability_migration_roundtrip(postgres_url):
         movie_cols = {
             row[0]
             for row in conn.execute(
-                text(
-                    "SELECT column_name FROM information_schema.columns "
-                    "WHERE table_name='movies'"
-                )
+                text("SELECT column_name FROM information_schema.columns WHERE table_name='movies'")
             )
         }
         session_nullable = conn.execute(
@@ -1211,7 +1201,7 @@ def test_media_upload_reliability_migration_roundtrip(postgres_url):
             )
         }
     engine.dispose()
-    assert version == "027_branch_cache_control_plane_v1"
+    assert version == "028_cdn_management_v1"
     assert "media_admin_events" in tables
     assert "content_translations" in tables
     assert "content_requests" in tables
@@ -1238,7 +1228,9 @@ def test_content_translations_migration_roundtrip(postgres_url):
     assert "content_translations" in tables
     assert "media_admin_events" in tables
 
-    assert _run_alembic(postgres_url, "downgrade", "019_media_upload_reliability_v1").returncode == 0
+    assert (
+        _run_alembic(postgres_url, "downgrade", "019_media_upload_reliability_v1").returncode == 0
+    )
     engine = create_engine(postgres_url)
     with engine.connect() as conn:
         version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
@@ -1316,7 +1308,7 @@ def test_content_requests_migration_roundtrip(postgres_url):
             )
         }
     engine.dispose()
-    assert version == "027_branch_cache_control_plane_v1"
+    assert version == "028_cdn_management_v1"
     assert "content_requests" in tables
     assert "media_tracks" in tables
 
@@ -1326,7 +1318,9 @@ def test_media_tracks_migration_roundtrip(postgres_url):
     _reset_schema(postgres_url)
     assert _run_alembic(postgres_url, "upgrade", "021_content_requests_v1").returncode == 0
     assert _run_alembic(postgres_url, "upgrade", "022_media_tracks_player_v1").returncode == 0
-    assert _run_alembic(postgres_url, "upgrade", "024_portal_subscriber_identity_v1").returncode == 0
+    assert (
+        _run_alembic(postgres_url, "upgrade", "024_portal_subscriber_identity_v1").returncode == 0
+    )
 
     engine = create_engine(postgres_url)
     with engine.connect() as conn:
@@ -1390,7 +1384,7 @@ def test_media_tracks_migration_roundtrip(postgres_url):
             )
         }
     engine.dispose()
-    assert version == "027_branch_cache_control_plane_v1"
+    assert version == "028_cdn_management_v1"
     assert "media_tracks" in tables
     assert "source_media_asset_id" in cols
 
@@ -1546,16 +1540,16 @@ def test_portal_identity_migration_024_roundtrip(postgres_url):
     assert "uq_subscribers_provider_subject" in idx
 
 
-def test_fresh_database_reaches_026(postgres_url):
+def test_fresh_database_reaches_current_head(postgres_url):
     _reset_schema(postgres_url)
     result = _run_alembic(postgres_url, "upgrade", "head")
     assert result.returncode == 0, result.stdout + result.stderr
     heads = _run_alembic(postgres_url, "heads")
     assert heads.returncode == 0
-    assert "027_branch_cache_control_plane_v1" in (heads.stdout + heads.stderr)
+    assert "028_cdn_management_v1" in (heads.stdout + heads.stderr)
     current = _run_alembic(postgres_url, "current")
     assert current.returncode == 0
-    assert "027_branch_cache_control_plane_v1" in (current.stdout + current.stderr)
+    assert "028_cdn_management_v1" in (current.stdout + current.stderr)
     history = _run_alembic(postgres_url, "history")
     assert history.returncode == 0
     assert "027_branch_cache_control_plane_v1" in (history.stdout + history.stderr)
@@ -1564,7 +1558,9 @@ def test_fresh_database_reaches_026(postgres_url):
 def test_integration_configs_migration_025_roundtrip(postgres_url):
     """024 → 025: integration_configs table; safe downgrade to 024."""
     _reset_schema(postgres_url)
-    assert _run_alembic(postgres_url, "upgrade", "024_portal_subscriber_identity_v1").returncode == 0
+    assert (
+        _run_alembic(postgres_url, "upgrade", "024_portal_subscriber_identity_v1").returncode == 0
+    )
 
     up = _run_alembic(postgres_url, "upgrade", "025_integration_configs_v1")
     assert up.returncode == 0, up.stdout + up.stderr
@@ -1590,7 +1586,13 @@ def test_integration_configs_migration_025_roundtrip(postgres_url):
     engine.dispose()
     assert version == "025_integration_configs_v1"
     assert "integration_configs" in tables
-    assert {"provider", "enabled", "config_json", "secret_ciphertext", "updated_by_admin_id"} <= cols
+    assert {
+        "provider",
+        "enabled",
+        "config_json",
+        "secret_ciphertext",
+        "updated_by_admin_id",
+    } <= cols
 
     down = _run_alembic(postgres_url, "downgrade", "024_portal_subscriber_identity_v1")
     assert down.returncode == 0, down.stdout + down.stderr
