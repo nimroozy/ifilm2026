@@ -58,6 +58,9 @@ def control_plane_status(
         "enable_branch_cache_pilot_lab": bool(cfg.enable_branch_cache_pilot_lab),
         "enable_branch_cache_http_service": bool(cfg.enable_branch_cache_http_service),
         "enable_branch_cache_http_lab_artifact": bool(cfg.enable_branch_cache_http_lab_artifact),
+        "enable_branch_cache_http_mtls_staging_candidate": bool(
+            cfg.enable_branch_cache_http_mtls_staging_candidate
+        ),
         "edge_grant_configured": bool(
             (cfg.edge_grant_public_key_pem or "").strip() and (cfg.edge_grant_key_id or "").strip()
         ),

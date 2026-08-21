@@ -160,17 +160,23 @@ def evaluate_branch_node_health(
     )
 
     mode = (inp.origin_adapter_mode or "").strip().lower()
+    allowed_modes = {
+        "local_dir",
+        "deferred_http",
+        "mtls_http_loopback",
+        "mtls_staging_candidate",
+    }
     checks.append(
         CheckResult(
             "origin_adapter_mode",
-            mode in {"local_dir", "deferred_http"},
-            "ok" if mode in {"local_dir", "deferred_http"} else "unsupported_origin_mode",
+            mode in allowed_modes,
+            "ok" if mode in allowed_modes else "unsupported_origin_mode",
         )
     )
     checks.append(
         CheckResult(
             "origin_not_live_http",
-            mode != "live_http" and mode != "mtls_http_live",
+            mode not in {"live_http", "mtls_http_live"},
             "ok" if mode not in {"live_http", "mtls_http_live"} else "live_http_forbidden",
         )
     )

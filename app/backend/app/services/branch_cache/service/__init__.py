@@ -9,6 +9,7 @@ from app.services.branch_cache.service.config import (
 from app.services.branch_cache.service.transport import (
     DeferredHttpsOriginTransport,
     InjectedLocalOriginTransport,
+    MtLsHttpsOriginFetcher,
 )
 
 __all__ = [
@@ -16,6 +17,7 @@ __all__ = [
     "BranchServiceConfigError",
     "DeferredHttpsOriginTransport",
     "InjectedLocalOriginTransport",
+    "MtLsHttpsOriginFetcher",
     "create_branch_cache_app",
     "validate_branch_service_config",
 ]
