@@ -39,6 +39,9 @@ def safe_storage_status(settings: Settings | None = None) -> dict:
         "enable_branch_cache_http_mtls_staging_candidate": bool(
             cfg.enable_branch_cache_http_mtls_staging_candidate
         ),
+        "enable_branch_cache_one_node_staging_deploy": bool(
+            cfg.enable_branch_cache_one_node_staging_deploy
+        ),
         "enable_cdn_sync_legacy": bool(cfg.enable_cdn_sync),
         "roles": {
             "local_workspace": {

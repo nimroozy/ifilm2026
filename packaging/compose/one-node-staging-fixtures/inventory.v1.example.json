@@ -1,0 +1,58 @@
+{
+  "bind_host": "127.0.0.1",
+  "ca_bundle_mount_path": "/run/ifilm/certs/ca-bundle.pem",
+  "cache": {
+    "device_or_path": "/var/lib/ifilm-branch-staging-cache",
+    "high_watermark_bytes": 50000000000,
+    "low_watermark_bytes": 40000000000,
+    "min_free_bytes": 1000000000,
+    "mount_path": "/var/cache/ifilm-branch"
+  },
+  "capacity": {
+    "cpus": "1.0",
+    "max_concurrent_fills": 4,
+    "max_object_bytes": 67108864,
+    "memory_mb": 512,
+    "nofile_hard": 2048,
+    "nofile_soft": 1024,
+    "pids": 256
+  },
+  "client_cert_mount_path": "/run/ifilm/certs/client.crt",
+  "client_key_mount_path": "/run/ifilm/certs/client.key",
+  "client_redirect_active": false,
+  "dns_resolver_placeholders": [
+    "REQUIRED:DNS_RESOLVER_IP"
+  ],
+  "edge_grant_public_key_mount_path": "/run/ifilm/certs/edge-grant-public.pem",
+  "environment": "staging-candidate",
+  "image": {
+    "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "provenance_ref": "placeholder:provenance-attestation-ref",
+    "repository": "ghcr.io/example/ifilm-branch-cache-lab",
+    "sbom_ref": "placeholder:sbom-spdx-ref"
+  },
+  "live_pilot_ready": false,
+  "management_access_placeholder": "REQUIRED:OPERATOR_MGMT_SOURCE_CIDR",
+  "node_id": "staging-node-1",
+  "notes": "Phase 9 offline example \u2014 replace placeholders before any live review.",
+  "operator_approval": {
+    "approver_role": "staging-owner",
+    "noted_at_utc": "1970-01-01T00:00:00Z",
+    "record_id": "approval-placeholder-001"
+  },
+  "origin": {
+    "host": "origin.staging-candidate.example.internal",
+    "pinned_resolved_ipv4": "10.50.1.10",
+    "port": 8443,
+    "reviewed_dns_evidence_id": "dns-evidence-placeholder-001"
+  },
+  "run_as_gid": 10001,
+  "run_as_uid": 10001,
+  "schema_version": "ifilm.branch_node.staging_inventory.v1",
+  "site_id": "staging-site",
+  "trust": {
+    "edge_grant_public_key_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "mtls_ca_bundle_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "mtls_client_cert_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  }
+}
