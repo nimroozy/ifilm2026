@@ -231,13 +231,17 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
               ))}
             </div>
 
-            <p className="max-w-xl text-sm leading-relaxed text-foreground/85 line-clamp-2 md:max-w-2xl md:text-base md:leading-relaxed md:text-foreground/90 md:line-clamp-3">
+            <p
+              className="max-w-xl text-sm leading-relaxed text-foreground/85 line-clamp-2 md:max-w-2xl md:text-base md:leading-relaxed md:text-foreground/90 md:line-clamp-3"
+              dir="auto"
+              data-testid="hero-synopsis"
+            >
               {movie.description}
             </p>
 
-            {/* Mobile: [ Play ] [ More Info ] [ + ] — Desktop: full-label actions */}
+            {/* Mobile: wrap actions so RTL labels are not truncated; Desktop: full-label actions */}
             <div
-              className="flex flex-nowrap items-center gap-2 pt-0.5 md:flex-wrap md:gap-3 md:pt-1"
+              className="flex flex-wrap items-center gap-2 pt-0.5 md:gap-3 md:pt-1"
               data-testid="hero-actions"
             >
               {playable || demo ? (
@@ -247,14 +251,16 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
                   onClick={() =>
                     navigate(`/player/movie/${movie.id}`, { state: { autoplay: true } })
                   }
-                  className="h-11 min-w-0 flex-1 gap-2 px-4 sm:flex-none sm:px-5 md:h-12 md:px-6"
+                  className="h-11 min-w-0 gap-2 px-4 sm:px-5 md:h-12 md:px-6"
                   aria-label={
-                    demo && !playable ? `Play demo clip for ${movie.title}` : `Play ${movie.title}`
+                    demo && !playable
+                      ? `${t.hero.playDemoClip} — ${movie.title}`
+                      : `${t.hero.play} ${movie.title}`
                   }
                   data-testid="hero-play"
                 >
                   <Play className="h-5 w-5 shrink-0 fill-current" />
-                  <span className="truncate">{demo && !playable ? 'Play Demo Clip' : t.hero.play}</span>
+                  <span>{demo && !playable ? t.hero.playDemoClip : t.hero.play}</span>
                 </Button>
               ) : (
                 <Badge variant="secondary" className="px-3 py-2 text-sm">
@@ -265,11 +271,11 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
                 size="lg"
                 variant="glass"
                 onClick={() => navigate(`/movie/${movie.id}`)}
-                className="h-11 min-w-0 flex-1 gap-2 px-3 sm:flex-none md:h-12 md:px-4"
+                className="h-11 min-w-0 gap-2 px-3 md:h-12 md:px-4"
                 data-testid="hero-more-info"
               >
                 <Info className="h-5 w-5 shrink-0" />
-                <span className="truncate">{t.hero.moreInfo}</span>
+                <span>{t.hero.moreInfo}</span>
               </Button>
               {isLoggedIn ? (
                 <>

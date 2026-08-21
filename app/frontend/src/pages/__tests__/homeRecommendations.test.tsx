@@ -17,7 +17,22 @@ vi.mock('@/lib/catalogData', () => ({
   fetchHomeCatalog: vi.fn(async () => ({
     featured: [],
     trending: [],
-    recentlyAdded: [],
+    recentlyAdded: [
+      {
+        id: 99,
+        type: 'movie',
+        title: 'Fresh Title',
+        slug: 'fresh',
+        year: 2026,
+        rating: 7,
+        duration: 100,
+        genres: [],
+        poster: '',
+        backdrop: '',
+        description: '',
+        playable: true,
+      },
+    ],
     popular: [],
     popularSeries: [],
     actionMovies: [],
@@ -46,6 +61,24 @@ vi.mock('@/lib/catalogData', () => ({
               reasons: ['Popular in the catalog'],
               explanation: 'Popular in the catalog',
               detail_path: '/movie/hit',
+            },
+          ],
+        },
+        {
+          shelf_type: 'new_releases',
+          title: 'New Releases',
+          personalized: false,
+          items: [
+            {
+              content_type: 'movie',
+              id: 2,
+              slug: 'new',
+              title: 'Brand New',
+              poster_url: 'https://example.test/n.jpg',
+              score: 0.4,
+              reasons: ['Recently added'],
+              explanation: 'Recently added',
+              detail_path: '/movie/new',
             },
           ],
         },
@@ -87,10 +120,13 @@ vi.mock('@/components/CustomerLayout', () => ({
         continueWatching: 'Continue Watching',
         trending: 'Trending',
         recentlyAdded: 'Recently Added',
+        newReleases: 'New Releases',
         popularMovies: 'Popular Movies',
         popularSeries: 'Popular Series',
         action: 'Action',
         comedy: 'Comedy',
+        drama: 'Drama',
+        animationFamily: 'Animation & Family',
         afghanMovies: 'Afghan',
         persianDubbed: 'Persian',
         pashtoDubbed: 'Pashto',
@@ -134,5 +170,23 @@ describe('Home recommendation shelves', () => {
     expect(screen.getByTestId('home-what-to-watch-cta')).toBeInTheDocument();
     // Recommendations come from catalog/home aggregate — no separate recs call.
     expect(getHomeRecommendations).not.toHaveBeenCalled();
+  });
+
+  it('does not duplicate Recently Added when new_releases shelf is present', async () => {
+    render(
+      <MemoryRouter>
+        <HomePage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('home-shelf-popular')).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('home-shelf-new_releases')).toBeInTheDocument();
+    });
+    expect(screen.getByText('New Releases')).toBeInTheDocument();
+    expect(screen.queryByText('Recently Added')).not.toBeInTheDocument();
+    expect(screen.getByText('Brand New')).toBeInTheDocument();
   });
 });
