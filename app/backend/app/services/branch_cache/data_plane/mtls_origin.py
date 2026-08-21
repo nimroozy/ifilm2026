@@ -347,8 +347,9 @@ class MtLsHttpsOriginFetcher:
                 object_ref_hash=ref,
             )
             raise DataPlaneError("origin timeout", code=CODE_TIMEOUT) from None
-        except httpx.HTTPError:
-            # Do not log exception strings — they may embed URLs.
+        except (httpx.HTTPError, ssl.SSLError):
+            # Map transport/TLS failures to a stable code. Never log exception
+            # strings — they may embed URLs or peer identity.
             _safe_fetch_log(
                 event="mtls_origin_error",
                 correlation_id=cid,

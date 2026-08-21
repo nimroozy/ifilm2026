@@ -3,19 +3,29 @@
 from __future__ import annotations
 
 import json
-import ssl
+import logging
 import threading
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Iterator
+from unittest.mock import MagicMock
 
+import httpx
 import pytest
 from app.core.config import Settings
 from app.services.branch_cache.data_plane.engine import BranchDataPlaneEngine
-from app.services.branch_cache.data_plane.errors import DataPlaneError
+from app.services.branch_cache.data_plane.errors import (
+    CODE_ORIGIN,
+    CODE_OVERSIZE,
+    CODE_TIMEOUT,
+    DataPlaneError,
+)
 from app.services.branch_cache.data_plane.mtls_origin import (
     MtLsHttpsOriginFetcher,
     MtLsOriginConfigError,
+    _object_ref_hash,
 )
 from app.services.branch_cache.data_plane.origin_allowlist import (
     build_object_url,
@@ -103,7 +113,7 @@ class _OriginHandler(BaseHTTPRequestHandler):
         candidate = self.root.joinpath(*parts)
         try:
             candidate.resolve().relative_to(self.root.resolve())
-        except Exception:
+        except (ValueError, OSError):
             return None
         return candidate if candidate.is_file() else None
 
@@ -146,14 +156,16 @@ class _OriginHandler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
 
-def _start_mtls_origin(
+@contextmanager
+def _mtls_origin_server(
     pki: BranchMtLsPkiPaths,
     content_root: Path,
     *,
     require_client: bool = True,
     redirect: bool = False,
     oversized: bool = False,
-) -> tuple[ThreadingHTTPServer, str, threading.Thread]:
+) -> Iterator[str]:
+    """Start a loopback mTLS origin; always shut down and join the thread."""
     handler = type(
         "H",
         (_OriginHandler,),
@@ -162,10 +174,15 @@ def _start_mtls_origin(
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     ctx = build_server_ssl_context(pki, require_client=require_client)
     server.socket = ctx.wrap_socket(server.socket, server_side=True)
-    port = server.server_address[1]
+    port = int(server.server_address[1])
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    return server, f"https://127.0.0.1:{port}", thread
+    try:
+        yield f"https://127.0.0.1:{port}"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5.0)
 
 
 def _seed_origin(root: Path) -> None:
@@ -196,12 +213,15 @@ def test_flags_default_off_and_prod_rejects():
 
 
 def test_allowlist_rejects_ssrf_shapes():
-    with pytest.raises(DataPlaneError):
+    with pytest.raises(DataPlaneError) as ei_http:
         parse_fixed_origin_url("http://origin.example/")
-    with pytest.raises(DataPlaneError):
+    assert ei_http.value.code == CODE_ORIGIN
+    with pytest.raises(DataPlaneError) as ei_creds:
         parse_fixed_origin_url("https://user:pass@origin.example/")
-    with pytest.raises(DataPlaneError):
+    assert ei_creds.value.code == CODE_ORIGIN
+    with pytest.raises(DataPlaneError) as ei_loop:
         parse_fixed_origin_url("https://127.0.0.1:8443/")
+    assert ei_loop.value.code == CODE_ORIGIN
     ep = parse_fixed_origin_url("https://127.0.0.1:8443/", allow_loopback=True)
     url = build_object_url(ep, asset_id="a", package_id="p", relative_path="720p/seg_000.ts")
     assert url.startswith("https://127.0.0.1:8443/")
@@ -212,8 +232,7 @@ def test_mtls_hit_miss_head_range_and_failures(tmp_path: Path):
     pki = generate_test_pki(tmp_path / "pki")
     origin_root = tmp_path / "origin"
     _seed_origin(origin_root)
-    server, base, _thread = _start_mtls_origin(pki, origin_root)
-    try:
+    with _mtls_origin_server(pki, origin_root) as base:
         settings = _settings()
         fetcher = MtLsHttpsOriginFetcher(
             endpoint_url=base,
@@ -224,86 +243,85 @@ def test_mtls_hit_miss_head_range_and_failures(tmp_path: Path):
             allow_loopback_for_tests=True,
             app_env="test",
         )
-        # Miss fill via engine
-        from app.services.branch_cache.data_plane.cache_store import CacheStore
+        try:
+            from app.services.branch_cache.data_plane.cache_store import CacheStore
 
-        cache = CacheStore(
-            tmp_path / "cache",
-            node_id="node-a",
-            high_watermark_bytes=5_000_000,
-            low_watermark_bytes=1_000_000,
-            min_free_bytes=10_000,
-        )
-        engine = BranchDataPlaneEngine(
-            node_id="node-a",
-            site_id="kabul",
-            cache=cache,
-            origin=fetcher,
-            public_key_pem=settings.edge_grant_public_key_pem,
-            settings=settings,
-        )
-        clear_replay_cache_for_tests()
-        tok, _ = issue_edge_grant(
-            node_id="node-a",
-            site_id="kabul",
-            package_id="pkg-1",
-            session_id="s1",
-            path_prefix="/v1/obj/asset-1/pkg-1/",
-            settings=settings,
-        )
-        miss = engine.serve(
-            grant_token=tok,
-            asset_id="asset-1",
-            package_id="pkg-1",
-            session_id="s1",
-            relative_path="720p/seg_000.ts",
-            path_prefix="/v1/obj/asset-1/pkg-1/",
-        )
-        assert miss.status_code == 200
-        assert miss.decision.decision == "cache_miss_filled"
+            cache = CacheStore(
+                tmp_path / "cache",
+                node_id="node-a",
+                high_watermark_bytes=5_000_000,
+                low_watermark_bytes=1_000_000,
+                min_free_bytes=10_000,
+            )
+            engine = BranchDataPlaneEngine(
+                node_id="node-a",
+                site_id="kabul",
+                cache=cache,
+                origin=fetcher,
+                public_key_pem=settings.edge_grant_public_key_pem,
+                settings=settings,
+            )
+            clear_replay_cache_for_tests()
+            tok, _ = issue_edge_grant(
+                node_id="node-a",
+                site_id="kabul",
+                package_id="pkg-1",
+                session_id="s1",
+                path_prefix="/v1/obj/asset-1/pkg-1/",
+                settings=settings,
+            )
+            miss = engine.serve(
+                grant_token=tok,
+                asset_id="asset-1",
+                package_id="pkg-1",
+                session_id="s1",
+                relative_path="720p/seg_000.ts",
+                path_prefix="/v1/obj/asset-1/pkg-1/",
+            )
+            assert miss.status_code == 200
+            assert miss.decision.decision == "cache_miss_filled"
 
-        clear_replay_cache_for_tests()
-        tok2, _ = issue_edge_grant(
-            node_id="node-a",
-            site_id="kabul",
-            package_id="pkg-1",
-            session_id="s2",
-            path_prefix="/v1/obj/asset-1/pkg-1/",
-            settings=settings,
-        )
-        hit = engine.serve(
-            grant_token=tok2,
-            asset_id="asset-1",
-            package_id="pkg-1",
-            session_id="s2",
-            relative_path="720p/seg_000.ts",
-            path_prefix="/v1/obj/asset-1/pkg-1/",
-        )
-        assert hit.decision.decision == "cache_hit"
+            clear_replay_cache_for_tests()
+            tok2, _ = issue_edge_grant(
+                node_id="node-a",
+                site_id="kabul",
+                package_id="pkg-1",
+                session_id="s2",
+                path_prefix="/v1/obj/asset-1/pkg-1/",
+                settings=settings,
+            )
+            hit = engine.serve(
+                grant_token=tok2,
+                asset_id="asset-1",
+                package_id="pkg-1",
+                session_id="s2",
+                relative_path="720p/seg_000.ts",
+                path_prefix="/v1/obj/asset-1/pkg-1/",
+            )
+            assert hit.decision.decision == "cache_hit"
 
-        clear_replay_cache_for_tests()
-        tok3, _ = issue_edge_grant(
-            node_id="node-a",
-            site_id="kabul",
-            package_id="pkg-1",
-            session_id="s3",
-            path_prefix="/v1/obj/asset-1/pkg-1/",
-            settings=settings,
-        )
-        ranged = engine.serve(
-            grant_token=tok3,
-            asset_id="asset-1",
-            package_id="pkg-1",
-            session_id="s3",
-            relative_path="720p/seg_000.ts",
-            path_prefix="/v1/obj/asset-1/pkg-1/",
-            range_header="bytes=0-9",
-        )
-        assert ranged.status_code == 206
-        assert len(ranged.body) == 10
-        fetcher.close()
-    finally:
-        server.shutdown()
+            clear_replay_cache_for_tests()
+            tok3, _ = issue_edge_grant(
+                node_id="node-a",
+                site_id="kabul",
+                package_id="pkg-1",
+                session_id="s3",
+                path_prefix="/v1/obj/asset-1/pkg-1/",
+                settings=settings,
+            )
+            ranged = engine.serve(
+                grant_token=tok3,
+                asset_id="asset-1",
+                package_id="pkg-1",
+                session_id="s3",
+                relative_path="720p/seg_000.ts",
+                path_prefix="/v1/obj/asset-1/pkg-1/",
+                range_header="bytes=0-9",
+            )
+            assert ranged.status_code == 206
+            assert len(ranged.body) == 10
+        finally:
+            fetcher.close()
 
 
 def test_mtls_invalid_ca_and_missing_client(tmp_path: Path):
@@ -311,9 +329,8 @@ def test_mtls_invalid_ca_and_missing_client(tmp_path: Path):
     other = generate_test_pki(tmp_path / "other")
     origin_root = tmp_path / "origin"
     _seed_origin(origin_root)
-    server, base, _ = _start_mtls_origin(good, origin_root)
-    try:
-        with pytest.raises((DataPlaneError, ssl.SSLError, Exception)):
+    with _mtls_origin_server(good, origin_root) as base:
+        with pytest.raises(DataPlaneError) as ei:
             bad = MtLsHttpsOriginFetcher(
                 endpoint_url=base,
                 client_cert_path=other.client_cert,
@@ -327,15 +344,11 @@ def test_mtls_invalid_ca_and_missing_client(tmp_path: Path):
                 bad.fetch(asset_id="asset-1", package_id="pkg-1", relative_path="720p/seg_000.ts")
             finally:
                 bad.close()
-    finally:
-        server.shutdown()
+        assert ei.value.code == CODE_ORIGIN
 
-    # Server requires client — connecting without client cert fails at handshake
-    server2, base2, _ = _start_mtls_origin(good, origin_root, require_client=True)
-    try:
-        # Use a fetcher with wrong key material already covered; missing client
-        # is enforced at construction (paths required).
-        with pytest.raises(MtLsOriginConfigError):
+    # Missing client material is rejected at construction with a stable code.
+    with _mtls_origin_server(good, origin_root, require_client=True) as base2:
+        with pytest.raises(MtLsOriginConfigError) as ei_missing:
             MtLsHttpsOriginFetcher(
                 endpoint_url=base2,
                 client_cert_path=tmp_path / "missing.crt",
@@ -345,8 +358,7 @@ def test_mtls_invalid_ca_and_missing_client(tmp_path: Path):
                 allow_loopback_for_tests=True,
                 app_env="test",
             )
-    finally:
-        server2.shutdown()
+        assert ei_missing.value.code == "cert_path"
 
 
 def test_mtls_expired_and_wrong_san_and_revoked(tmp_path: Path):
@@ -367,8 +379,7 @@ def test_mtls_expired_and_wrong_san_and_revoked(tmp_path: Path):
     wrong_san = generate_test_pki(tmp_path / "san", server_sans=["wrong.example"])
     origin_root = tmp_path / "origin"
     _seed_origin(origin_root)
-    server, base, _ = _start_mtls_origin(wrong_san, origin_root)
-    try:
+    with _mtls_origin_server(wrong_san, origin_root) as base:
         fetcher = MtLsHttpsOriginFetcher(
             endpoint_url=base,
             client_cert_path=wrong_san.client_cert,
@@ -378,11 +389,14 @@ def test_mtls_expired_and_wrong_san_and_revoked(tmp_path: Path):
             allow_loopback_for_tests=True,
             app_env="test",
         )
-        with pytest.raises(DataPlaneError):
-            fetcher.fetch(asset_id="asset-1", package_id="pkg-1", relative_path="720p/seg_000.ts")
-        fetcher.close()
-    finally:
-        server.shutdown()
+        try:
+            with pytest.raises(DataPlaneError) as ei_san:
+                fetcher.fetch(
+                    asset_id="asset-1", package_id="pkg-1", relative_path="720p/seg_000.ts"
+                )
+            assert ei_san.value.code == CODE_ORIGIN
+        finally:
+            fetcher.close()
 
     good = generate_test_pki(tmp_path / "rev")
     with pytest.raises(MtLsOriginConfigError) as ei2:
@@ -404,8 +418,7 @@ def test_mtls_redirect_and_oversize_refused(tmp_path: Path):
     pki = generate_test_pki(tmp_path / "pki")
     origin_root = tmp_path / "origin"
     _seed_origin(origin_root)
-    server, base, _ = _start_mtls_origin(pki, origin_root, redirect=True)
-    try:
+    with _mtls_origin_server(pki, origin_root, redirect=True) as base:
         fetcher = MtLsHttpsOriginFetcher(
             endpoint_url=base,
             client_cert_path=pki.client_cert,
@@ -415,15 +428,16 @@ def test_mtls_redirect_and_oversize_refused(tmp_path: Path):
             allow_loopback_for_tests=True,
             app_env="test",
         )
-        with pytest.raises(DataPlaneError) as ei:
-            fetcher.fetch(asset_id="asset-1", package_id="pkg-1", relative_path="720p/seg_000.ts")
-        assert "redirect" in str(ei.value).lower() or ei.value.code == "origin_unavailable"
-        fetcher.close()
-    finally:
-        server.shutdown()
+        try:
+            with pytest.raises(DataPlaneError) as ei:
+                fetcher.fetch(
+                    asset_id="asset-1", package_id="pkg-1", relative_path="720p/seg_000.ts"
+                )
+            assert ei.value.code == CODE_ORIGIN
+        finally:
+            fetcher.close()
 
-    server2, base2, _ = _start_mtls_origin(pki, origin_root, oversized=True)
-    try:
+    with _mtls_origin_server(pki, origin_root, oversized=True) as base2:
         fetcher = MtLsHttpsOriginFetcher(
             endpoint_url=base2,
             client_cert_path=pki.client_cert,
@@ -434,16 +448,61 @@ def test_mtls_redirect_and_oversize_refused(tmp_path: Path):
             app_env="test",
             max_body_bytes=1024,
         )
-        with pytest.raises(DataPlaneError) as ei2:
+        try:
+            with pytest.raises(DataPlaneError) as ei2:
+                fetcher.fetch(
+                    asset_id="asset-1", package_id="pkg-1", relative_path="720p/seg_000.ts"
+                )
+            assert ei2.value.code == CODE_OVERSIZE
+        finally:
+            fetcher.close()
+
+
+def test_mtls_timeout_maps_to_origin_timeout(tmp_path: Path):
+    pki = generate_test_pki(tmp_path / "pki")
+    mock_client = MagicMock()
+    mock_client.stream.side_effect = httpx.TimeoutException("simulated timeout")
+    fetcher = MtLsHttpsOriginFetcher(
+        endpoint_url="https://127.0.0.1:1",
+        client_cert_path=pki.client_cert,
+        client_key_path=pki.client_key,
+        ca_bundle_path=pki.ca_cert,
+        enable_mtls_staging_candidate=True,
+        allow_loopback_for_tests=True,
+        app_env="test",
+        skip_dns_check=True,
+        http_client=mock_client,
+    )
+    try:
+        with pytest.raises(DataPlaneError) as ei:
             fetcher.fetch(asset_id="asset-1", package_id="pkg-1", relative_path="720p/seg_000.ts")
-        assert (
-            ei2.value.code == "object_too_large"
-            or "size" in str(ei2.value).lower()
-            or "large" in str(ei2.value).lower()
-        )
-        fetcher.close()
+        assert ei.value.code == CODE_TIMEOUT
     finally:
-        server2.shutdown()
+        fetcher.close()
+
+
+def test_mtls_origin_miss_maps_to_origin_unavailable(tmp_path: Path):
+    pki = generate_test_pki(tmp_path / "pki")
+    origin_root = tmp_path / "origin"
+    _seed_origin(origin_root)
+    with _mtls_origin_server(pki, origin_root) as base:
+        fetcher = MtLsHttpsOriginFetcher(
+            endpoint_url=base,
+            client_cert_path=pki.client_cert,
+            client_key_path=pki.client_key,
+            ca_bundle_path=pki.ca_cert,
+            enable_mtls_staging_candidate=True,
+            allow_loopback_for_tests=True,
+            app_env="test",
+        )
+        try:
+            with pytest.raises(DataPlaneError) as ei:
+                fetcher.fetch(
+                    asset_id="asset-1", package_id="pkg-1", relative_path="720p/missing.ts"
+                )
+            assert ei.value.code == CODE_ORIGIN
+        finally:
+            fetcher.close()
 
 
 def test_loopback_forbidden_outside_lab_env(tmp_path: Path):
@@ -532,8 +591,7 @@ def test_asgi_http_service_with_mtls_origin_and_drain(tmp_path: Path):
     pki = generate_test_pki(tmp_path / "pki")
     origin_root = tmp_path / "origin"
     _seed_origin(origin_root)
-    server, base, _ = _start_mtls_origin(pki, origin_root)
-    try:
+    with _mtls_origin_server(pki, origin_root) as base:
         settings = _settings()
         fetcher = MtLsHttpsOriginFetcher(
             endpoint_url=base,
@@ -544,91 +602,85 @@ def test_asgi_http_service_with_mtls_origin_and_drain(tmp_path: Path):
             allow_loopback_for_tests=True,
             app_env="test",
         )
-        app = create_branch_cache_app(
-            BranchServiceConfig(
+        try:
+            app = create_branch_cache_app(
+                BranchServiceConfig(
+                    node_id="node-a",
+                    site_id="kabul",
+                    public_key_pem=settings.edge_grant_public_key_pem,
+                    cache_root=tmp_path / "cache",
+                    origin=fetcher,
+                    settings=settings,
+                    enable_health=True,
+                    enable_ready=True,
+                )
+            )
+            client = TestClient(app)
+            clear_replay_cache_for_tests()
+            tok, _ = issue_edge_grant(
                 node_id="node-a",
                 site_id="kabul",
-                public_key_pem=settings.edge_grant_public_key_pem,
-                cache_root=tmp_path / "cache",
-                origin=fetcher,
+                package_id="pkg-1",
+                session_id="h1",
+                path_prefix="/v1/obj/asset-1/pkg-1/",
                 settings=settings,
-                enable_health=True,
-                enable_ready=True,
             )
-        )
-        client = TestClient(app)
-        clear_replay_cache_for_tests()
-        tok, _ = issue_edge_grant(
-            node_id="node-a",
-            site_id="kabul",
-            package_id="pkg-1",
-            session_id="h1",
-            path_prefix="/v1/obj/asset-1/pkg-1/",
-            settings=settings,
-        )
-        r = client.get(
-            "/v1/obj/asset-1/pkg-1/720p/seg_000.ts",
-            headers={"Authorization": f"Bearer {tok}", "X-Ifilm-Session-Id": "h1"},
-        )
-        assert r.status_code == 200
-        ready = client.get("/ready").json()
-        assert ready["live_origin"] is False
-        assert ready["client_redirect"] is False
-        app.state.branch_state.start_drain()
-        (origin_root / "asset-1" / "pkg-1" / "720p" / "seg_001.ts").write_bytes(b"Y" * 40)
-        clear_replay_cache_for_tests()
-        tok2, _ = issue_edge_grant(
-            node_id="node-a",
-            site_id="kabul",
-            package_id="pkg-1",
-            session_id="h2",
-            path_prefix="/v1/obj/asset-1/pkg-1/",
-            settings=settings,
-        )
-        r2 = client.get(
-            "/v1/obj/asset-1/pkg-1/720p/seg_001.ts",
-            headers={"Authorization": f"Bearer {tok2}", "X-Ifilm-Session-Id": "h2"},
-        )
-        assert r2.status_code == 503
-        app.state.branch_state.start_shutdown()
-        clear_replay_cache_for_tests()
-        tok3, _ = issue_edge_grant(
-            node_id="node-a",
-            site_id="kabul",
-            package_id="pkg-1",
-            session_id="h3",
-            path_prefix="/v1/obj/asset-1/pkg-1/",
-            settings=settings,
-        )
-        assert (
-            client.get(
+            r = client.get(
                 "/v1/obj/asset-1/pkg-1/720p/seg_000.ts",
-                headers={"Authorization": f"Bearer {tok3}", "X-Ifilm-Session-Id": "h3"},
-            ).status_code
-            == 503
-        )
-        fetcher.close()
-    finally:
-        server.shutdown()
+                headers={"Authorization": f"Bearer {tok}", "X-Ifilm-Session-Id": "h1"},
+            )
+            assert r.status_code == 200
+            ready = client.get("/ready").json()
+            assert ready["live_origin"] is False
+            assert ready["client_redirect"] is False
+            app.state.branch_state.start_drain()
+            (origin_root / "asset-1" / "pkg-1" / "720p" / "seg_001.ts").write_bytes(b"Y" * 40)
+            clear_replay_cache_for_tests()
+            tok2, _ = issue_edge_grant(
+                node_id="node-a",
+                site_id="kabul",
+                package_id="pkg-1",
+                session_id="h2",
+                path_prefix="/v1/obj/asset-1/pkg-1/",
+                settings=settings,
+            )
+            r2 = client.get(
+                "/v1/obj/asset-1/pkg-1/720p/seg_001.ts",
+                headers={"Authorization": f"Bearer {tok2}", "X-Ifilm-Session-Id": "h2"},
+            )
+            assert r2.status_code == 503
+            app.state.branch_state.start_shutdown()
+            clear_replay_cache_for_tests()
+            tok3, _ = issue_edge_grant(
+                node_id="node-a",
+                site_id="kabul",
+                package_id="pkg-1",
+                session_id="h3",
+                path_prefix="/v1/obj/asset-1/pkg-1/",
+                settings=settings,
+            )
+            assert (
+                client.get(
+                    "/v1/obj/asset-1/pkg-1/720p/seg_000.ts",
+                    headers={"Authorization": f"Bearer {tok3}", "X-Ifilm-Session-Id": "h3"},
+                ).status_code
+                == 503
+            )
+        finally:
+            fetcher.close()
 
 
 def test_mtls_origin_logs_never_leak_identifiers(tmp_path: Path, caplog: pytest.LogCaptureFixture):
-    import logging
-
-    from app.services.branch_cache.data_plane.mtls_origin import _object_ref_hash
-
     pki = generate_test_pki(tmp_path / "pki")
     origin_root = tmp_path / "origin"
     _seed_origin(origin_root)
-    server, base, _ = _start_mtls_origin(pki, origin_root)
     asset = "asset-secret-42"
     package = "pkg-secret-99"
     rel = "720p/seg_000.ts"
-    # Unique identifiable strings that must never appear in logs.
     (origin_root / asset / package / "720p").mkdir(parents=True)
     (origin_root / asset / package / rel).write_bytes(b"SEGMENTDATA" * 64)
     expected_ref = _object_ref_hash(asset_id=asset, package_id=package, relative_path=rel)
-    try:
+    with _mtls_origin_server(pki, origin_root) as base:
         fetcher = MtLsHttpsOriginFetcher(
             endpoint_url=base,
             client_cert_path=pki.client_cert,
@@ -638,43 +690,45 @@ def test_mtls_origin_logs_never_leak_identifiers(tmp_path: Path, caplog: pytest.
             allow_loopback_for_tests=True,
             app_env="test",
         )
-        with caplog.at_level(logging.DEBUG, logger="app.branch_cache.mtls_origin"):
-            obj = fetcher.fetch(asset_id=asset, package_id=package, relative_path=rel)
-            assert obj.size_bytes > 0
-            # Force an error path that previously might have logged exception text.
-            with pytest.raises(DataPlaneError):
-                fetcher.fetch(asset_id=asset, package_id=package, relative_path="720p/missing.ts")
-        text = "\n".join(r.getMessage() for r in caplog.records)
-        # Must not appear at any captured level:
-        for forbidden in (
-            asset,
-            package,
-            rel,
-            "720p/",
-            base,
-            "https://",
-            "BEGIN ",
-            "PRIVATE KEY",
-            "CERTIFICATE",
-            "Authorization",
-            "Bearer ",
-            str(pki.client_cert),
-            str(pki.client_key),
-            pki.client_fingerprint_sha256,
-        ):
-            assert forbidden not in text, f"leaked {forbidden!r} in logs: {text}"
-        assert "event=mtls_origin_fetch" in text
-        assert "correlation_id=" in text
-        assert f"object_ref={expected_ref}" in text
-        assert "host=" not in text
-        assert "asset=" not in text
-        assert "package=" not in text
-        assert " path=" not in text and not any(
-            m.startswith("path=") for m in text.replace("object_ref=", "").split()
-        )
-        fetcher.close()
-    finally:
-        server.shutdown()
+        try:
+            with caplog.at_level(logging.DEBUG, logger="app.branch_cache.mtls_origin"):
+                obj = fetcher.fetch(asset_id=asset, package_id=package, relative_path=rel)
+                assert obj.size_bytes > 0
+                with pytest.raises(DataPlaneError) as ei_miss:
+                    fetcher.fetch(
+                        asset_id=asset, package_id=package, relative_path="720p/missing.ts"
+                    )
+                assert ei_miss.value.code == CODE_ORIGIN
+            text = "\n".join(r.getMessage() for r in caplog.records)
+            for forbidden in (
+                asset,
+                package,
+                rel,
+                "720p/",
+                base,
+                "https://",
+                "BEGIN ",
+                "PRIVATE KEY",
+                "CERTIFICATE",
+                "Authorization",
+                "Bearer ",
+                str(pki.client_cert),
+                str(pki.client_key),
+                pki.client_fingerprint_sha256,
+            ):
+                assert forbidden not in text, f"leaked {forbidden!r} in logs: {text}"
+            assert "event=mtls_origin_fetch" in text
+            assert "correlation_id=" in text
+            assert f"object_ref={expected_ref}" in text
+            assert "host=" not in text
+            assert "asset=" not in text
+            assert "package=" not in text
+            assert " path=" not in text and not any(
+                m.startswith("path=") for m in text.replace("object_ref=", "").split()
+            )
+            assert "mtls_origin_fetch host=" not in text
+        finally:
+            fetcher.close()
 
 
 def test_central_stream_unchanged(monkeypatch: pytest.MonkeyPatch):
