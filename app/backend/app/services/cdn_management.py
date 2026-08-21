@@ -173,9 +173,10 @@ def issue_heartbeat_token(node: ManagedCDNNode) -> str:
 
 
 def verify_heartbeat_token(node: ManagedCDNNode, token: str) -> bool:
-    return bool(node.heartbeat_token_hash and token) and hmac.compare_digest(
-        node.heartbeat_token_hash, _hash_token(token)
-    )
+    stored_hash = node.heartbeat_token_hash
+    if not stored_hash or not token:
+        return False
+    return hmac.compare_digest(stored_hash, _hash_token(token))
 
 
 def validate_host_fingerprint(value: str | None) -> str | None:
