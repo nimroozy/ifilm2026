@@ -27,11 +27,15 @@ def _cmd_plan(args: argparse.Namespace) -> int:
         host = HostFacts(
             resolved_origin_ips=(),
             ca=None,
+            origin_server_cert=None,
             client_cert=None,
             client_key_exists=False,
+            client_key_matches_cert=False,
+            observed_client_identity="",
             image_digest_present=False,
-            sbom_ref_present=False,
-            provenance_ref_present=False,
+            sbom_ref_reviewed="",
+            provenance_ref_reviewed="",
+            manifest_signature="",
             rollback_prior_digest_recorded=False,
         )
     report = evaluate_preflight(inventory, host=host)

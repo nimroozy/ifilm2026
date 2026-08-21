@@ -87,11 +87,14 @@ class TrustFingerprints(ModelForbidExtra):
     mtls_ca_bundle_sha256: str
     mtls_client_cert_sha256: str
     edge_grant_public_key_sha256: str
+    # Fingerprint of the origin *server* leaf observed during verified mTLS preflight.
+    mtls_origin_server_cert_sha256: str
 
     @field_validator(
         "mtls_ca_bundle_sha256",
         "mtls_client_cert_sha256",
         "edge_grant_public_key_sha256",
+        "mtls_origin_server_cert_sha256",
     )
     @classmethod
     def _fp(cls, value: str) -> str:
@@ -99,6 +102,25 @@ class TrustFingerprints(ModelForbidExtra):
         if not _SHA256_HEX.match(text):
             raise ValueError("fingerprint must be 64 lowercase hex chars")
         return text
+
+
+def is_unreviewed_placeholder(value: str) -> bool:
+    """True when a string is empty or an explicit non-concrete placeholder.
+
+    Non-empty placeholder tokens must never count as reviewed evidence.
+    """
+    text = (value or "").strip()
+    if not text:
+        return True
+    upper = text.upper()
+    if upper.startswith("REQUIRED:"):
+        return True
+    lower = text.lower()
+    if "placeholder" in lower:
+        return True
+    if lower.startswith("todo:") or lower in {"tbd", "replace-me", "changeme"}:
+        return True
+    return False
 
 
 class CacheVolumeSpec(ModelForbidExtra):
@@ -199,6 +221,8 @@ class StagingInventoryV1(ModelForbidExtra):
     cache: CacheVolumeSpec
     capacity: CapacityLimits = Field(default_factory=CapacityLimits)
     operator_approval: OperatorApproval
+    # Explicit expected client identity (DNS name / URI SAN / CN) — never the origin host.
+    expected_client_identity: str = Field(min_length=3, max_length=253)
     # Mount path placeholders only — never PEM contents.
     ca_bundle_mount_path: str = "/run/ifilm/certs/ca-bundle.pem"
     client_cert_mount_path: str = "/run/ifilm/certs/client.crt"
@@ -227,6 +251,18 @@ class StagingInventoryV1(ModelForbidExtra):
             raise ValueError("invalid node_id/site_id")
         return text
 
+    @field_validator("expected_client_identity")
+    @classmethod
+    def _client_id(cls, value: str) -> str:
+        text = (value or "").strip().lower()
+        if not text or is_unreviewed_placeholder(text):
+            raise ValueError("expected_client_identity must be concrete")
+        if "*" in text:
+            raise ValueError("wildcard client identity forbidden")
+        if _IPV4_RE.match(text):
+            raise ValueError("client identity must not be a raw IP")
+        return text
+
     @field_validator(
         "ca_bundle_mount_path",
         "client_cert_mount_path",
@@ -250,12 +286,36 @@ class StagingInventoryV1(ModelForbidExtra):
                 raise ValueError("empty DNS resolver placeholder")
         return value
 
+    @model_validator(mode="after")
+    def _client_identity_not_origin(self) -> StagingInventoryV1:
+        if self.expected_client_identity == self.origin.host:
+            raise ValueError("expected_client_identity must differ from origin host")
+        return self
+
     def to_public_dict(self) -> dict[str, Any]:
         data = self.model_dump()
         blob = json.dumps(data, sort_keys=True)
         if "PRIVATE KEY" in blob or "BEGIN CERTIFICATE" in blob:
             raise ValueError("inventory must not embed certificate or key PEM")
         return data
+
+    def placeholder_fields(self) -> list[str]:
+        """Inventory fields that are still explicit placeholders (fail readiness)."""
+        bad: list[str] = []
+        if is_unreviewed_placeholder(self.image.sbom_ref):
+            bad.append("image.sbom_ref")
+        if is_unreviewed_placeholder(self.image.provenance_ref):
+            bad.append("image.provenance_ref")
+        if is_unreviewed_placeholder(self.operator_approval.record_id):
+            bad.append("operator_approval.record_id")
+        if is_unreviewed_placeholder(self.origin.reviewed_dns_evidence_id):
+            bad.append("origin.reviewed_dns_evidence_id")
+        if is_unreviewed_placeholder(self.management_access_placeholder):
+            bad.append("management_access_placeholder")
+        for idx, resolver in enumerate(self.dns_resolver_placeholders):
+            if is_unreviewed_placeholder(resolver):
+                bad.append(f"dns_resolver_placeholders[{idx}]")
+        return bad
 
 
 def _reject_secret_keys(raw: Any) -> None:
@@ -306,7 +366,7 @@ def write_staging_inventory(path: Path, inventory: StagingInventoryV1) -> None:
 
 
 def example_inventory_dict() -> dict[str, Any]:
-    """Placeholder example — no real endpoints/secrets."""
+    """Offline example with explicit placeholders — must fail readiness until replaced."""
     return {
         "schema_version": "ifilm.branch_node.staging_inventory.v1",
         "environment": "staging-candidate",
@@ -328,6 +388,7 @@ def example_inventory_dict() -> dict[str, Any]:
             "mtls_ca_bundle_sha256": "b" * 64,
             "mtls_client_cert_sha256": "c" * 64,
             "edge_grant_public_key_sha256": "d" * 64,
+            "mtls_origin_server_cert_sha256": "e" * 64,
         },
         "cache": {
             "device_or_path": "/var/lib/ifilm-branch-staging-cache",
@@ -350,9 +411,22 @@ def example_inventory_dict() -> dict[str, Any]:
             "approver_role": "staging-owner",
             "noted_at_utc": "1970-01-01T00:00:00Z",
         },
+        "expected_client_identity": "branch-node-staging-1.example.internal",
         "client_redirect_active": False,
         "live_pilot_ready": False,
         "management_access_placeholder": "REQUIRED:OPERATOR_MGMT_SOURCE_CIDR",
         "dns_resolver_placeholders": ["REQUIRED:DNS_RESOLVER_IP"],
         "notes": "Phase 9 offline example — replace placeholders before any live review.",
     }
+
+
+def concrete_reviewed_inventory_dict() -> dict[str, Any]:
+    """Fully concrete inventory values for offline readiness tests (still fake)."""
+    data = example_inventory_dict()
+    data["image"]["sbom_ref"] = "spdx:reviewed-sbom-" + ("1" * 16)
+    data["image"]["provenance_ref"] = "in-toto:reviewed-provenance-" + ("2" * 16)
+    data["origin"]["reviewed_dns_evidence_id"] = "dns-ev-20260821-reviewed-001"
+    data["operator_approval"]["record_id"] = "apr-20260821-reviewed-001"
+    data["management_access_placeholder"] = "203.0.113.10/32"
+    data["dns_resolver_placeholders"] = ["203.0.113.53"]
+    return data

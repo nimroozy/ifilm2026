@@ -2,16 +2,23 @@
 
 Never modifies the host. Host facts are injected for offline/unit tests.
 Fails closed when required deployment inputs are absent or incomplete.
+
+Certificate roles are split:
+- Origin *server* cert evidence (SAN must exactly include inventory.origin.host)
+- Client cert (clientAuth EKU, fingerprint, validity, key match/perms, expected identity)
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from app.services.branch_cache.deploy.inventory import StagingInventoryV1
+from app.services.branch_cache.deploy.inventory import (
+    StagingInventoryV1,
+    is_unreviewed_placeholder,
+)
 from app.services.branch_cache.ops.node_health import CheckResult
 
 
@@ -26,7 +33,9 @@ class CertMaterialFact:
     sha256_hex: str
     not_after_utc: str
     san_dns: tuple[str, ...]
-    has_client_auth_eku: bool
+    has_client_auth_eku: bool = False
+    has_server_auth_eku: bool = False
+    subject_cn: str = ""
 
 
 @dataclass(frozen=True)
@@ -47,13 +56,20 @@ class HostFacts:
     resolved_origin_ips: tuple[str, ...] = ()
     dns_resolution_stable: bool = True
     ca: CertMaterialFact | None = None
+    # Verified mTLS preflight evidence for the *origin server* leaf certificate.
+    origin_server_cert: CertMaterialFact | None = None
     client_cert: CertMaterialFact | None = None
     client_key_mode_bits: int = 0o600
     client_key_exists: bool = False
+    client_key_matches_cert: bool = False
+    # Observed client identity (exact DNS SAN or CN) from client cert material.
+    observed_client_identity: str = ""
     edge_grant_public_sha256: str = ""
     image_digest_present: bool = True
-    sbom_ref_present: bool = True
-    provenance_ref_present: bool = True
+    # Concrete reviewed refs only — placeholder strings must not flip these true.
+    sbom_ref_reviewed: str = ""
+    provenance_ref_reviewed: str = ""
+    manifest_signature: str = ""
     feature_flags: dict[str, bool] = field(
         default_factory=lambda: {
             "ENABLE_BRANCH_CACHE_HTTP_MTLS_STAGING_CANDIDATE": False,
@@ -68,6 +84,23 @@ class HostFacts:
 
 def _check(name: str, ok: bool, detail: str = "ok") -> CheckResult:
     return CheckResult(name, ok, detail if ok else detail)
+
+
+def _norm_dns(value: str) -> str:
+    return (value or "").strip().lower().rstrip(".")
+
+
+def _cert_not_after_ok(
+    fact: CertMaterialFact, now: datetime, *, min_days: int = 7
+) -> tuple[bool, str]:
+    try:
+        not_after = datetime.fromisoformat(fact.not_after_utc.replace("Z", "+00:00"))
+    except ValueError:
+        return False, "invalid_not_after"
+    remaining = (not_after - now).days
+    if remaining < min_days:
+        return False, "cert_expiring_soon"
+    return True, "ok"
 
 
 def evaluate_preflight(
@@ -90,12 +123,23 @@ def evaluate_preflight(
         _check("non_root_uid", inventory.run_as_uid == 10001 and inventory.run_as_gid == 10001)
     )
     checks.append(_check("immutable_image_digest", inventory.image.digest.startswith("sha256:")))
+
+    # Explicit placeholder fields on the inventory fail readiness (non-empty ≠ concrete).
+    placeholders = inventory.placeholder_fields()
+    checks.append(
+        _check(
+            "inventory_placeholders_absent",
+            not placeholders,
+            "ok" if not placeholders else "placeholders:" + ",".join(placeholders),
+        )
+    )
     checks.append(
         _check(
             "operator_approval_record",
-            bool(inventory.operator_approval.record_id)
-            and not inventory.operator_approval.record_id.startswith("REQUIRED"),
-            "ok" if inventory.operator_approval.record_id else "missing_approval",
+            not is_unreviewed_placeholder(inventory.operator_approval.record_id),
+            "ok"
+            if not is_unreviewed_placeholder(inventory.operator_approval.record_id)
+            else "approval_placeholder_or_missing",
         )
     )
 
@@ -151,7 +195,7 @@ def evaluate_preflight(
     )
     checks.append(_check("cpu", int(host.cpu_count) >= 1))
 
-    # Certs — metadata only
+    # CA bundle
     if host.ca is None:
         checks.append(_check("ca_material", False, "ca_facts_absent"))
     else:
@@ -166,53 +210,90 @@ def evaluate_preflight(
             )
         )
 
-    if host.client_cert is None:
-        checks.append(_check("client_cert_material", False, "client_cert_facts_absent"))
+    # Origin *server* certificate evidence (from verified mTLS preflight) — SAN exact match.
+    origin_host = _norm_dns(inventory.origin.host)
+    if host.origin_server_cert is None:
+        checks.append(_check("origin_server_cert_material", False, "origin_server_cert_absent"))
     else:
+        osc = host.origin_server_cert
+        checks.append(_check("origin_server_cert_exists", osc.exists and not osc.is_symlink))
         checks.append(
             _check(
-                "client_cert_exists", host.client_cert.exists and not host.client_cert.is_symlink
+                "origin_server_cert_fingerprint",
+                osc.sha256_hex == inventory.trust.mtls_origin_server_cert_sha256,
+                "ok"
+                if osc.sha256_hex == inventory.trust.mtls_origin_server_cert_sha256
+                else "origin_server_fp_mismatch",
             )
         )
         checks.append(
             _check(
+                "origin_server_cert_eku",
+                osc.has_server_auth_eku,
+                "ok" if osc.has_server_auth_eku else "missing_server_auth_eku",
+            )
+        )
+        sans = tuple(_norm_dns(s) for s in osc.san_dns)
+        if not sans:
+            checks.append(_check("origin_server_san_exact", False, "origin_san_missing"))
+        elif origin_host not in sans:
+            # Non-empty but wrong/unrelated SAN must fail closed — never "any SAN present".
+            checks.append(_check("origin_server_san_exact", False, "origin_san_mismatch"))
+        else:
+            checks.append(_check("origin_server_san_exact", True, "ok"))
+        exp_ok, exp_detail = _cert_not_after_ok(osc, now)
+        checks.append(_check("origin_server_cert_expiry", exp_ok, exp_detail))
+
+    # Client certificate — identity is NOT the origin host.
+    if host.client_cert is None:
+        checks.append(_check("client_cert_material", False, "client_cert_facts_absent"))
+    else:
+        cc = host.client_cert
+        checks.append(_check("client_cert_exists", cc.exists and not cc.is_symlink))
+        checks.append(
+            _check(
                 "client_cert_fingerprint",
-                host.client_cert.sha256_hex == inventory.trust.mtls_client_cert_sha256,
+                cc.sha256_hex == inventory.trust.mtls_client_cert_sha256,
                 "ok"
-                if host.client_cert.sha256_hex == inventory.trust.mtls_client_cert_sha256
+                if cc.sha256_hex == inventory.trust.mtls_client_cert_sha256
                 else "client_fp_mismatch",
             )
         )
         checks.append(
             _check(
                 "client_cert_eku",
-                host.client_cert.has_client_auth_eku,
-                "ok" if host.client_cert.has_client_auth_eku else "missing_client_auth_eku",
+                cc.has_client_auth_eku,
+                "ok" if cc.has_client_auth_eku else "missing_client_auth_eku",
             )
         )
-        san_ok = inventory.origin.host in host.client_cert.san_dns or bool(host.client_cert.san_dns)
-        # Client cert SAN need not match origin host; record presence only.
+        exp_ok, exp_detail = _cert_not_after_ok(cc, now)
+        checks.append(_check("client_cert_expiry", exp_ok, exp_detail))
+
+        expected_id = _norm_dns(inventory.expected_client_identity)
+        observed = _norm_dns(host.observed_client_identity)
+        client_sans = {_norm_dns(s) for s in cc.san_dns}
+        subject = _norm_dns(cc.subject_cn)
+        identity_candidates = set(client_sans)
+        if subject:
+            identity_candidates.add(subject)
+        if observed:
+            identity_candidates.add(observed)
+        identity_ok = expected_id in identity_candidates and expected_id != origin_host
         checks.append(
             _check(
-                "client_cert_san_present",
-                bool(host.client_cert.san_dns),
-                "ok" if san_ok else "san_empty",
+                "client_identity_match",
+                identity_ok,
+                "ok" if identity_ok else "client_identity_mismatch",
             )
         )
-        try:
-            not_after = datetime.fromisoformat(
-                host.client_cert.not_after_utc.replace("Z", "+00:00")
+        # Client must not present the origin hostname as its identity.
+        checks.append(
+            _check(
+                "client_identity_not_origin",
+                origin_host not in identity_candidates,
+                "ok" if origin_host not in identity_candidates else "client_identity_is_origin",
             )
-            remaining = (not_after - now).days
-            checks.append(
-                _check(
-                    "client_cert_expiry",
-                    remaining >= 7,
-                    "ok" if remaining >= 7 else "cert_expiring_soon",
-                )
-            )
-        except ValueError:
-            checks.append(_check("client_cert_expiry", False, "invalid_not_after"))
+        )
 
     checks.append(
         _check(
@@ -221,6 +302,13 @@ def evaluate_preflight(
             "ok"
             if host.client_key_exists and (host.client_key_mode_bits & 0o077) == 0
             else "key_perms",
+        )
+    )
+    checks.append(
+        _check(
+            "client_key_matches_cert",
+            bool(host.client_key_matches_cert),
+            "ok" if host.client_key_matches_cert else "key_cert_mismatch",
         )
     )
     checks.append(
@@ -257,10 +345,51 @@ def evaluate_preflight(
         )
 
     checks.append(_check("image_digest_ref", host.image_digest_present))
-    checks.append(_check("sbom_ref", host.sbom_ref_present or bool(inventory.image.sbom_ref)))
+
+    # SBOM / provenance / signature — inventory and host evidence must both be concrete.
+    sbom_inventory_ok = not is_unreviewed_placeholder(inventory.image.sbom_ref)
+    sbom_host_ok = not is_unreviewed_placeholder(host.sbom_ref_reviewed)
+    sbom_match = (
+        sbom_inventory_ok
+        and sbom_host_ok
+        and host.sbom_ref_reviewed.strip() == inventory.image.sbom_ref.strip()
+    )
     checks.append(
         _check(
-            "provenance_ref", host.provenance_ref_present or bool(inventory.image.provenance_ref)
+            "sbom_ref_concrete",
+            sbom_match,
+            "ok" if sbom_match else "sbom_placeholder_or_mismatch",
+        )
+    )
+
+    prov_inventory_ok = not is_unreviewed_placeholder(inventory.image.provenance_ref)
+    prov_host_ok = not is_unreviewed_placeholder(host.provenance_ref_reviewed)
+    prov_match = (
+        prov_inventory_ok
+        and prov_host_ok
+        and host.provenance_ref_reviewed.strip() == inventory.image.provenance_ref.strip()
+    )
+    checks.append(
+        _check(
+            "provenance_ref_concrete",
+            prov_match,
+            "ok" if prov_match else "provenance_placeholder_or_mismatch",
+        )
+    )
+
+    sig = host.manifest_signature.strip()
+    sig_ok = (not is_unreviewed_placeholder(sig)) and not sig.upper().startswith("REQUIRED:")
+    # Signatures must look like concrete hex (ed25519/sha256 style), not free text.
+    if sig_ok and not (
+        len(sig) >= 32 and all(c in "0123456789abcdefABCDEF" for c in sig.replace(":", ""))
+    ):
+        # Allow opaque reviewed tokens that are explicitly not placeholders and long enough.
+        sig_ok = len(sig) >= 32 and " " not in sig
+    checks.append(
+        _check(
+            "manifest_signature_concrete",
+            sig_ok,
+            "ok" if sig_ok else "signature_placeholder_or_missing",
         )
     )
 
@@ -293,8 +422,6 @@ def evaluate_preflight(
         )
     )
 
-    # Incomplete live inputs — always report as remaining inputs (informational
-    # blockers for any future apply, not for plan rendering itself).
     remaining_inputs = [
         "approved_staging_hostname_or_ip",
         "server_login",
@@ -304,30 +431,41 @@ def evaluate_preflight(
         "cloudflare_or_r2_account",
         "real_credentials",
         "reviewed_egress_application",
+        "concrete_sbom_provenance_and_manifest_signature",
     ]
 
     failed = [c for c in checks if not c.ok]
     go = not failed
+    # plan_success requires every check green AND concrete reviewed evidence (no placeholders).
+    plan_success = go and not placeholders and sig_ok
     return {
         "schema_version": "ifilm.branch_node.staging_preflight.v1",
         "mode": "plan_readonly",
         "mutates_host": False,
         "classification": "plan_go" if go else "plan_no_go",
         "go": go,
+        "plan_success": plan_success,
         "live_pilot_ready": False,
         "client_redirect_active": False,
         "deployment_authorized": False,
         "apply_allowed": False,
         "checks": [c.as_dict() for c in checks],
         "failed": [c.name for c in failed],
+        "placeholder_fields": placeholders,
         "remaining_live_deployment_inputs": remaining_inputs,
         "evidence_redaction": "secrets_and_identifiers_redacted",
         "inventory_node_id": inventory.node_id,
         "origin_host": inventory.origin.host,
         "origin_pinned_ip": inventory.origin.pinned_resolved_ipv4,
+        "expected_client_identity": inventory.expected_client_identity,
         "image_digest": inventory.image.digest,
         "evaluated_at_utc": now.isoformat().replace("+00:00", "Z"),
     }
+
+
+def with_host_overrides(host: HostFacts, **kwargs: Any) -> HostFacts:
+    """Return a copy of HostFacts with selected fields replaced (tests/helpers)."""
+    return replace(host, **kwargs)
 
 
 def write_preflight_report(path: Path, report: dict[str, Any]) -> None:

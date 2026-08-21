@@ -59,6 +59,12 @@ class BranchCacheOneNodeStagingTests(unittest.TestCase):
         self.assertFalse(raw["client_redirect_active"])
         self.assertEqual(raw["bind_host"], "127.0.0.1")
         self.assertEqual(raw["run_as_uid"], 10001)
+        self.assertIn("mtls_origin_server_cert_sha256", raw["trust"])
+        self.assertTrue(raw["expected_client_identity"])
+        self.assertNotEqual(raw["expected_client_identity"], raw["origin"]["host"])
+        # Example fixture intentionally keeps placeholders that must fail readiness.
+        self.assertIn("placeholder", raw["image"]["sbom_ref"].lower())
+        self.assertIn("placeholder", raw["operator_approval"]["record_id"].lower())
 
     def test_installer_security_flags_false(self):
         self.assertIn(

@@ -25,6 +25,7 @@
   ],
   "edge_grant_public_key_mount_path": "/run/ifilm/certs/edge-grant-public.pem",
   "environment": "staging-candidate",
+  "expected_client_identity": "branch-node-staging-1.example.internal",
   "image": {
     "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "provenance_ref": "placeholder:provenance-attestation-ref",
@@ -53,6 +54,7 @@
   "trust": {
     "edge_grant_public_key_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     "mtls_ca_bundle_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-    "mtls_client_cert_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    "mtls_client_cert_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "mtls_origin_server_cert_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
   }
 }

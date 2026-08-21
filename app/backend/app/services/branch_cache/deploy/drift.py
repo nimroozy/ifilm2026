@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from app.services.branch_cache.deploy.inventory import StagingInventoryV1
+from app.services.branch_cache.deploy.inventory import StagingInventoryV1, is_unreviewed_placeholder
 from app.services.branch_cache.deploy.render import MANIFEST_NAME, render_all
 
 
@@ -50,7 +50,15 @@ def detect_drift(
     current_manifest_path = current_dir / MANIFEST_NAME
     if not current_manifest_path.is_file():
         reasons.append("manifest_missing")
-        return {"drift": True, "reasons": reasons, "plan_success": False, "apply_allowed": False}
+        return {
+            "drift": True,
+            "reasons": reasons,
+            "incomplete_inputs": True,
+            "plan_success": False,
+            "apply_allowed": False,
+            "live_pilot_ready": False,
+            "client_redirect_active": False,
+        }
 
     current = json.loads(current_manifest_path.read_text(encoding="utf-8"))
     if current.get("manifest_sha256") != expected_manifest.get("manifest_sha256"):
@@ -68,10 +76,13 @@ def detect_drift(
         if unexpected_firewall_hash != expected_fw:
             reasons.append("unexpected_firewall_change")
 
-    # Incomplete signing placeholder is not drift, but blocks apply/plan success
-    # when treated as an apply gate.
     sig = (current.get("signing") or {}).get("signature", "")
-    incomplete_inputs = bool(str(sig).startswith("REQUIRED:"))
+    pub_fp = (current.get("signing") or {}).get("public_key_fingerprint_sha256", "")
+    incomplete_inputs = (
+        is_unreviewed_placeholder(str(sig))
+        or is_unreviewed_placeholder(str(pub_fp))
+        or str(sig).upper().startswith("REQUIRED:")
+    )
 
     drift = bool(reasons)
     return {
