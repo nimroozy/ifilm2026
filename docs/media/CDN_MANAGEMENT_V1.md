@@ -28,10 +28,10 @@ Read APIs require `cdn.read`; mutations require `cdn.manage`; R2 settings requir
 
 1. Admin saves a target and an encrypted bootstrap credential.
 2. Test SSH performs a bounded reachability probe without exposing credentials.
-3. Provision creates an auditable queued run. A privileged isolated worker validates DNS/IP (rejecting loopback, link-local, multicast and unspecified targets), pins host keys, verifies a signed release, and invokes `packaging/cdn/install_debian13.sh`.
+3. Provision requires an explicitly confirmed SHA-256 SSH host-key pin and creates an auditable queued run. A privileged isolated worker validates DNS/IP (rejecting loopback, link-local, multicast and unspecified targets), verifies the pinned host key and signed release, and invokes `packaging/cdn/install_debian13.sh`.
 4. The idempotent Debian 13 script installs minimal packages, creates the non-login `ifilm-cdn` user, writes a root-owned configuration, installs a hardened systemd service and verifies it is active. The one-time enrollment credential is then rotated to key-based authentication.
-5. Heartbeats populate disk, RTT, cache, bandwidth, sync and version fields. Central routing excludes disabled/draining nodes.
+5. A one-time node heartbeat token is returned once and stored centrally only as a SHA-256 hash. Authenticated heartbeats populate disk, RTT, cache, bandwidth, sync and version fields. Central routing excludes disabled/draining nodes.
 
 ## Production hardening still required
 
-This pass intentionally supplies an injectable provisioning runner and queued control-plane workflow with mocked safety tests; it does not run live SSH from the web process. Before production, deploy the executor as a separately privileged worker, add SSH host-key enrollment/rotation UI, authenticate node heartbeats with the existing mTLS/enrollment-token protocol, publish a signed branch-cache artifact URL, and add a real Debian 13 staging end-to-end test. Firewall policy must be rendered from the operator-approved management and serving CIDRs rather than guessed by the installer.
+This pass intentionally supplies an injectable provisioning runner and queued control-plane workflow with mocked safety tests; it does not run live SSH from the web process. Before production, deploy the executor as a separately privileged worker, upgrade heartbeat bearer tokens to the existing mTLS node-identity protocol, publish a signed branch-cache artifact URL, and add a real Debian 13 staging end-to-end test. Firewall policy must be rendered from the operator-approved management and serving CIDRs rather than guessed by the installer.

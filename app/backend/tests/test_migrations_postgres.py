@@ -169,7 +169,7 @@ def test_postgresql_migration_succeeds(postgres_url):
     assert "content_requests" in tables
     assert "content_request_events" in tables
     assert "media_tracks" in tables
-    assert version == "028_cdn_management_v1"
+    assert version == "029_cdn_security_hardening_v1"
 
 
 def test_postgresql_migration_from_previous_revision(postgres_url):
@@ -202,7 +202,7 @@ def test_postgresql_migration_from_previous_revision(postgres_url):
     assert movie_slug == "ordinary-film"
     assert series_slug == "ordinary-show"
     assert null_imdb >= 1
-    assert version == "028_cdn_management_v1"
+    assert version == "029_cdn_security_hardening_v1"
 
 
 def test_002_to_head_duplicate_and_messy_titles(postgres_url):
@@ -1201,7 +1201,7 @@ def test_media_upload_reliability_migration_roundtrip(postgres_url):
             )
         }
     engine.dispose()
-    assert version == "028_cdn_management_v1"
+    assert version == "029_cdn_security_hardening_v1"
     assert "media_admin_events" in tables
     assert "content_translations" in tables
     assert "content_requests" in tables
@@ -1308,7 +1308,7 @@ def test_content_requests_migration_roundtrip(postgres_url):
             )
         }
     engine.dispose()
-    assert version == "028_cdn_management_v1"
+    assert version == "029_cdn_security_hardening_v1"
     assert "content_requests" in tables
     assert "media_tracks" in tables
 
@@ -1384,7 +1384,7 @@ def test_media_tracks_migration_roundtrip(postgres_url):
             )
         }
     engine.dispose()
-    assert version == "028_cdn_management_v1"
+    assert version == "029_cdn_security_hardening_v1"
     assert "media_tracks" in tables
     assert "source_media_asset_id" in cols
 
@@ -1546,10 +1546,10 @@ def test_fresh_database_reaches_current_head(postgres_url):
     assert result.returncode == 0, result.stdout + result.stderr
     heads = _run_alembic(postgres_url, "heads")
     assert heads.returncode == 0
-    assert "028_cdn_management_v1" in (heads.stdout + heads.stderr)
+    assert "029_cdn_security_hardening_v1" in (heads.stdout + heads.stderr)
     current = _run_alembic(postgres_url, "current")
     assert current.returncode == 0
-    assert "028_cdn_management_v1" in (current.stdout + current.stderr)
+    assert "029_cdn_security_hardening_v1" in (current.stdout + current.stderr)
     history = _run_alembic(postgres_url, "history")
     assert history.returncode == 0
     assert "027_branch_cache_control_plane_v1" in (history.stdout + history.stderr)

@@ -7,6 +7,7 @@ never puts passwords/private keys in argv, logs, or browser responses.
 from __future__ import annotations
 
 import ipaddress
+import re
 import socket
 from dataclasses import dataclass
 from typing import Protocol
@@ -23,6 +24,7 @@ class ProvisionPlan:
     username: str
     script_path: str
     cache_limit_bytes: int
+    host_key_fingerprint: str
     strict_host_key_checking: bool = True
     rotate_password_to_key: bool = True
 
@@ -54,7 +56,13 @@ def validate_target(host: str, *, resolver=socket.getaddrinfo) -> list[str]:
 
 
 def build_plan(
-    *, host: str, port: int, username: str, cache_limit_bytes: int, script_path: str
+    *,
+    host: str,
+    port: int,
+    username: str,
+    cache_limit_bytes: int,
+    script_path: str,
+    host_key_fingerprint: str,
 ) -> ProvisionPlan:
     if not 1 <= int(port) <= 65535:
         raise ProvisioningError("Invalid SSH port")
@@ -62,6 +70,8 @@ def build_plan(
         raise ProvisioningError("Cache limit must be greater than zero")
     if not username or any(c.isspace() for c in username):
         raise ProvisioningError("Invalid SSH username")
+    if not re.fullmatch(r"SHA256:[A-Za-z0-9+/]{20,}={0,2}", host_key_fingerprint or ""):
+        raise ProvisioningError("A valid pinned SSH host-key fingerprint is required")
     validate_target(host)
     return ProvisionPlan(
         host=host,
@@ -69,6 +79,7 @@ def build_plan(
         username=username,
         script_path=script_path,
         cache_limit_bytes=cache_limit_bytes,
+        host_key_fingerprint=host_key_fingerprint,
     )
 
 

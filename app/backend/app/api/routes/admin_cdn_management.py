@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
 
 from app.core.deps import DbSession, require_permissions
 from app.models.admin import AdminUser
@@ -14,6 +14,8 @@ from app.schemas.cdn_management import (
     ConfirmedActionIn,
     ManagedNodeIn,
     ManagedNodePatch,
+    NodeHeartbeatIn,
+    PinHostKeyIn,
     PrefixRouteIn,
     R2SettingsIn,
     RouteLookupIn,
@@ -60,7 +62,8 @@ def create_node(
     admin: Annotated[AdminUser, Depends(require_permissions("cdn.manage"))],
 ) -> dict[str, Any]:
     try:
-        return svc.save_node(db, admin, payload.model_dump())
+        node, token = svc.save_node(db, admin, payload.model_dump())
+        return {"node": node, "heartbeat_token": token}
     except svc.CDNManagementError as exc:
         raise bad(exc) from exc
 
@@ -73,9 +76,10 @@ def update_node(
     admin: Annotated[AdminUser, Depends(require_permissions("cdn.manage"))],
 ) -> dict[str, Any]:
     try:
-        return svc.save_node(
+        node, _ = svc.save_node(
             db, admin, payload.model_dump(exclude_unset=True), svc.get_node(db, node_id)
         )
+        return node
     except svc.CDNManagementError as exc:
         raise bad(exc, 404 if "not found" in str(exc) else 400) from exc
 
@@ -136,7 +140,49 @@ def node_action(
     if action == "disable":
         node.enabled = False
     db.add(node)
-    return svc.queue_action(db, admin, node, action)
+    try:
+        return svc.queue_action(db, admin, node, action)
+    except svc.CDNManagementError as exc:
+        raise bad(exc, 409) from exc
+
+
+@router.post("/nodes/{node_id}/pin-host-key")
+def pin_host_key(
+    node_id: str,
+    payload: PinHostKeyIn,
+    db: DbSession,
+    _: Annotated[AdminUser, Depends(require_permissions("cdn.manage"))],
+) -> dict[str, Any]:
+    if not payload.confirm:
+        raise HTTPException(status_code=409, detail="Explicit confirmation is required")
+    try:
+        node = svc.get_node(db, node_id)
+        node.ssh_host_key_fingerprint = svc.validate_host_fingerprint(payload.fingerprint)
+    except svc.CDNManagementError as exc:
+        raise bad(exc, 400) from exc
+    db.add(node)
+    db.commit()
+    db.refresh(node)
+    return svc._node_public(node)
+
+
+@router.post("/nodes/{node_id}/heartbeat-token")
+def rotate_heartbeat_token(
+    node_id: str,
+    payload: ConfirmedActionIn,
+    db: DbSession,
+    _: Annotated[AdminUser, Depends(require_permissions("cdn.manage"))],
+) -> dict[str, str]:
+    if not payload.confirm:
+        raise HTTPException(status_code=409, detail="Explicit confirmation is required")
+    try:
+        node = svc.get_node(db, node_id)
+    except svc.CDNManagementError as exc:
+        raise bad(exc, 404) from exc
+    token = svc.issue_heartbeat_token(node)
+    db.add(node)
+    db.commit()
+    return {"heartbeat_token": token}
 
 
 @router.get("/nodes/{node_id}/provision-runs")
@@ -166,14 +212,18 @@ def provision_runs(
 @router.post("/nodes/{node_id}/heartbeat")
 def heartbeat(
     node_id: str,
-    payload: dict[str, Any],
+    payload: NodeHeartbeatIn,
     db: DbSession,
-    _: Annotated[AdminUser, Depends(require_permissions("cdn.manage"))],
+    authorization: Annotated[str | None, Header()] = None,
 ) -> dict[str, Any]:
     try:
         node = svc.get_node(db, node_id)
     except svc.CDNManagementError as exc:
         raise bad(exc, 404) from exc
+    token = authorization.removeprefix("Bearer ").strip() if authorization else ""
+    if not svc.verify_heartbeat_token(node, token):
+        raise HTTPException(status_code=401, detail="Invalid node heartbeat credential")
+    heartbeat = payload.model_dump(exclude_unset=True)
     for key in (
         "disk_total_bytes",
         "disk_free_bytes",
@@ -186,8 +236,8 @@ def heartbeat(
         "software_version",
         "last_sync_at",
     ):
-        if key in payload:
-            setattr(node, key, payload[key])
+        if key in heartbeat:
+            setattr(node, key, heartbeat[key])
     node.health_status = "online"
     node.last_heartbeat_at = datetime.now(UTC)
     db.add(node)

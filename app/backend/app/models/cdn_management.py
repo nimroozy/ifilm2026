@@ -26,6 +26,8 @@ class ManagedCDNNode(Base):
     ssh_username: Mapped[str] = mapped_column(String(128), nullable=False)
     credential_type: Mapped[str] = mapped_column(String(16), nullable=False, default="password")
     credential_ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    ssh_host_key_fingerprint: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    heartbeat_token_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
     branch: Mapped[str | None] = mapped_column(String(128), nullable=True)
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import ipaddress
 import json
+import re
+import secrets
 import socket
 from datetime import UTC, datetime
 from typing import Any
@@ -18,6 +22,7 @@ from app.models.integration_config import IntegrationConfig
 from app.services.integration_secrets import IntegrationSecretsError, decrypt_secret, encrypt_secret
 
 R2_PROVIDER = "cloudflare_r2"
+HOST_KEY_RE = re.compile(r"^SHA256:[A-Za-z0-9+/]{20,}={0,2}$")
 
 
 class CDNManagementError(ValueError):
@@ -118,6 +123,8 @@ def _node_public(node: ManagedCDNNode) -> dict[str, Any]:
         "ssh_username": node.ssh_username,
         "credential_type": node.credential_type,
         "credential_configured": bool(node.credential_ciphertext),
+        "ssh_host_key_fingerprint": node.ssh_host_key_fingerprint,
+        "heartbeat_token_configured": bool(node.heartbeat_token_hash),
         "branch": node.branch,
         "location": node.location,
         "notes": node.notes,
@@ -155,14 +162,40 @@ def get_node(db: Session, node_id: str) -> ManagedCDNNode:
     return node
 
 
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def issue_heartbeat_token(node: ManagedCDNNode) -> str:
+    raw = secrets.token_urlsafe(32)
+    node.heartbeat_token_hash = _hash_token(raw)
+    return raw
+
+
+def verify_heartbeat_token(node: ManagedCDNNode, token: str) -> bool:
+    return bool(node.heartbeat_token_hash and token) and hmac.compare_digest(
+        node.heartbeat_token_hash, _hash_token(token)
+    )
+
+
+def validate_host_fingerprint(value: str | None) -> str | None:
+    clean = (value or "").strip()
+    if not clean:
+        return None
+    if not HOST_KEY_RE.fullmatch(clean):
+        raise CDNManagementError("SSH host key must be an SHA256 fingerprint")
+    return clean
+
+
 def save_node(
     db: Session,
     admin: AdminUser,
     payload: dict[str, Any],
     node: ManagedCDNNode | None = None,
     settings: Settings | None = None,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], str | None]:
     cfg = settings or get_settings()
+    created = node is None
     node = node or ManagedCDNNode(created_by_admin_id=admin.id)
     for key in (
         "name",
@@ -180,6 +213,10 @@ def save_node(
     ):
         if key in payload and payload[key] is not None:
             setattr(node, key, payload[key])
+    if "ssh_host_key_fingerprint" in payload:
+        node.ssh_host_key_fingerprint = validate_host_fingerprint(
+            payload.get("ssh_host_key_fingerprint")
+        )
     if payload.get("remove_credential"):
         node.credential_ciphertext = None
     elif payload.get("credential"):
@@ -190,10 +227,13 @@ def save_node(
         raise CDNManagementError("Only a Main CDN node can be the default")
     if node.is_default:
         db.query(ManagedCDNNode).filter(ManagedCDNNode.id != node.id).update({"is_default": False})
+    heartbeat_token = None
+    if created and payload.get("issue_heartbeat_token", True):
+        heartbeat_token = issue_heartbeat_token(node)
     db.add(node)
     db.commit()
     db.refresh(node)
-    return _node_public(node)
+    return _node_public(node), heartbeat_token
 
 
 def validate_cidr(cidr: str) -> ipaddress._BaseNetwork:
@@ -308,6 +348,8 @@ def test_tcp(node: ManagedCDNNode, connector=socket.create_connection) -> dict[s
 def queue_action(
     db: Session, admin: AdminUser, node: ManagedCDNNode, action: str
 ) -> dict[str, Any]:
+    if action in {"provision", "reprovision", "upgrade"} and not node.ssh_host_key_fingerprint:
+        raise CDNManagementError("Pin and confirm the SSH host key before provisioning")
     run = CDNProvisionRun(
         node_id=node.id,
         action=action,

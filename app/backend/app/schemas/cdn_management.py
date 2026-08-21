@@ -30,6 +30,8 @@ class ManagedNodeIn(BaseModel):
     enabled: bool = True
     is_default: bool = False
     cache_limit_bytes: int | None = Field(default=None, ge=0)
+    ssh_host_key_fingerprint: str | None = Field(default=None, max_length=128)
+    issue_heartbeat_token: bool = True
 
     @field_validator("host")
     @classmethod
@@ -55,6 +57,7 @@ class ManagedNodePatch(BaseModel):
     enabled: bool | None = None
     is_default: bool | None = None
     cache_limit_bytes: int | None = Field(default=None, ge=0)
+    ssh_host_key_fingerprint: str | None = Field(default=None, max_length=128)
 
 
 class PrefixRouteIn(BaseModel):
@@ -66,6 +69,23 @@ class PrefixRouteIn(BaseModel):
 
 class ConfirmedActionIn(BaseModel):
     confirm: bool
+
+
+class PinHostKeyIn(BaseModel):
+    fingerprint: str = Field(min_length=20, max_length=128)
+    confirm: bool
+
+
+class NodeHeartbeatIn(BaseModel):
+    disk_total_bytes: int | None = Field(default=None, ge=0)
+    disk_free_bytes: int | None = Field(default=None, ge=0)
+    cached_objects: int | None = Field(default=None, ge=0)
+    cached_titles: int | None = Field(default=None, ge=0)
+    cache_hits: int | None = Field(default=None, ge=0)
+    cache_misses: int | None = Field(default=None, ge=0)
+    bandwidth_bytes: int | None = Field(default=None, ge=0)
+    rtt_ms: int | None = Field(default=None, ge=0, le=60000)
+    software_version: str | None = Field(default=None, max_length=64)
 
 
 class RouteLookupIn(BaseModel):

@@ -67,7 +67,10 @@ def test_nodes_prefix_routing_and_main_fallback(client, admin_headers, db_sessio
         )
         assert result.status_code == 201, result.text
         assert "bootstrap-password-test" not in result.text
-        return result.json()
+        body = result.json()
+        assert body["heartbeat_token"]
+        assert "heartbeat_token_hash" not in result.text
+        return body["node"]
 
     main = add("Kabul Main", "main", "203.0.113.10", True)
     broad = add("Kabul Cache", "cache", "203.0.113.11")
@@ -124,3 +127,55 @@ def test_provisioning_target_validation_and_log_redaction():
     with pytest.raises(ProvisioningError):
         validate_target("localhost", resolver=local)
     assert "super-secret" not in redact_log(["using super-secret", "done"], ["super-secret"])
+
+
+def test_heartbeat_requires_one_time_token(client, admin_headers, encryption_key):
+    created = client.post(
+        "/api/admin/cdn-management/nodes",
+        headers=admin_headers,
+        json={
+            "name": "Heartbeat Cache",
+            "role": "cache",
+            "host": "203.0.113.30",
+            "ssh_username": "root",
+            "credential": "bootstrap-test",
+            "cache_limit_bytes": 1_000_000,
+        },
+    ).json()
+    node, token = created["node"], created["heartbeat_token"]
+    url = f"/api/admin/cdn-management/nodes/{node['id']}/heartbeat"
+    assert client.post(url, json={"disk_total_bytes": 100}).status_code == 401
+    assert client.post(url, headers={"Authorization": "Bearer wrong"}, json={}).status_code == 401
+    ok = client.post(
+        url,
+        headers={"Authorization": f"Bearer {token}"},
+        json={"disk_total_bytes": 1000, "disk_free_bytes": 600, "software_version": "1.2.3"},
+    )
+    assert ok.status_code == 200
+    assert ok.json()["disk_free_bytes"] == 600
+    assert token not in ok.text
+
+
+def test_provisioning_requires_confirmed_host_key(client, admin_headers, encryption_key):
+    created = client.post(
+        "/api/admin/cdn-management/nodes",
+        headers=admin_headers,
+        json={
+            "name": "Pinned Cache",
+            "role": "cache",
+            "host": "203.0.113.31",
+            "ssh_username": "root",
+            "credential": "bootstrap-test",
+            "cache_limit_bytes": 1000,
+        },
+    ).json()["node"]
+    action = f"/api/admin/cdn-management/nodes/{created['id']}/actions/provision"
+    assert client.post(action, headers=admin_headers, json={"confirm": True}).status_code == 409
+    fingerprint = "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    pinned = client.post(
+        f"/api/admin/cdn-management/nodes/{created['id']}/pin-host-key",
+        headers=admin_headers,
+        json={"fingerprint": fingerprint, "confirm": True},
+    )
+    assert pinned.status_code == 200
+    assert client.post(action, headers=admin_headers, json={"confirm": True}).status_code == 202
