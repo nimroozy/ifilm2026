@@ -198,11 +198,11 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
               <>
                 <img
                   src={logoUrl}
-                  alt={movie.title}
+                  alt=""
                   className="max-h-14 w-auto max-w-[min(100%,360px)] object-contain drop-shadow-lg md:max-h-24"
                   data-testid="hero-title-logo"
                 />
-                <p className="sr-only">{movie.title}</p>
+                <h1 className="sr-only">{movie.title}</h1>
               </>
             ) : (
               <h1
@@ -331,7 +331,7 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
       ) : null}
 
       <div
-        className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 gap-1.5 md:bottom-7"
+        className="absolute bottom-1 left-1/2 z-20 flex max-w-full -translate-x-1/2 md:bottom-3"
         role="tablist"
         aria-label="Featured titles"
         data-testid="hero-dots"
@@ -348,11 +348,16 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
               setCurrent(index);
               setFadeKey((k) => k + 1);
             }}
-            className={cn(
-              'h-1.5 rounded-full transition-all duration-normal focus-visible:ring-2 focus-visible:ring-ring',
-              index === current ? 'w-6 bg-primary/90' : 'w-1.5 bg-white/35 hover:bg-white/55'
-            )}
-          />
+            className="group flex h-11 w-11 shrink-0 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <span
+              aria-hidden
+              className={cn(
+                'h-1.5 rounded-full transition-all duration-normal',
+                index === current ? 'w-6 bg-primary/90' : 'w-1.5 bg-white/35 group-hover:bg-white/55'
+              )}
+            />
+          </button>
         ))}
       </div>
     </section>

@@ -6,6 +6,7 @@ import { useLang } from '@/components/CustomerLayout';
 export function resolveCustomerTitle(pathname: string, t: ReturnType<typeof useLang>['t']): string {
   const brand = 'iFilm';
   if (pathname === '/') return brand;
+  if (pathname.startsWith('/player/')) return `Playback · ${brand}`;
   if (pathname.startsWith('/movie/')) return `${t.common.movie} · ${brand}`;
   if (pathname.startsWith('/series/') && pathname !== '/series') return `${t.common.series} · ${brand}`;
   const map: Record<string, string> = {

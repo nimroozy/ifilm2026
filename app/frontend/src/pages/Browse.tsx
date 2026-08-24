@@ -50,9 +50,16 @@ import {
   sortEpisodesByAirOrder,
 } from '@/lib/seriesDetailPlayback';
 
-function PageLoading() {
+function PageLoading({ label = 'Loading catalog' }: { label?: string }) {
   return (
-    <div className="container mx-auto px-4 pt-6 space-y-4" data-testid="browse-loading">
+    <div
+      className="container mx-auto px-4 pt-6 space-y-4"
+      data-testid="browse-loading"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <span className="sr-only">{label}</span>
       <Skeleton className="h-8 w-48" />
       <div className={mediaGridClass}>
         {Array.from({ length: 12 }).map((_, i) => (
@@ -65,7 +72,7 @@ function PageLoading() {
 
 function PageError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <div className="min-h-[40vh] flex flex-col items-center justify-center gap-3" data-testid="browse-error">
+    <div className="min-h-[40vh] flex flex-col items-center justify-center gap-3" data-testid="browse-error" role="alert">
       <p className="text-muted-foreground">{message}</p>
       <Button onClick={onRetry}>Retry</Button>
     </div>
@@ -253,7 +260,7 @@ export function MoviesPage({ audience = 'all' }: { audience?: 'all' | 'children'
         </div>
 
         {loading ? (
-          <PageLoading />
+          <PageLoading label={`${t.common.loading} ${isChildren ? t.nav.children : t.nav.movies}`} />
         ) : error ? (
           <PageError message={error} onRetry={load} />
         ) : items.length === 0 ? (
@@ -396,7 +403,7 @@ export function SeriesPage() {
         </div>
 
         {loading ? (
-          <PageLoading />
+          <PageLoading label={`${t.common.loading} ${t.nav.series}`} />
         ) : error ? (
           <PageError message={error} onRetry={load} />
         ) : items.length === 0 ? (

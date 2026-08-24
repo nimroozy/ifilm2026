@@ -90,7 +90,7 @@ export const translations = {
     login: { title: 'Sign In', location: 'Service Location', locationPlaceholder: 'Select your branch / city', locationRequired: 'Please select a service location.', locationsUnavailable: 'Authentication service is temporarily unavailable. Please try again.', username: 'Internet Username', password: 'Password', remember: 'Remember this device', signIn: 'Sign In', signingIn: 'Signing in...', support: 'Contact Support', note: 'Use your Haroon Net internet account to sign in.' },
     profile: { title: 'Profile', devices: 'Devices', watchlist: 'Watchlist', history: 'Watch History', requestMovie: 'Request Movie', settings: 'Settings', logout: 'Logout' },
     admin: { dashboard: 'Dashboard', movies: 'Movies', series: 'Series', upload: 'Upload Center', encoding: 'Encoding Queue', cdn: 'CDN Management', users: 'Users', branches: 'Branches', reports: 'Reports', settings: 'Settings' },
-    common: { movie: 'Movie', series: 'Series', episode: 'Episode', season: 'Season', min: 'min', views: 'views', remove: 'Remove', cancel: 'Cancel', save: 'Save', edit: 'Edit', delete: 'Delete', add: 'Add', filter: 'Filter', sort: 'Sort', all: 'All' },
+    common: { movie: 'Movie', series: 'Series', episode: 'Episode', season: 'Season', min: 'min', views: 'views', remove: 'Remove', cancel: 'Cancel', save: 'Save', edit: 'Edit', delete: 'Delete', add: 'Add', filter: 'Filter', sort: 'Sort', all: 'All', loading: 'Loading' },
     whatToWatch: {
       eyebrow: 'Guided discovery',
       title: 'What to Watch',
@@ -346,7 +346,7 @@ export const translations = {
     login: { title: 'ورود', location: 'موقعیت سرویس', locationPlaceholder: 'شعبه / شهر را انتخاب کنید', locationRequired: 'لطفاً موقعیت سرویس را انتخاب کنید.', locationsUnavailable: 'سرویس ورود موقتاً در دسترس نیست. لطفاً دوباره تلاش کنید.', username: 'نام کاربری اینترنت', password: 'رمز عبور', remember: 'این دستگاه را به خاطر بسپار', signIn: 'ورود', signingIn: 'در حال ورود...', support: 'تماس با پشتیبانی', note: 'از حساب اینترنت Haroon Net خود برای ورود استفاده کنید.' },
     profile: { title: 'پروفایل', devices: 'دستگاه‌ها', watchlist: 'لیست تماشا', history: 'تاریخچه تماشا', requestMovie: 'درخواست فیلم', settings: 'تنظیمات', logout: 'خروج' },
     admin: { dashboard: 'داشبورد', movies: 'فیلم‌ها', series: 'سریال‌ها', upload: 'مرکز آپلود', encoding: 'صف رمزگذاری', cdn: 'مدیریت CDN', users: 'کاربران', branches: 'شعب', reports: 'گزارش‌ها', settings: 'تنظیمات' },
-    common: { movie: 'فیلم', series: 'سریال', episode: 'قسمت', season: 'فصل', min: 'دقیقه', views: 'بازدید', remove: 'حذف', cancel: 'لغو', save: 'ذخیره', edit: 'ویرایش', delete: 'حذف', add: 'افزودن', filter: 'فیلتر', sort: 'مرتب‌سازی', all: 'همه' },
+    common: { movie: 'فیلم', series: 'سریال', episode: 'قسمت', season: 'فصل', min: 'دقیقه', views: 'بازدید', remove: 'حذف', cancel: 'لغو', save: 'ذخیره', edit: 'ویرایش', delete: 'حذف', add: 'افزودن', filter: 'فیلتر', sort: 'مرتب‌سازی', all: 'همه', loading: 'در حال بارگذاری' },
     whatToWatch: {
       eyebrow: 'کشف هدایت‌شده',
       title: 'چه ببینم',
@@ -602,7 +602,7 @@ export const translations = {
     login: { title: 'ننوتل', location: 'د خدمت ځای', locationPlaceholder: 'څانګه / ښار وټاکئ', locationRequired: 'مهرباني وکړئ د خدمت ځای وټاکئ.', locationsUnavailable: 'د ننوتلو خدمت موقتاً نشته. بیا هڅه وکړئ.', username: 'د انترنت کارن نوم', password: 'پټنوم', remember: 'دا وسیله یاد ساتل', signIn: 'ننوتل', signingIn: 'ننوتل...', support: 'د ملاتړ سره اړیکه', note: 'د Haroon Net د انترنت حساب وکاروئ.' },
     profile: { title: 'پروفایل', devices: 'وسایل', watchlist: 'د لیدو لیست', history: 'تاریخچه', requestMovie: 'د فلم غوښتنه', settings: 'ترتیبات', logout: 'وتل' },
     admin: { dashboard: 'ډشبورډ', movies: 'فیلمونه', series: 'سریالونه', upload: 'اپلوډ مرکز', encoding: 'کوډ کول', cdn: 'CDN مدیریت', users: 'کاروونکي', branches: 'څانګې', reports: 'راپورونه', settings: 'ترتیبات' },
-    common: { movie: 'فیلم', series: 'سریال', episode: 'برخه', season: 'فصل', min: 'دقیقه', views: 'لیدنې', remove: 'لرې کول', cancel: 'لغوه', save: 'خوندي', edit: 'سمون', delete: 'حذف', add: 'اضافه', filter: 'فیلتر', sort: 'ترتیب', all: 'ټول' },
+    common: { movie: 'فیلم', series: 'سریال', episode: 'برخه', season: 'فصل', min: 'دقیقه', views: 'لیدنې', remove: 'لرې کول', cancel: 'لغوه', save: 'خوندي', edit: 'سمون', delete: 'حذف', add: 'اضافه', filter: 'فیلتر', sort: 'ترتیب', all: 'ټول', loading: 'بارېږي' },
     whatToWatch: {
       eyebrow: 'لارښود موندنه',
       title: 'څه وګورم',
