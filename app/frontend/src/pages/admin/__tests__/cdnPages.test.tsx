@@ -22,6 +22,8 @@ const api = vi.hoisted(() => ({
   updateRoute: vi.fn(),
   deleteRoute: vi.fn(),
   lookupRoute: vi.fn(),
+  getNetwork: vi.fn(),
+  updateNetwork: vi.fn(),
 }));
 
 vi.mock('@/lib/cdnApi', async () => {
@@ -72,6 +74,18 @@ const node: CDNNodeDto = {
 
 const mainNode: CDNNodeDto = { ...node, id: 'm1', name: 'Kabul Main', role: 'main', role_label: 'MAIN_CDN', host: '203.0.113.10', is_default: true, state: 'offline', online: false, heartbeat_age_seconds: 4000, provision_status: 'not_started', ssh_host_key_fingerprint: null };
 
+const closedNetwork = {
+  management_cidrs: [] as string[],
+  serve_cidrs: [] as string[],
+  source: 'unset' as const,
+  management_configured: false,
+  management_allow_any: false,
+  serve_allow_any: false,
+  media_port_open: false,
+  provisioning_ready: false,
+  updated_at: null,
+};
+
 function wrap(ui: React.ReactElement) {
   return render(<MemoryRouter>{ui}</MemoryRouter>);
 }
@@ -80,6 +94,7 @@ describe('CDN admin pages', () => {
   beforeEach(() => {
     Object.values(api).forEach((fn) => fn.mockReset());
     api.listNodes.mockResolvedValue([mainNode, node]);
+    api.getNetwork.mockResolvedValue(closedNetwork);
     api.listRoutes.mockResolvedValue([{ id: 'r1', cidr: '103.126.4.0/24', prefix_length: 24, node_id: 'n1', node_name: 'Nimruz Cache', node_role: 'cache', priority: 100, enabled: true, notes: 'Nimruz branch' }]);
     api.provisionRuns.mockResolvedValue([{ id: 'run1', node_id: 'n1', action: 'provision', status: 'failed', step: 'packages', attempt: 1, error_code: 'apt_install_failed', log: '[10:00:00] == packages\n[10:00:01] FAILED', created_at: '2026-09-06T10:00:00Z' }]);
   });
@@ -192,5 +207,41 @@ describe('CDN admin pages', () => {
     expect(row.textContent).toContain('90.0%');
     expect(row.textContent).toContain('1200');
     expect(row.textContent).toContain('250.0 GB');
+  });
+
+  it('network card fails closed, requires management CIDRs, and confirms allow-any', async () => {
+    api.updateNetwork.mockImplementation(async (payload: { management_cidrs: string[]; serve_cidrs: string[]; confirm_allow_any?: boolean }) => ({
+      ...closedNetwork,
+      management_cidrs: payload.management_cidrs,
+      serve_cidrs: payload.serve_cidrs,
+      source: 'db' as const,
+      management_configured: true,
+      provisioning_ready: true,
+      media_port_open: payload.serve_cidrs.length > 0,
+      serve_allow_any: payload.serve_cidrs.includes('0.0.0.0/0'),
+      management_allow_any: false,
+    }));
+    wrap(<CDNServersPage />);
+    await waitFor(() => expect(screen.getByTestId('cdn-network-card')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId('cdn-network-missing')).toBeInTheDocument());
+    expect(screen.getByTestId('cdn-media-port-badge').textContent).toContain('media port closed');
+    expect((screen.getByTestId('cdn-management-cidrs') as HTMLTextAreaElement).value).toBe('');
+    expect((screen.getByTestId('cdn-serve-cidrs') as HTMLTextAreaElement).value).toBe('');
+    expect((screen.getByTestId('cdn-network-save') as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.change(screen.getByTestId('cdn-management-cidrs'), { target: { value: '203.0.113.10/32\n2001:db8::/32' } });
+    fireEvent.click(screen.getByTestId('cdn-network-save'));
+    await waitFor(() => expect(api.updateNetwork).toHaveBeenCalledTimes(1));
+    expect(api.updateNetwork.mock.calls[0][0]).toEqual({ management_cidrs: ['203.0.113.10/32', '2001:db8::/32'], serve_cidrs: [], confirm_allow_any: false });
+    await waitFor(() => expect(screen.getByTestId('cdn-media-port-badge').textContent).toContain('media port closed'));
+
+    fireEvent.change(screen.getByTestId('cdn-serve-cidrs'), { target: { value: '0.0.0.0/0' } });
+    expect(screen.getByTestId('cdn-network-allow-any-warning')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('cdn-network-save'));
+    await waitFor(() => expect(screen.getByTestId('cdn-network-confirm')).toBeInTheDocument());
+    expect(api.updateNetwork).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByTestId('cdn-network-confirm-action'));
+    await waitFor(() => expect(api.updateNetwork).toHaveBeenCalledTimes(2));
+    expect(api.updateNetwork.mock.calls[1][0]).toMatchObject({ serve_cidrs: ['0.0.0.0/0'], confirm_allow_any: true });
   });
 });

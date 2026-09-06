@@ -23,6 +23,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ApiError } from '@/lib/api';
 import { cdnApi, type CDNNodeDto, type CDNNodePayload, type NodeAction, type ProvisionRunDto, type SSHTestDto } from '@/lib/cdnApi';
 import { AdminTableCard, EmptyState, ErrorState, LoadingBlock, PageHeader } from '../adminShared';
+import CDNNetworkCard from './CDNNetworkCard';
 import { KeyValue, NodeBadges, formatAge, formatBytes, formatDate, formatPercent } from './cdnShared';
 
 type FormState = {
@@ -305,6 +306,8 @@ export default function CDNServersPage() {
           </AlertDescription>
         </Alert>
       )}
+
+      <CDNNetworkCard />
 
       {editing && (
         <Card data-testid="cdn-server-form">

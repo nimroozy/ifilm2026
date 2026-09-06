@@ -245,9 +245,24 @@ export type CDNOverviewDto = {
     cache_used_bytes: number;
   };
   cache: { hits: number; misses: number; hit_rate: number | null; bandwidth_bytes: number };
+  network?: NetworkSettingsDto;
   recent_provisioning_failures: (ProvisionRunDto & { node_name: string })[];
   central_fallback: string;
 };
+
+export type NetworkSettingsDto = {
+  management_cidrs: string[];
+  serve_cidrs: string[];
+  source: 'db' | 'env' | 'unset';
+  management_configured: boolean;
+  management_allow_any: boolean;
+  serve_allow_any: boolean;
+  media_port_open: boolean;
+  provisioning_ready: boolean;
+  updated_at?: string | null;
+};
+
+export type NetworkSettingsPayload = { management_cidrs: string[]; serve_cidrs: string[]; confirm_allow_any?: boolean };
 
 export type NodeAction =
   | 'provision'
@@ -268,6 +283,12 @@ export const cdnApi = {
   },
   async testStorage(): Promise<StorageTestDto> {
     return (await http.post<StorageTestDto>(`${BASE}/r2/test`)).data;
+  },
+  async getNetwork(): Promise<NetworkSettingsDto> {
+    return (await http.get<NetworkSettingsDto>(`${BASE}/network`)).data;
+  },
+  async updateNetwork(payload: NetworkSettingsPayload): Promise<NetworkSettingsDto> {
+    return (await http.put<NetworkSettingsDto>(`${BASE}/network`, payload)).data;
   },
   async flags(): Promise<CDNFlagsDto> {
     return (await http.get<CDNFlagsDto>(`${BASE}/status`)).data;

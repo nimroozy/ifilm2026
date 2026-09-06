@@ -497,3 +497,55 @@ def test_provisioning_target_validation_and_log_redaction():
     with pytest.raises(ProvisioningError):
         validate_target("localhost", resolver=local)
     assert "super-secret" not in redact_log(["using super-secret", "done"], ["super-secret"])
+
+
+# --- Network policy ---------------------------------------------------------
+
+
+def test_network_policy_defaults_closed_and_validation(client, admin_headers, encryption_key):
+    initial = client.get(f"{BASE}/network", headers=admin_headers).json()
+    assert initial["management_cidrs"] == [] and initial["serve_cidrs"] == []
+    assert initial["provisioning_ready"] is False and initial["media_port_open"] is False
+    put = lambda body: client.put(f"{BASE}/network", headers=admin_headers, json=body)  # noqa: E731
+    assert put({"management_cidrs": [], "serve_cidrs": []}).status_code == 400  # at least one management CIDR
+    assert put({"management_cidrs": ["203.0.113.5/24"], "serve_cidrs": []}).status_code == 400  # host bits set
+    assert put({"management_cidrs": ["nope"], "serve_cidrs": []}).status_code == 400
+    assert put({"management_cidrs": ["0.0.0.0/0"], "serve_cidrs": []}).status_code == 400  # allow-any needs confirmation
+    assert put({"management_cidrs": ["203.0.113.0/24"], "serve_cidrs": ["::/0"]}).status_code == 400
+    saved = put({"management_cidrs": ["203.0.113.0/24", "2001:db8::/32", "203.0.113.0/24"], "serve_cidrs": []})
+    assert saved.status_code == 200, saved.text
+    body = saved.json()
+    assert body["management_cidrs"] == ["203.0.113.0/24", "2001:db8::/32"]
+    assert body["serve_cidrs"] == [] and body["media_port_open"] is False and body["provisioning_ready"] is True
+    assert body["source"] == "db" and body["management_allow_any"] is False
+    confirmed = put({"management_cidrs": ["203.0.113.0/24"], "serve_cidrs": ["0.0.0.0/0"], "confirm_allow_any": True})
+    assert confirmed.status_code == 200 and confirmed.json()["serve_allow_any"] is True and confirmed.json()["media_port_open"] is True
+    overview = client.get(f"{BASE}/overview", headers=admin_headers).json()
+    assert overview["network"]["serve_allow_any"] is True
+
+
+def test_network_policy_requires_provision_permission(client, admin_headers, db_session, encryption_key):
+    from app.core.security import hash_password
+    from app.models.admin import AdminRole, AdminUser
+
+    role = AdminRole(name="cdn-manager-only", permissions=["cdn.read", "cdn.routing"])
+    db_session.add(role)
+    db_session.flush()
+    db_session.add(AdminUser(username="router", email="router@example.test", full_name="R", hashed_password=hash_password("router-pass-ok-123"), role_id=role.id, is_active=True))
+    db_session.commit()
+    login = client.post("/api/admin/auth/login", json={"username": "router", "password": "router-pass-ok-123"})
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    assert client.get(f"{BASE}/network", headers=headers).status_code == 200
+    assert client.put(f"{BASE}/network", headers=headers, json={"management_cidrs": ["203.0.113.0/24"], "serve_cidrs": []}).status_code == 403
+
+
+def test_network_env_fallback_used_when_unset(db_session, encryption_key):
+    from app.services.cdn_network import effective_network, get_network_settings
+
+    cfg = Settings(app_env="test", database_url="sqlite://", jwt_secret="unit-test-jwt-secret-value-32chars-min", cdn_management_cidrs="203.0.113.10/32", cdn_serve_cidrs="", _env_file=None)
+    assert effective_network(db_session, cfg) == (["203.0.113.10/32"], [])
+    assert get_network_settings(db_session, cfg)["source"] == "env"
+    bad = Settings(app_env="test", database_url="sqlite://", jwt_secret="unit-test-jwt-secret-value-32chars-min", cdn_management_cidrs="garbage", _env_file=None)
+    assert effective_network(db_session, bad) == ([], [])  # malformed env never yields allow-any
+    empty = Settings(app_env="test", database_url="sqlite://", jwt_secret="unit-test-jwt-secret-value-32chars-min", _env_file=None)
+    assert empty.cdn_serve_cidrs == "" and empty.cdn_management_cidrs == ""

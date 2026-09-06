@@ -9,7 +9,12 @@
 #   IFILM_CDN_NODE_TOKEN       node identity token issued by central (shown once)
 #   IFILM_CDN_CACHE_LIMIT_BYTES storage limit for the pull-through cache
 #   IFILM_CDN_BUNDLE           path to ifilm-cdn-node-<version>.tar.gz (+ .sha256 beside it)
+#   IFILM_CDN_MANAGEMENT_CIDRS comma-separated networks allowed to reach SSH (REQUIRED;
+#                              the firewall fails closed without it; must include your
+#                              current SSH source)
 # Optional:
+#   IFILM_CDN_SERVE_CIDRS    comma-separated client networks allowed to reach the media
+#                            port. Empty (default) = media port stays CLOSED (CDN-P1).
 #   IFILM_CDN_NODE_ROLE (main|cache), IFILM_CDN_SITE_ID, IFILM_CDN_BIND_PORT (8443),
 #   IFILM_CDN_EDGE_GRANT_PUBLIC_KEY_FILE (PEM, public key only)
 set -eu
@@ -20,6 +25,8 @@ umask 077
 : "${IFILM_CDN_NODE_TOKEN:?missing node token}"
 : "${IFILM_CDN_CACHE_LIMIT_BYTES:?missing cache limit}"
 : "${IFILM_CDN_BUNDLE:?missing node bundle path}"
+: "${IFILM_CDN_MANAGEMENT_CIDRS:?missing management CIDRs (firewall fails closed without them)}"
+SERVE_CIDRS="${IFILM_CDN_SERVE_CIDRS:-}"
 ROLE="${IFILM_CDN_NODE_ROLE:-cache}"
 SITE="${IFILM_CDN_SITE_ID:-default}"
 PORT="${IFILM_CDN_BIND_PORT:-8443}"
@@ -118,27 +125,67 @@ EOT
 
 SSH_PORT="$(ss -tlnp 2>/dev/null | awk '/sshd/ {split($4,a,":"); print a[length(a)]; exit}')"
 SSH_PORT="${SSH_PORT:-22}"
-cat >/etc/nftables.conf <<EOT
-#!/usr/sbin/nft -f
-flush ruleset
-table inet ifilm_cdn {
-  chain input {
-    type filter hook input priority 0; policy drop;
-    ct state established,related accept
-    ct state invalid drop
-    iif "lo" accept
-    ip protocol icmp accept
-    ip6 nexthdr ipv6-icmp accept
-    tcp dport ${SSH_PORT} accept
-    tcp dport ${PORT} accept
-  }
-  chain forward { type filter hook forward priority 0; policy drop; }
-  chain output { type filter hook output priority 0; policy accept; }
-}
-EOT
-nft -c -f /etc/nftables.conf
-nft -f /etc/nftables.conf
+SSH_SOURCE="${SSH_CLIENT%% *}"
+SSH_SOURCE="${SSH_SOURCE:-${SSH_CONNECTION%% *}}"
+# Render accept rules for exactly the configured networks. Empty serve list = no media rule.
+# Refuses allow-any that was not written explicitly and refuses to exclude the current SSH source.
+nft_rules="$(mktemp)"
+trap 'rm -f "$tmp_config" "$nft_rules"' EXIT
+python3 - "$SSH_PORT" "$PORT" "$IFILM_CDN_MANAGEMENT_CIDRS" "$SERVE_CIDRS" "$SSH_SOURCE" >"$nft_rules" <<'PYEOF'
+import ipaddress, sys
+ssh_port, serve_port, mgmt_raw, serve_raw, source = sys.argv[1:6]
+def parse(raw, field):
+    out = []
+    for item in raw.replace("\n", ",").split(","):
+        item = item.strip()
+        if not item:
+            continue
+        try:
+            net = ipaddress.ip_network(item, strict=True)
+        except ValueError:
+            sys.exit(f"{field}: invalid CIDR {item!r}")
+        if str(net) not in out:
+            out.append(str(net))
+    return out
+def rules(port, cidrs):
+    v4 = [c for c in cidrs if ipaddress.ip_network(c).version == 4]
+    v6 = [c for c in cidrs if ipaddress.ip_network(c).version == 6]
+    lines = []
+    if "0.0.0.0/0" in v4:
+        lines.append(f"    meta nfproto ipv4 tcp dport {port} accept")
+    elif v4:
+        lines.append(f"    ip saddr {{ {', '.join(v4)} }} tcp dport {port} accept")
+    if "::/0" in v6:
+        lines.append(f"    meta nfproto ipv6 tcp dport {port} accept")
+    elif v6:
+        lines.append(f"    ip6 saddr {{ {', '.join(v6)} }} tcp dport {port} accept")
+    return lines
+mgmt = parse(mgmt_raw, "IFILM_CDN_MANAGEMENT_CIDRS")
+serve = parse(serve_raw, "IFILM_CDN_SERVE_CIDRS")
+if not mgmt:
+    sys.exit("IFILM_CDN_MANAGEMENT_CIDRS must contain at least one network")
+if source:
+    ip = ipaddress.ip_address(source.split("%", 1)[0])
+    if not any(ip.version == ipaddress.ip_network(c).version and ip in ipaddress.ip_network(c) for c in mgmt):
+        sys.exit(f"current SSH source {source} is not inside the management CIDRs; refusing to lock you out")
+lines = rules(ssh_port, mgmt) + (rules(serve_port, serve) or [f"    # media port {serve_port} closed: no serve CIDRs configured"])
+print("\n".join(lines))
+PYEOF
+{
+  printf '%s\n' '#!/usr/sbin/nft -f' 'flush ruleset' 'table inet ifilm_cdn {' '  chain input {' \
+    '    type filter hook input priority 0; policy drop;' '    ct state established,related accept' \
+    '    ct state invalid drop' '    iif "lo" accept' '    ip protocol icmp accept' '    ip6 nexthdr ipv6-icmp accept'
+  cat "$nft_rules"
+  printf '%s\n' '  }' '  chain forward { type filter hook forward priority 0; policy drop; }' \
+    '  chain output { type filter hook output priority 0; policy accept; }' '}'
+} >/etc/ifilm-cdn/nftables.candidate
+nft -c -f /etc/ifilm-cdn/nftables.candidate
+nft -f /etc/ifilm-cdn/nftables.candidate
+install -o root -g root -m 0640 /etc/ifilm-cdn/nftables.candidate /etc/nftables.conf
+rm -f /etc/ifilm-cdn/nftables.candidate
 systemctl enable nftables
+echo "firewall applied: SSH from ${IFILM_CDN_MANAGEMENT_CIDRS}; media port ${PORT} from ${SERVE_CIDRS:-nobody (closed)}"
+echo "verify a FRESH SSH session from a management network now before closing this one"
 
 systemctl daemon-reload
 systemctl enable --now ifilm-cdn

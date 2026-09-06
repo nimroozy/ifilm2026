@@ -120,3 +120,9 @@ class NodeHeartbeatIn(BaseModel):
 
 class RouteLookupIn(BaseModel):
     client_ip: str = Field(min_length=3, max_length=64)
+
+
+class NetworkSettingsIn(BaseModel):
+    management_cidrs: list[str] = Field(default_factory=list, max_length=64)
+    serve_cidrs: list[str] = Field(default_factory=list, max_length=64)
+    confirm_allow_any: bool = False

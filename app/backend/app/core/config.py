@@ -229,11 +229,13 @@ class Settings(BaseSettings):
     cdn_origin_max_object_bytes: int = 64 * 1024 * 1024
     # Base URL CDN nodes use to reach central (https). Empty = derive from request.
     cdn_central_base_url: str = ""
-    # Comma-separated management CIDRs allowed to reach SSH on provisioned nodes.
-    # Empty = SSH stays open (only the node firewall default is applied to media port).
+    # Fallback comma-separated management CIDRs allowed to reach SSH on provisioned
+    # nodes when the admin has not configured them (Admin → CDN → Servers → Network).
+    # Empty means FAIL CLOSED: the firewall step refuses to run.
     cdn_management_cidrs: str = ""
-    # Comma-separated client CIDRs allowed to reach the node media port (default: any).
-    cdn_serve_cidrs: str = "0.0.0.0/0,::/0"
+    # Fallback client CIDRs for the node media port. Empty = NO media ingress rule
+    # (CDN-P1 default; CDN-P2 configures subscriber prefixes deliberately).
+    cdn_serve_cidrs: str = ""
     cdn_node_serve_port: int = 8443
     cdn_provisioning_worker_id: str = ""
     cdn_provisioning_poll_seconds: float = 3.0

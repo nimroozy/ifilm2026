@@ -20,6 +20,7 @@ from app.services.cdn_provisioner import (
     ACTION_STEPS,
     NodeBundle,
     ProvisionExecutor,
+    ProvisionStepError,
     build_node_bundle,
     probe_ssh_connection,
     render_nftables,
@@ -69,6 +70,11 @@ class FakeHost:
     service_active: bool = False
     release_marker: bool = False
     sudo_ok: bool = True
+    ssh_source: str = "203.0.113.5"
+    live_ruleset: str = "table inet filter {\n}\n"
+    firewall_applied: bool = False
+    lock_out_after_firewall: bool = False
+    fresh_connections_after_firewall: int = 0
 
     def authorized(self, credential: SSHCredential) -> bool:
         if credential.kind == "password":
@@ -106,6 +112,24 @@ class FakeSession:
             return CommandResult(0 if "ifilm-cdn-exists" in self.host.files else 1, "", "")
         if core[:1] == ["true"]:
             return CommandResult(0 if self.host.sudo_ok else 1, "", "")
+        if core[:1] == ["printenv"]:
+            if core[1] == "SSH_CLIENT" and self.host.ssh_source:
+                return CommandResult(0, f"{self.host.ssh_source} 51234 22\n", "")
+            return CommandResult(1, "", "")
+        if core[:1] == ["nft"]:
+            if core[1:3] == ["list", "ruleset"]:
+                return CommandResult(0, self.host.live_ruleset, "")
+            if core[1:3] == ["flush", "ruleset"]:
+                self.host.live_ruleset = ""
+                self.host.firewall_applied = False
+                return CommandResult(0, "", "")
+            if core[1] == "-c":
+                return CommandResult(0, "", "")
+            if core[1] == "-f":
+                self.host.live_ruleset = self.host.files.get(core[2], b"").decode()
+                self.host.firewall_applied = "ifilm_cdn" in self.host.live_ruleset
+                return CommandResult(0, "", "")
+            return CommandResult(0, "", "")
         if core[:2] == ["uname", "-m"]:
             return CommandResult(0, self.host.arch + "\n", "")
         if core[:1] == ["df"]:
@@ -173,6 +197,10 @@ class FakeTransport:
 
     def connect(self, target: SSHTarget, credential: SSHCredential, *, expected_fingerprint: str | None, connect_timeout: float) -> FakeSession:
         self.host.connections.append(credential.kind)
+        if self.host.firewall_applied:
+            self.host.fresh_connections_after_firewall += 1
+            if self.host.lock_out_after_firewall:
+                raise SSHError("SSH connection failed (timeout)", code="timeout")
         if expected_fingerprint and expected_fingerprint != self.host.fingerprint:
             raise SSHError("SSH host key does not match the pinned fingerprint", code="host_key_mismatch")
         if not self.host.authorized(credential):
@@ -254,17 +282,63 @@ def test_render_artifacts_are_secret_free_and_hardened():
     unit = render_systemd_unit(serve_port=8443)
     assert "User=ifilm-cdn" in unit and "NoNewPrivileges=true" in unit and "ProtectSystem=strict" in unit
     assert "python -m app.services.cdn_node serve" in unit
-    nft = render_nftables(ssh_port=2222, serve_port=8443, management_cidrs="203.0.113.0/24, 2001:db8::/32", serve_cidrs="0.0.0.0/0,::/0")
-    assert "policy drop" in nft
-    assert "ip saddr { 203.0.113.0/24 } tcp dport 2222 accept" in nft
-    assert "ip6 saddr { 2001:db8::/32 } tcp dport 2222 accept" in nft
-    assert "meta nfproto ipv4 tcp dport 8443 accept" in nft and "meta nfproto ipv6 tcp dport 8443 accept" in nft
-    open_ssh = render_nftables(ssh_port=22, serve_port=8443, management_cidrs="", serve_cidrs="10.0.0.0/8")
-    assert "    tcp dport 22 accept" in open_ssh and "ip saddr { 10.0.0.0/8 } tcp dport 8443 accept" in open_ssh
     node = ManagedCDNNode(id="n1", name="x", role="cache", host="h", ssh_port=22, ssh_username="root", branch="Nimruz", cache_limit_bytes=1000, high_watermark_pct=90, low_watermark_pct=80)
     env = render_node_env(node=node, central_url="https://ifilm.example", node_token="tok", serve_port=8443, edge_grant_key_id="eg1", version="1.0")
     assert "IFILM_CDN_HIGH_WATERMARK_BYTES=900" in env and "IFILM_CDN_LOW_WATERMARK_BYTES=800" in env
     assert "IFILM_CDN_SITE_ID=nimruz" in env and "ENABLE_CDN_SYNC=false" in env
+
+
+def _accept_lines(text: str) -> list[str]:
+    return [ln.strip() for ln in text.splitlines() if "accept" in ln and "dport" in ln]
+
+
+def test_nftables_empty_management_fails_closed_and_no_allow_any_generated():
+    with pytest.raises(ProvisionStepError) as exc:
+        render_nftables(ssh_port=22, serve_port=8443, management_cidrs="", serve_cidrs="")
+    assert exc.value.code == "management_cidrs_missing" and exc.value.retryable is False
+    with pytest.raises(ProvisionStepError) as exc:
+        render_nftables(ssh_port=22, serve_port=8443, management_cidrs=[], serve_cidrs=["10.0.0.0/8"])
+    assert exc.value.code == "management_cidrs_missing"
+
+
+def test_nftables_empty_serve_generates_no_media_rule():
+    nft = render_nftables(ssh_port=22, serve_port=8443, management_cidrs="203.0.113.0/24", serve_cidrs="")
+    lines = _accept_lines(nft)
+    assert lines == ["ip saddr { 203.0.113.0/24 } tcp dport 22 accept"]
+    assert "dport 8443 accept" not in nft and "media port 8443 closed" in nft
+    assert "policy drop" in nft and "0.0.0.0/0" not in nft and "::/0" not in nft and "nfproto" not in nft
+
+
+def test_nftables_explicit_cidrs_generate_only_those_sources_v4_and_v6():
+    nft = render_nftables(
+        ssh_port=2222,
+        serve_port=8443,
+        management_cidrs="203.0.113.0/24, 2001:db8::/32",
+        serve_cidrs=["103.89.153.0/24", "103.126.4.0/24", "2001:db8:1::/48"],
+    )
+    assert _accept_lines(nft) == [
+        "ip saddr { 203.0.113.0/24 } tcp dport 2222 accept",
+        "ip6 saddr { 2001:db8::/32 } tcp dport 2222 accept",
+        "ip saddr { 103.89.153.0/24, 103.126.4.0/24 } tcp dport 8443 accept",
+        "ip6 saddr { 2001:db8:1::/48 } tcp dport 8443 accept",
+    ]
+    assert "0.0.0.0/0" not in nft and "nfproto" not in nft
+
+
+def test_nftables_allow_any_only_when_explicit():
+    nft = render_nftables(ssh_port=22, serve_port=8443, management_cidrs="203.0.113.0/24", serve_cidrs="0.0.0.0/0,::/0")
+    assert "meta nfproto ipv4 tcp dport 8443 accept" in nft and "meta nfproto ipv6 tcp dport 8443 accept" in nft
+    assert "meta nfproto ipv4 tcp dport 22 accept" not in nft
+
+
+@pytest.mark.parametrize("bad", ["203.0.113.5/24", "not-a-cidr", "300.1.1.0/24", "203.0.113.0/33"])
+def test_nftables_rejects_malformed_cidr_before_provisioning(bad):
+    with pytest.raises(ProvisionStepError) as exc:
+        render_nftables(ssh_port=22, serve_port=8443, management_cidrs=bad, serve_cidrs="")
+    assert exc.value.code == "invalid_cidr" and exc.value.retryable is False
+    with pytest.raises(ProvisionStepError) as exc:
+        render_nftables(ssh_port=22, serve_port=8443, management_cidrs="203.0.113.0/24", serve_cidrs=bad)
+    assert exc.value.code == "invalid_cidr"
 
 
 def test_keypair_generation_and_fingerprint():
@@ -351,13 +425,22 @@ def test_successful_debian13_bootstrap_rotates_key_and_marks_ready(client, db_se
     assert "IFILM_CDN_CENTRAL_URL=https://ifilm.example" in env_text
     assert "/etc/systemd/system/ifilm-cdn.service" in host.installed
     assert "/etc/nftables.conf" in host.installed and b"policy drop" in host.files["/etc/nftables.conf"]
+    nft_text = host.files["/etc/nftables.conf"].decode()
+    assert "ip saddr { 203.0.113.0/24 } tcp dport 22 accept" in nft_text
+    assert "dport 8443 accept" not in nft_text and "0.0.0.0/0" not in nft_text  # media port closed in P1
+    cmds = [" ".join(c) for c in host.commands]
+    check_idx = next(i for i, c in enumerate(cmds) if "nft -c -f" in c)
+    apply_idx = next(i for i, c in enumerate(cmds) if c.endswith("nft -f /etc/ifilm-cdn/nftables.candidate"))
+    persist_idx = next(i for i, c in enumerate(cmds) if "nftables.candidate /etc/nftables.conf" in c)
+    assert check_idx < apply_idx < persist_idx
+    assert host.fresh_connections_after_firewall >= 1  # fresh SSH verified after apply
     assert b"BEGIN PUBLIC KEY" in host.files["/etc/ifilm-cdn/edge-grant-public.pem"]
     assert host.service_active is True
     # Bundle verified by checksum before extraction.
     assert any(c[:2] == ["sha256sum", "-c"] for c in host.commands)
     assert host.commands.index(next(c for c in host.commands if c[:2] == ["sha256sum", "-c"])) < host.commands.index(next(c for c in host.commands if c[:1] == ["tar"]))
     # Key rotation: private key verified on a fresh connection, then bootstrap password retired.
-    assert host.connections == ["password", "private_key"]
+    assert host.connections == ["password", "password", "private_key"]  # bootstrap, fresh verify, key verify
     assert node.credential_ciphertext is None and node.credential_type == "managed_key"
     assert node.managed_key_ciphertext is not None and node.managed_key_fingerprint.startswith("SHA256:")
     assert node.managed_key_public.split(" ")[1] in host.authorized_keys
@@ -388,7 +471,7 @@ def test_bootstrap_idempotent_rerun_uses_managed_key(client, db_session, secrets
     db_session.refresh(run2)
     db_session.refresh(node)
     assert run2.status == "completed", run2.log_text
-    assert host.connections == ["private_key"]  # no password needed any more
+    assert host.connections == ["private_key", "private_key"]  # bootstrap + fresh firewall verify; no password
     assert node.managed_key_fingerprint == first_key
     assert not any(c[:1] == ["useradd"] for c in host.commands)  # user already exists
     assert not any(c[:1] == ["tar"] for c in host.commands)  # release already installed
@@ -555,3 +638,117 @@ def test_worker_startup_fails_closed(secrets_key):
     ok, reason = worker.worker_startup_ok(_settings(enable_cdn_provisioning=True, cdn_central_base_url="http://plain"))
     assert not ok and "https" in reason
     assert worker.worker_startup_ok(_settings(enable_cdn_provisioning=True))[0] is True
+
+
+# --- Firewall fail-closed regression tests ------------------------------------------
+
+
+def test_firewall_step_fails_closed_without_management_cidrs(client, db_session, secrets_key):
+    node, admin = _seed_node(db_session)
+    host = FakeHost()
+    executor = ProvisionExecutor(settings=_settings(cdn_management_cidrs=""), transport=FakeTransport(host), bundle_builder=_fake_bundle)
+    run = _queue(db_session, admin, node)
+    executor.execute(db_session, run)
+    db_session.refresh(run)
+    assert run.status == "failed" and run.error_code == "management_cidrs_missing" and run.step == "firewall"
+    assert "/etc/nftables.conf" not in host.installed
+    assert not any(c[:2] == ["nft", "-f"] for c in host.commands)
+    assert host.firewall_applied is False
+
+
+def test_firewall_step_prefers_admin_network_policy_over_env(client, db_session, secrets_key):
+    from app.services.cdn_network import update_network_settings
+
+    node, admin = _seed_node(db_session)
+    update_network_settings(db_session, admin, management_cidrs=["203.0.113.0/24"], serve_cidrs=["103.126.4.0/24"])
+    host = FakeHost()
+    executor = ProvisionExecutor(settings=_settings(cdn_management_cidrs="198.51.100.0/24", cdn_serve_cidrs=""), transport=FakeTransport(host), bundle_builder=_fake_bundle)
+    run = _queue(db_session, admin, node)
+    executor.execute(db_session, run)
+    db_session.refresh(run)
+    assert run.status == "completed", run.log_text
+    nft_text = host.files["/etc/nftables.conf"].decode()
+    assert "ip saddr { 203.0.113.0/24 } tcp dport 22 accept" in nft_text
+    assert "ip saddr { 103.126.4.0/24 } tcp dport 8443 accept" in nft_text
+    assert "198.51.100.0/24" not in nft_text
+
+
+def test_firewall_refuses_to_lock_out_the_worker(client, db_session, secrets_key):
+    node, admin = _seed_node(db_session)
+    host = FakeHost(ssh_source="198.51.100.9")  # worker source outside management CIDRs
+    executor = ProvisionExecutor(settings=_settings(), transport=FakeTransport(host), bundle_builder=_fake_bundle)
+    run = _queue(db_session, admin, node)
+    executor.execute(db_session, run)
+    db_session.refresh(run)
+    assert run.status == "failed" and run.error_code == "management_cidrs_exclude_worker"
+    assert not any(c[:2] == ["nft", "-f"] for c in host.commands)
+    host = FakeHost(ssh_source="")
+    run = _queue(db_session, admin, node)
+    ProvisionExecutor(settings=_settings(), transport=FakeTransport(host), bundle_builder=_fake_bundle).execute(db_session, run)
+    db_session.refresh(run)
+    assert run.status == "failed" and run.error_code == "management_source_unknown"
+
+
+def test_firewall_syntax_error_blocks_apply(client, db_session, secrets_key):
+    node, admin = _seed_node(db_session)
+    host = FakeHost(fail_commands={"nft -c": 1})
+    executor = ProvisionExecutor(settings=_settings(), transport=FakeTransport(host), bundle_builder=_fake_bundle)
+    run = _queue(db_session, admin, node)
+    executor.execute(db_session, run)
+    db_session.refresh(run)
+    assert run.status == "failed" and run.error_code == "firewall_invalid"
+    assert not any(c[:2] == ["nft", "-f"] for c in host.commands)
+    assert host.firewall_applied is False and "/etc/nftables.conf" not in host.installed
+
+
+def test_failed_fresh_ssh_verification_rolls_back_firewall(client, db_session, secrets_key, caplog):
+    caplog.set_level(logging.DEBUG)
+    node, admin = _seed_node(db_session)
+    host = FakeHost(lock_out_after_firewall=True, live_ruleset="table inet previous {\n  chain input { type filter hook input priority 0; policy accept; }\n}\n")
+    executor = ProvisionExecutor(settings=_settings(), transport=FakeTransport(host), bundle_builder=_fake_bundle)
+    run = _queue(db_session, admin, node)
+    executor.execute(db_session, run)
+    db_session.refresh(run)
+    db_session.refresh(node)
+    assert run.status == "failed" and run.error_code == "firewall_verify_failed" and run.step == "firewall"
+    assert host.fresh_connections_after_firewall == 1
+    cmds = [" ".join(c) for c in host.commands]
+    assert any(c.endswith("nft flush ruleset") for c in cmds)
+    assert any(c.endswith("nft -f /etc/ifilm-cdn/nftables.rollback") for c in cmds)
+    assert "table inet previous" in host.live_ruleset  # previous ruleset restored
+    assert host.firewall_applied is False
+    assert "/etc/nftables.conf" not in host.installed  # never persisted an unverified ruleset
+    assert not any("systemctl enable nftables" in c for c in cmds)
+    assert node.provision_status == "failed" and node.credential_ciphertext is not None
+    assert "previous ruleset restored" in run.log_text
+    for secret in ("bootstrap-password-test",):
+        assert secret not in run.log_text and secret not in caplog.text
+
+
+def test_failed_fresh_ssh_verification_without_previous_ruleset_flushes(client, db_session, secrets_key):
+    node, admin = _seed_node(db_session)
+    host = FakeHost(lock_out_after_firewall=True, live_ruleset="")
+    run = _queue(db_session, admin, node)
+    ProvisionExecutor(settings=_settings(), transport=FakeTransport(host), bundle_builder=_fake_bundle).execute(db_session, run)
+    db_session.refresh(run)
+    assert run.status == "failed" and run.error_code == "firewall_verify_failed"
+    assert host.live_ruleset == "" and host.firewall_applied is False
+    assert not any(c[:2] == ["nft", "-f"] and c[2].endswith("rollback") for c in host.commands)
+
+
+def test_firewall_logs_never_contain_secrets(client, db_session, secrets_key, caplog):
+    caplog.set_level(logging.DEBUG)
+    node, admin = _seed_node(db_session)
+    host = FakeHost()
+    run = _queue(db_session, admin, node)
+    ProvisionExecutor(settings=_settings(), transport=FakeTransport(host), bundle_builder=_fake_bundle).execute(db_session, run)
+    db_session.refresh(run)
+    db_session.refresh(node)
+    assert run.status == "completed"
+    env_text = host.files["/etc/ifilm-cdn/node.env"].decode()
+    token = re.search(r"IFILM_CDN_NODE_TOKEN=(\S+)", env_text).group(1)
+    private_pem = mgmt.load_managed_private_key(node, _settings())
+    firewall_log = "\n".join(ln for ln in run.log_text.splitlines() if "nft" in ln or "firewall" in ln.lower())
+    assert firewall_log  # firewall step was logged
+    for secret in ("bootstrap-password-test", token, private_pem.strip().splitlines()[1]):
+        assert secret not in run.log_text and secret not in caplog.text and secret not in host.files["/etc/nftables.conf"].decode()

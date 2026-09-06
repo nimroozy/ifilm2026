@@ -902,9 +902,12 @@ def overview(db: Session, settings: Settings | None = None) -> dict[str, Any]:
     misses = sum(int(n["cache_misses"]) for n in nodes)
     mains = [n for n in nodes if n["role"] == "main"]
     default_main = next((n for n in mains if n["is_default"]), None)
+    from app.services.cdn_network import get_network_settings
+
     return {
         "generated_at": now.isoformat(),
         "flags": status_flags(cfg),
+        "network": get_network_settings(db, cfg),
         "totals": {
             "nodes": len(nodes),
             "online": sum(1 for n in nodes if n["state"] == "online"),

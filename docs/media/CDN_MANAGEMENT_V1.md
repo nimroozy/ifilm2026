@@ -38,7 +38,18 @@ The legacy `cdn_sync.py` / `/api/admin/cdn/*` remain quarantined; `ENABLE_CDN_SY
 | `ENABLE_CDN_PROVISIONING` | Privileged provisioning worker (never inside the web container) |
 | `ENABLE_CDN_EDGE_ROUTING` | CDN-P2 only. Rejected by startup validation in CDN-P1 |
 
-Related settings: `CDN_CENTRAL_BASE_URL` (https, reachable by nodes), `CDN_MANAGEMENT_CIDRS`, `CDN_SERVE_CIDRS`, `CDN_NODE_SERVE_PORT` (8443), `CDN_NODE_HEARTBEAT_STALE_SECONDS` (90), `CDN_ORIGIN_MAX_OBJECT_BYTES`.
+Related settings: `CDN_CENTRAL_BASE_URL` (https, reachable by nodes), `CDN_NODE_SERVE_PORT` (8443), `CDN_NODE_HEARTBEAT_STALE_SECONDS` (90), `CDN_ORIGIN_MAX_OBJECT_BYTES`. `CDN_MANAGEMENT_CIDRS` / `CDN_SERVE_CIDRS` are only env fallbacks for the admin network policy below.
+
+## Network policy (fail closed)
+
+`Admin → CDN → Servers → Network policy` (`GET|PUT /api/admin/cdn-management/network`, `cdn.provision`):
+
+| Field | Meaning | Default |
+|-------|---------|---------|
+| Management CIDRs | Networks allowed to administer CDN servers over SSH. Must include the provisioning worker's egress address. | **empty = provisioning refuses the firewall step** |
+| Serve CIDRs | Subscriber/client networks allowed to reach the media port. | **empty = no media ingress rule (port closed in CDN-P1)** |
+
+Rules: every entry is validated as a strict CIDR; at least one management CIDR is required to save; `0.0.0.0/0` / `::/0` are never introduced implicitly and are accepted only when typed explicitly and confirmed (UI dialog, API `confirm_allow_any`). The rendered nftables ruleset contains accept rules for exactly the configured sources.
 
 ## Permissions
 
@@ -72,7 +83,7 @@ Node-facing (flag `ENABLE_CDN_NODE_API`, headers `Authorization: Bearer <node to
 1. *Add server*: name, role (`MAIN_CDN` | `CACHE`), host, SSH port/user, bootstrap password or key (encrypted), storage limit, watermarks, priority, serve base URL.
 2. *Test SSH*: authenticated probe (bounded timeouts) returning the observed host-key fingerprint, OS release, sudo availability and disk. Nothing is changed on the host.
 3. *Pin host key*: explicit confirmation. Provisioning and all later SSH refuse unpinned or changed keys.
-4. *Provision*: queues a `cdn_provision_runs` row. The worker claims it (`SKIP LOCKED` on PostgreSQL) and runs idempotent steps: `preflight` (Debian 13, root/sudo, arch, disk) → `packages` → `user_dirs` (`ifilm-cdn`, `/var/lib/ifilm-cdn/cache`, `/etc/ifilm-cdn`) → `bundle` (versioned tarball built from this checkout, SHA-256 verified before extraction, venv + `requirements-branch-cache.txt`) → `config` (`/etc/ifilm-cdn/node.env` 0640 root:ifilm-cdn with a freshly issued node token; edge-grant public key if configured) → `systemd` (hardened unit) → `firewall` (nftables default-deny inbound: SSH from `CDN_MANAGEMENT_CIDRS`, media port from `CDN_SERVE_CIDRS`; checked with `nft -c` before apply) → `start` → `verify` (`/health`, `/ready` over loopback) → `collect` (disk, version) → `rotate_key` (generate ed25519 key, install to `authorized_keys`, verify key login on a fresh connection, only then encrypt the private key centrally and retire the bootstrap credential) → `finalize` (`provision_status=ready`).
+4. *Provision*: queues a `cdn_provision_runs` row. The worker claims it (`SKIP LOCKED` on PostgreSQL) and runs idempotent steps: `preflight` (Debian 13, root/sudo, arch, disk) → `packages` → `user_dirs` (`ifilm-cdn`, `/var/lib/ifilm-cdn/cache`, `/etc/ifilm-cdn`) → `bundle` (versioned tarball built from this checkout, SHA-256 verified before extraction, venv + `requirements-branch-cache.txt`) → `config` (`/etc/ifilm-cdn/node.env` 0640 root:ifilm-cdn with a freshly issued node token; edge-grant public key if configured) → `systemd` (hardened unit) → `firewall` (fails closed without management CIDRs; refuses if the worker's own `SSH_CLIENT` source is outside them; `nft -c` syntax check; snapshot of the live ruleset; atomic `nft -f`; then a **fresh** SSH login is verified — on failure the previous ruleset is restored through the still-open session and the run fails with `firewall_verify_failed`; only after verification is `/etc/nftables.conf` written and `nftables` enabled) → `start` → `verify` (`/health`, `/ready` over loopback) → `collect` (disk, version) → `rotate_key` (generate ed25519 key, install to `authorized_keys`, verify key login on a fresh connection, only then encrypt the private key centrally and retire the bootstrap credential) → `finalize` (`provision_status=ready`).
 5. A failed run records `step`, `error_code`, and a redacted log; the next *Provision* resumes from the failed step. *Re-provision* runs everything again; *Upgrade* re-installs the bundle/config; *Clear Cache* stops, wipes the cache root, restarts.
 
 Secrets (passwords, private keys, node tokens) never appear in argv, run logs, exceptions, DB logs or API responses; every recorded line passes through `redact_log`.
@@ -95,7 +106,7 @@ Subscribers still authenticate, pass entitlement checks, and stream through `/ap
 
 ## Staging checklist for the first real node
 
-1. Set `INTEGRATION_SECRETS_KEY`, `CDN_CENTRAL_BASE_URL=https://<central>`, `ENABLE_CDN_NODE_API=true` on the API; run `docker compose --profile cdn up cdn-provisioning-worker` with `ENABLE_CDN_PROVISIONING=true` and `CDN_MANAGEMENT_CIDRS` including the central egress IP.
+1. Set `INTEGRATION_SECRETS_KEY`, `CDN_CENTRAL_BASE_URL=https://<central>`, `ENABLE_CDN_NODE_API=true` on the API; run `docker compose --profile cdn up cdn-provisioning-worker` with `ENABLE_CDN_PROVISIONING=true`; save the network policy (management CIDRs must include the worker's egress IP; leave serve CIDRs empty in CDN-P1).
 2. Add the Debian 13 server, Test SSH, pin the fingerprint after out-of-band verification, Provision.
 3. Confirm the node shows `ONLINE` within 60 s, disk/version populated, `Health / Metrics` updating, and the routing tester selecting it for its CIDR.
-4. Keep `ENABLE_CDN_EDGE_ROUTING=false`. Do not expose the node media port beyond `CDN_SERVE_CIDRS`.
+4. Keep `ENABLE_CDN_EDGE_ROUTING=false` and serve CIDRs empty: the node media port stays closed until CDN-P2 deliberately opens subscriber prefixes.

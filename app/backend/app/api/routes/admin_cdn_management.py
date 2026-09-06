@@ -20,6 +20,7 @@ from app.schemas.cdn_management import (
     ConfirmedActionIn,
     ManagedNodeIn,
     ManagedNodePatch,
+    NetworkSettingsIn,
     NodeHeartbeatIn,
     PinHostKeyIn,
     PrefixRouteIn,
@@ -28,6 +29,7 @@ from app.schemas.cdn_management import (
     RouteLookupIn,
 )
 from app.services import cdn_management as svc
+from app.services import cdn_network
 from app.services.cdn_provisioner import probe_ssh_connection
 from app.services.cdn_routing import evaluate_route
 
@@ -91,6 +93,28 @@ def status_flags(_: CdnRead) -> dict[str, Any]:
 @router.get("/overview")
 def overview(db: DbSession, _: CdnRead) -> dict[str, Any]:
     return svc.overview(db)
+
+
+# --- Network policy (management SSH + media serve CIDRs) --------------------
+
+
+@router.get("/network")
+def get_network(db: DbSession, _: CdnRead) -> dict[str, Any]:
+    return cdn_network.get_network_settings(db)
+
+
+@router.put("/network")
+def put_network(payload: NetworkSettingsIn, db: DbSession, admin: CdnProvision) -> dict[str, Any]:
+    try:
+        return cdn_network.update_network_settings(
+            db,
+            admin,
+            management_cidrs=payload.management_cidrs,
+            serve_cidrs=payload.serve_cidrs,
+            confirm_allow_any=payload.confirm_allow_any,
+        )
+    except cdn_network.CDNNetworkError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 # --- Nodes ------------------------------------------------------------------

@@ -8,8 +8,10 @@ into root-owned files and are redacted from all recorded logs.
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import io
+import ipaddress
 import logging
 import re
 import secrets
@@ -28,6 +30,12 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.models.cdn_management import CDNProvisionRun, ManagedCDNNode
 from app.services import cdn_management as mgmt
+from app.services.cdn_network import (
+    CDNNetworkError,
+    address_in_networks,
+    effective_network,
+    parse_cidr_list,
+)
 from app.services.cdn_provisioning import ProvisioningError, redact_log, validate_target
 from app.services.cdn_ssh import (
     CommandResult,
@@ -130,24 +138,25 @@ def build_node_bundle(settings: Settings | None = None) -> NodeBundle:
         info.mtime = 0
         return info
 
-    buffer = io.BytesIO()
-    with tarfile.open(fileobj=buffer, mode="w:gz", compresslevel=6) as tar:
-        tar.add(str(app_dir), arcname="app", filter=_filter)
-        tar.add(str(requirements), arcname="requirements-branch-cache.txt", filter=_filter)
-    data = buffer.getvalue()
-    digest = hashlib.sha256(data).hexdigest()
+    def _archive(version: str | None) -> bytes:
+        buffer = io.BytesIO()
+        # gzip mtime is pinned so identical trees hash identically across builds.
+        with gzip.GzipFile(fileobj=buffer, mode="wb", compresslevel=6, mtime=0) as gz:
+            with tarfile.open(fileobj=gz, mode="w") as tar:
+                tar.add(str(app_dir), arcname="app", filter=_filter)
+                tar.add(str(requirements), arcname="requirements-branch-cache.txt", filter=_filter)
+                if version is not None:
+                    version_info = tarfile.TarInfo("VERSION")
+                    payload = (version + "\n").encode("utf-8")
+                    version_info.size = len(payload)
+                    version_info.mtime = 0
+                    tar.addfile(version_info, io.BytesIO(payload))
+        return buffer.getvalue()
+
+    digest = hashlib.sha256(_archive(None)).hexdigest()
     base = (cfg.app_version or "0.0.0-dev").strip() or "0.0.0-dev"
     version = f"{base}+{digest[:8]}"
-    buffer = io.BytesIO()
-    with tarfile.open(fileobj=buffer, mode="w:gz", compresslevel=6) as tar:
-        tar.add(str(app_dir), arcname="app", filter=_filter)
-        tar.add(str(requirements), arcname="requirements-branch-cache.txt", filter=_filter)
-        version_info = tarfile.TarInfo("VERSION")
-        payload = (version + "\n").encode("utf-8")
-        version_info.size = len(payload)
-        version_info.mtime = 0
-        tar.addfile(version_info, io.BytesIO(payload))
-    data = buffer.getvalue()
+    data = _archive(version)
     return NodeBundle(data=data, sha256=hashlib.sha256(data).hexdigest(), version=version)
 
 
@@ -188,26 +197,21 @@ WantedBy=multi-user.target
 """
 
 
-def _split_cidrs(raw: str) -> tuple[list[str], list[str]]:
-    import ipaddress
-
-    v4: list[str] = []
-    v6: list[str] = []
-    for item in (raw or "").split(","):
-        text = item.strip()
-        if not text:
-            continue
-        network = ipaddress.ip_network(text, strict=False)
-        (v4 if network.version == 4 else v6).append(str(network))
+def _cidr_families(cidrs: str | Sequence[str], *, field: str) -> tuple[list[str], list[str]]:
+    try:
+        parsed = parse_cidr_list(cidrs, field=field)
+    except CDNNetworkError as exc:
+        raise ProvisionStepError(str(exc), code="invalid_cidr", retryable=False) from exc
+    v4 = [c for c in parsed if ipaddress.ip_network(c).version == 4]
+    v6 = [c for c in parsed if ipaddress.ip_network(c).version == 6]
     return v4, v6
 
 
-def _nft_accept_rules(port: int, cidrs: str, *, allow_any_when_empty: bool) -> list[str]:
-    v4, v6 = _split_cidrs(cidrs)
-    if not v4 and not v6:
-        return [f"    tcp dport {port} accept"] if allow_any_when_empty else []
+def _nft_accept_rules(port: int, cidrs: str | Sequence[str], *, field: str) -> list[str]:
+    """Accept rules for exactly the configured sources. Empty → NO rule (fail closed)."""
+    v4, v6 = _cidr_families(cidrs, field=field)
     rules: list[str] = []
-    if "0.0.0.0/0" in v4:
+    if "0.0.0.0/0" in v4:  # explicit allow-any only; never derived from an empty list
         rules.append(f"    meta nfproto ipv4 tcp dport {port} accept")
     elif v4:
         rules.append(f"    ip saddr {{ {', '.join(v4)} }} tcp dport {port} accept")
@@ -218,12 +222,28 @@ def _nft_accept_rules(port: int, cidrs: str, *, allow_any_when_empty: bool) -> l
     return rules
 
 
-def render_nftables(*, ssh_port: int, serve_port: int, management_cidrs: str, serve_cidrs: str) -> str:
-    ssh_rules = _nft_accept_rules(ssh_port, management_cidrs, allow_any_when_empty=True)
-    serve_rules = _nft_accept_rules(serve_port, serve_cidrs, allow_any_when_empty=True)
+def render_nftables(
+    *,
+    ssh_port: int,
+    serve_port: int,
+    management_cidrs: str | Sequence[str],
+    serve_cidrs: str | Sequence[str],
+) -> str:
+    """Default-deny inbound ruleset. Requires explicit management CIDRs (fail closed)."""
+    mgmt_v4, mgmt_v6 = _cidr_families(management_cidrs, field="management_cidrs")
+    if not mgmt_v4 and not mgmt_v6:
+        raise ProvisionStepError(
+            "management CIDRs are required before the firewall can be applied",
+            code="management_cidrs_missing",
+            retryable=False,
+        )
+    ssh_rules = _nft_accept_rules(ssh_port, management_cidrs, field="management_cidrs")
+    serve_rules = _nft_accept_rules(serve_port, serve_cidrs, field="serve_cidrs")
+    if not serve_rules:
+        serve_rules = [f"    # media port {serve_port} closed: no serve CIDRs configured (CDN-P1 default)"]
     body = "\n".join(ssh_rules + serve_rules)
     return f"""#!/usr/sbin/nft -f
-# Managed by iFilm CDN provisioning. Default deny inbound; SSH + media port only.
+# Managed by iFilm CDN provisioning. Default deny inbound; SSH from management CIDRs only.
 flush ruleset
 table inet ifilm_cdn {{
   chain input {{
@@ -531,20 +551,110 @@ def step_systemd(ctx: ProvisionContext) -> None:
     ctx.run_cmd(["systemctl", "enable", REMOTE_SERVICE])
 
 
+REMOTE_NFT_CANDIDATE = f"{REMOTE_CONFIG_DIR}/nftables.candidate"
+REMOTE_NFT_ROLLBACK = f"{REMOTE_CONFIG_DIR}/nftables.rollback"
+
+
+def _ssh_client_address(ctx: ProvisionContext) -> str | None:
+    """Source address of the worker's current SSH session as seen by the node."""
+    result = ctx.run_cmd(["printenv", "SSH_CLIENT"], privileged=False, check=False, timeout=15)
+    parts = (result.stdout or "").strip().split()
+    if result.exit_code != 0 or not parts:
+        result = ctx.run_cmd(["printenv", "SSH_CONNECTION"], privileged=False, check=False, timeout=15)
+        parts = (result.stdout or "").strip().split()
+    return parts[0] if parts else None
+
+
+def _rollback_firewall(ctx: ProvisionContext, *, had_previous_ruleset: bool) -> bool:
+    """Restore the pre-apply ruleset through the still-open session. True on success."""
+    ctx.log.info("Rolling back firewall to the previous ruleset")
+    flushed = ctx.run_cmd(["nft", "flush", "ruleset"], check=False, timeout=30)
+    if flushed.exit_code != 0:
+        return False
+    if had_previous_ruleset:
+        restored = ctx.run_cmd(["nft", "-f", REMOTE_NFT_ROLLBACK], check=False, timeout=30)
+        return restored.exit_code == 0
+    return True
+
+
 def step_firewall(ctx: ProvisionContext) -> None:
+    management, serve = effective_network(ctx.db, ctx.settings)
+    if not management:
+        raise ProvisionStepError(
+            "management CIDRs are required before the firewall can be applied "
+            "(Admin → CDN → Servers → Network)",
+            code="management_cidrs_missing",
+            retryable=False,
+        )
     rules = render_nftables(
         ssh_port=int(ctx.node.ssh_port),
         serve_port=int(ctx.settings.cdn_node_serve_port),
-        management_cidrs=ctx.settings.cdn_management_cidrs,
-        serve_cidrs=ctx.settings.cdn_serve_cidrs,
+        management_cidrs=management,
+        serve_cidrs=serve,
     )
-    candidate = "/etc/ifilm-cdn/nftables.candidate"
-    ctx.install_file(rules.encode("utf-8"), candidate, mode="0640", group=NODE_USER)
-    ctx.run_cmd(["nft", "-c", "-f", candidate], code="firewall_invalid")
-    ctx.run_cmd(["install", "-o", "root", "-g", "root", "-m", "0640", candidate, REMOTE_NFT_PATH])
-    ctx.run_cmd(["nft", "-f", REMOTE_NFT_PATH], code="firewall_apply_failed")
+    if not serve:
+        ctx.log.info("No serve CIDRs configured: media port stays closed (CDN-P1)")
+
+    # 1. The management path used right now must survive the new ruleset.
+    source = _ssh_client_address(ctx)
+    if not source:
+        raise ProvisionStepError(
+            "unable to determine the SSH management source address", code="management_source_unknown"
+        )
+    if not address_in_networks(source, management):
+        raise ProvisionStepError(
+            "the provisioning worker's SSH source is not inside the management CIDRs; "
+            "refusing to apply a firewall that would lock out management",
+            code="management_cidrs_exclude_worker",
+            retryable=False,
+        )
+    ctx.log.info(f"Management source {source} is covered by the management CIDRs")
+
+    # 2. Syntax-check the candidate before touching the live ruleset.
+    ctx.install_file(rules.encode("utf-8"), REMOTE_NFT_CANDIDATE, mode="0640", group=NODE_USER)
+    ctx.run_cmd(["nft", "-c", "-f", REMOTE_NFT_CANDIDATE], code="firewall_invalid")
+
+    # 3. Snapshot the current ruleset so a failed verification can restore it.
+    snapshot = ctx.run_cmd(["nft", "list", "ruleset"], check=False, timeout=30)
+    previous = (snapshot.stdout or "").strip()
+    had_previous = bool(previous) and snapshot.exit_code == 0
+    if had_previous:
+        ctx.install_file((previous + "\n").encode("utf-8"), REMOTE_NFT_ROLLBACK, mode="0600")
+
+    # 4. Atomic apply (nft -f replaces the ruleset in one transaction).
+    ctx.run_cmd(["nft", "-f", REMOTE_NFT_CANDIDATE], code="firewall_apply_failed")
+
+    # 5. Prove a FRESH SSH session still works; never trust the already-open one.
+    node = ctx.node
+    target = SSHTarget(host=node.host, port=int(node.ssh_port), username=node.ssh_username)
+    verified = False
+    try:
+        fresh = ctx.transport.connect(
+            target,
+            _credential_for(node, ctx.settings),
+            expected_fingerprint=node.ssh_host_key_fingerprint,
+            connect_timeout=float(ctx.settings.cdn_ssh_connect_timeout_seconds),
+        )
+        try:
+            verified = fresh.run(["true"], timeout=15).ok
+        finally:
+            fresh.close()
+    except SSHError as exc:
+        ctx.log.info(f"Fresh SSH verification failed after firewall apply ({exc.code})")
+    if not verified:
+        restored = _rollback_firewall(ctx, had_previous_ruleset=had_previous)
+        ctx.run_cmd(["rm", "-f", REMOTE_NFT_CANDIDATE, REMOTE_NFT_ROLLBACK], check=False)
+        raise ProvisionStepError(
+            "fresh SSH verification failed after applying the firewall; "
+            + ("previous ruleset restored" if restored else "ROLLBACK FAILED — inspect the node console"),
+            code="firewall_verify_failed" if restored else "firewall_rollback_failed",
+        )
+    ctx.log.info("Fresh SSH session verified after firewall apply")
+
+    # 6. Persist only after verification so a reboot never boots into an unverified ruleset.
+    ctx.run_cmd(["install", "-o", "root", "-g", "root", "-m", "0640", REMOTE_NFT_CANDIDATE, REMOTE_NFT_PATH])
     ctx.run_cmd(["systemctl", "enable", "nftables"])
-    ctx.run_cmd(["rm", "-f", candidate], check=False)
+    ctx.run_cmd(["rm", "-f", REMOTE_NFT_CANDIDATE, REMOTE_NFT_ROLLBACK], check=False)
 
 
 def step_start(ctx: ProvisionContext) -> None:
