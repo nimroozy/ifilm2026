@@ -19,6 +19,22 @@ def collect_object_storage_errors(settings: Settings) -> list[str]:
             "(experimental edge sync is not a signed branch-cache protocol)"
         )
 
+    # CDN-P1 operational control plane: edge playback routing is CDN-P2 only.
+    if settings.enable_cdn_edge_routing:
+        errors.append(
+            "ENABLE_CDN_EDGE_ROUTING must remain false in CDN-P1 "
+            "(customer playback stays on central /api/stream)"
+        )
+    if settings.enable_cdn_node_api and settings.enable_cdn_sync:
+        errors.append("ENABLE_CDN_SYNC must remain false when the CDN node API is enabled")
+    if settings.enable_cdn_provisioning and not (settings.integration_secrets_key or "").strip():
+        errors.append(
+            "INTEGRATION_SECRETS_KEY is required when ENABLE_CDN_PROVISIONING=true "
+            "(node credentials are encrypted at rest)"
+        )
+    if int(settings.cdn_node_heartbeat_stale_seconds) < 30:
+        errors.append("CDN_NODE_HEARTBEAT_STALE_SECONDS must be at least 30")
+
     # Phase 3 control-plane flag dependencies (independent of object storage).
     if settings.enable_edge_grant_issue and not settings.enable_branch_cache_control_plane:
         errors.append("ENABLE_EDGE_GRANT_ISSUE requires ENABLE_BRANCH_CACHE_CONTROL_PLANE=true")

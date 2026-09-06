@@ -172,6 +172,45 @@ services:
       retries: 3
       start_period: 10s
 
+  cdn-provisioning-worker:
+    # Opt-in privileged worker for Admin → CDN → Servers provisioning (CDN-P1).
+    #   docker compose --profile cdn up cdn-provisioning-worker
+    # Requires ENABLE_CDN_PROVISIONING=true, INTEGRATION_SECRETS_KEY and an https
+    # CDN_CENTRAL_BASE_URL reachable by CDN nodes. Never enable in the web container.
+    profiles: ["cdn"]
+    labels:
+      - "ifilm.pipeline.role=cdn-provisioning"
+      - "ifilm.compose.profile=cdn"
+    build:
+      context: ./app/backend
+    command: python -m app.workers.cdn_provisioning
+    environment:
+      APP_ENV: development
+      DEBUG: "false"
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-ifilm}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ifilm}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in your environment}
+      MEDIA_ROOT: /data/media
+      ENABLE_CDN_PROVISIONING: ${ENABLE_CDN_PROVISIONING:-false}
+      ENABLE_CDN_NODE_API: ${ENABLE_CDN_NODE_API:-false}
+      INTEGRATION_SECRETS_KEY: ${INTEGRATION_SECRETS_KEY:-}
+      CDN_CENTRAL_BASE_URL: ${CDN_CENTRAL_BASE_URL:-}
+      CDN_MANAGEMENT_CIDRS: ${CDN_MANAGEMENT_CIDRS:-}
+      CDN_SERVE_CIDRS: ${CDN_SERVE_CIDRS:-0.0.0.0/0,::/0}
+      CDN_NODE_SERVE_PORT: ${CDN_NODE_SERVE_PORT:-8443}
+      EDGE_GRANT_PUBLIC_KEY_PEM: ${EDGE_GRANT_PUBLIC_KEY_PEM:-}
+      EDGE_GRANT_KEY_ID: ${EDGE_GRANT_KEY_ID:-eg1}
+    volumes:
+      - ./app/backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.workers.cdn_provisioning", "--healthcheck"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
   publishing-worker:
     labels:
       - "ifilm.pipeline.role=canonical"

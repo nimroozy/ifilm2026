@@ -46,7 +46,7 @@ Frontend data mode:
 
 **Important:** The full `MEDIA_ROOT` is **not** publicly mounted. Anonymous `/media/**` access was removed. HLS packages are delivered only via protected `/api/stream/{token}/…` routes. Optional artwork may be served from `ARTWORK_ROOT` at `/artwork`.
 
-Alembic head: `007_streaming_service`.
+Alembic head: `030_cdn_operations_v1`.
 
 Uploads, ffprobe processing, local HLS encoding, protected streaming, and the adaptive customer HLS video player are implemented. Persistent watch history, CDN, DRM, and payments remain deferred.
 
@@ -55,6 +55,7 @@ Uploads, ffprobe processing, local HLS encoding, protected streaming, and the ad
 - [SECURITY.md](./SECURITY.md)
 - [docs/backend/PRODUCTION_READINESS.md](./docs/backend/PRODUCTION_READINESS.md)
 - [docs/backend/THREAT_MODEL.md](./docs/backend/THREAT_MODEL.md)
+- [docs/media/CDN_MANAGEMENT_V1.md](./docs/media/CDN_MANAGEMENT_V1.md) — CDN-P1 management, provisioning, node runtime (edge playback deferred to CDN-P2)
 - [docs/audits/PHASE_7_REPOSITORY_AUDIT.md](./docs/audits/PHASE_7_REPOSITORY_AUDIT.md)
 
 ## Quick start

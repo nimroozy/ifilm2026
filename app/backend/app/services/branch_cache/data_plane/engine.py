@@ -258,6 +258,10 @@ class BranchDataPlaneEngine:
             if not ok:
                 metrics.incr("dp_fallback")
                 return self._fallback_response(reason, reason)
+            if not self.cache.has(rel):
+                # Filled object was evicted immediately (capacity pressure): fall back.
+                metrics.incr("dp_fallback")
+                return self._fallback_response(DECISION_FALLBACK_CENTRAL, "evicted_after_fill")
             decision_code = DECISION_MISS_FILL
         else:
             metrics.incr("dp_hit")

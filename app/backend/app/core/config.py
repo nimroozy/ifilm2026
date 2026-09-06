@@ -216,6 +216,31 @@ class Settings(BaseSettings):
     # Phase 9: one-node staging deploy apply gate (plan/render always available; apply stays off).
     enable_branch_cache_one_node_staging_deploy: bool = False
 
+    # CDN-P1 operational control plane (managed_cdn_nodes). Defaults OFF.
+    # Node-facing APIs: authenticated heartbeat + central origin pull for CDN nodes.
+    enable_cdn_node_api: bool = False
+    # Privileged provisioning worker (python -m app.workers.cdn_provisioning).
+    enable_cdn_provisioning: bool = False
+    # CDN-P2 only: route customer playback to edge nodes. Must stay false in CDN-P1.
+    enable_cdn_edge_routing: bool = False
+    # Node is considered offline for routing when its heartbeat is older than this.
+    cdn_node_heartbeat_stale_seconds: int = 90
+    # Central origin endpoint object size ceiling for node pull-through fills.
+    cdn_origin_max_object_bytes: int = 64 * 1024 * 1024
+    # Base URL CDN nodes use to reach central (https). Empty = derive from request.
+    cdn_central_base_url: str = ""
+    # Comma-separated management CIDRs allowed to reach SSH on provisioned nodes.
+    # Empty = SSH stays open (only the node firewall default is applied to media port).
+    cdn_management_cidrs: str = ""
+    # Comma-separated client CIDRs allowed to reach the node media port (default: any).
+    cdn_serve_cidrs: str = "0.0.0.0/0,::/0"
+    cdn_node_serve_port: int = 8443
+    cdn_provisioning_worker_id: str = ""
+    cdn_provisioning_poll_seconds: float = 3.0
+    cdn_provisioning_stale_after_seconds: int = 1800
+    cdn_ssh_connect_timeout_seconds: float = 10.0
+    cdn_ssh_command_timeout_seconds: float = 600.0
+
     # Watch progress / Continue Watching (Phase 10)
     enable_watch_history: bool = True
     watch_progress_min_seconds: int = 30
