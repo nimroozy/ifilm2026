@@ -107,8 +107,11 @@ const MediaProcessingJobsPage = lazy(() => import('@/pages/admin/MediaProcessing
 const PlaybackSessionsPage = lazy(() => import('@/pages/admin/PlaybackSessionsPage'));
 const SystemUpdatesPage = lazy(() => import('@/pages/admin/SystemUpdatesPage'));
 const PortalSettingsPage = lazy(() => import('@/pages/admin/PortalSettingsPage'));
-const R2SettingsPage = lazy(() => import('@/pages/admin/R2SettingsPage'));
-const CDNManagementPage = lazy(() => import('@/pages/admin/CDNManagementPage'));
+const StorageSettingsPage = lazy(() => import('@/pages/admin/StorageSettingsPage'));
+const CDNOverviewPage = lazy(() => import('@/pages/admin/cdn/CDNOverviewPage'));
+const CDNServersPage = lazy(() => import('@/pages/admin/cdn/CDNServersPage'));
+const CDNRoutingPage = lazy(() => import('@/pages/admin/cdn/CDNRoutingPage'));
+const CDNHealthPage = lazy(() => import('@/pages/admin/cdn/CDNHealthPage'));
 const TmdbToolsPage = lazy(() => import('@/pages/admin/TmdbToolsPage'));
 const AdminPlaceholderPage = lazy(() => import('@/pages/admin/AdminPlaceholderPage'));
 const RecommendationsInspectPage = lazy(() =>
@@ -274,9 +277,14 @@ const router = createBrowserRouter([
           { path: 'media/:assetId', element: <LazyPage><MediaAssetDetailPage /></LazyPage> },
           { path: 'system/updates', element: <LazyPage><SystemUpdatesPage /></LazyPage> },
           { path: 'settings/portal', element: <LazyPage><PortalSettingsPage /></LazyPage> },
-          { path: 'settings/r2', element: <LazyPage><R2SettingsPage /></LazyPage> },
+          { path: 'settings/storage', element: <LazyPage><StorageSettingsPage /></LazyPage> },
+          { path: 'settings/r2', element: <Navigate to="/admin/settings/storage" replace /> },
+          { path: 'cdn', element: <LazyPage><CDNOverviewPage /></LazyPage> },
+          { path: 'cdn/servers', element: <LazyPage><CDNServersPage /></LazyPage> },
+          { path: 'cdn/routing', element: <LazyPage><CDNRoutingPage /></LazyPage> },
+          { path: 'cdn/health', element: <LazyPage><CDNHealthPage /></LazyPage> },
           { path: 'tools/encoding', element: <LazyPage><AdminPlaceholderPage section="encoding" /></LazyPage> },
-          { path: 'tools/cdn', element: <LazyPage><CDNManagementPage /></LazyPage> },
+          { path: 'tools/cdn', element: <Navigate to="/admin/cdn" replace /> },
           { path: 'tools/users', element: <LazyPage><AdminPlaceholderPage section="users" /></LazyPage> },
         ],
       },

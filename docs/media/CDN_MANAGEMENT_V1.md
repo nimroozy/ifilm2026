@@ -1,37 +1,112 @@
-# CDN Management v1
+# CDN Management (CDN-P1)
+
+**Status:** CDN-P1 — management, provisioning, node runtime, routing rules. Customer playback is unchanged.
+**Edge playback (CDN-P2):** not implemented. `ENABLE_CDN_EDGE_ROUTING` must stay `false`; startup validation rejects it.
 
 ## Architecture
 
-The admin control plane manages three independent concerns:
+```
+Admin (ifilm.af/admin)                     Central iFilm backend
+  Settings → Storage / R2  ───────────►  integration_configs (provider=cloudflare_r2, Fernet secrets)
+  CDN → Servers / Routing  ───────────►  managed_cdn_nodes · cdn_prefix_routes · cdn_provision_runs
+                                                  │
+                     python -m app.workers.cdn_provisioning (privileged, opt-in)
+                                                  │  SSH (paramiko, pinned host key, argv-only commands)
+                                                  ▼
+                                    Debian 13 node: ifilm-cdn.service
+                                    python -m app.services.cdn_node serve
+                                    /health /ready /metrics /v1/obj/{asset}/{pkg}/…
+                                                  │  heartbeat every 30 s (node token)
+                                                  │  pull-through fills from
+                                                  ▼
+                              GET /api/cdn/origin/{asset}/{pkg}/{path}  (node token, sha256, size cap)
+```
 
-1. Cloudflare R2 is an optional private hot tier in the existing `object_storage` architecture. Its access and secret keys are Fernet-encrypted with `INTEGRATION_SECRETS_KEY`; APIs return only `credentials_configured`.
-2. `managed_cdn_nodes` stores Main CDN and Cache inventory, desired cache limits, safe lifecycle state and secret-free health metrics. SSH passwords or private keys are encrypted in a dedicated binary column and never returned.
-3. `cdn_prefix_routes` maps canonical IPv4/IPv6 CIDRs to preferred nodes. Selection sorts by prefix length descending, priority ascending, then node name. When no enabled, healthy route applies, the logical default Main CDN is selected.
+Three independent concerns:
 
-Protected playback remains in the existing streaming/branch-cache path. Storage credentials are never sent to browsers. Edge delivery continues to use short-lived, package/path-bound signed grants. `ENABLE_CDN_SYNC` remains false in production and `cdn_sync.py` is not used.
+1. **Storage / R2** (`Admin → Settings → Storage / R2`): provider (`cloudflare_r2` | `s3_compatible`), endpoint, bucket, region, object key prefix, credentials. Secrets are Fernet-encrypted with `INTEGRATION_SECRETS_KEY`; APIs return only `credentials_configured`. Blank keys preserve the stored secret; *Replace Secret* sends both keys; *Test Connection* records `reachable`, `bucket_accessible`, `last_test_at`, `last_test_message`. Requires `cdn.secrets` (legacy `settings` admins keep access).
+2. **Managed nodes** (`managed_cdn_nodes`, authoritative production registry). `branch_cache_nodes` (Phase 3) stays lab-only and is never consulted for production decisions.
+3. **Prefix routes** (`cdn_prefix_routes`) with the routing engine in `app/services/cdn_routing.py`.
 
-## API summary
+The legacy `cdn_sync.py` / `/api/admin/cdn/*` remain quarantined; `ENABLE_CDN_SYNC` stays `false`.
 
-- `GET|PUT /api/admin/cdn-management/r2`
-- `GET|POST /api/admin/cdn-management/nodes`
-- `PATCH|DELETE /api/admin/cdn-management/nodes/{id}`
-- `POST /api/admin/cdn-management/nodes/{id}/test-ssh`
-- `POST /api/admin/cdn-management/nodes/{id}/actions/{provision|reprovision|upgrade|drain|disable|clear-cache}`
-- `GET /api/admin/cdn-management/nodes/{id}/provision-runs`
-- `GET|POST /api/admin/cdn-management/routes`
-- `PATCH|DELETE /api/admin/cdn-management/routes/{id}`
-- `POST /api/admin/cdn-management/routes/lookup`
+## Flags (all default `false`)
 
-Read APIs require `cdn.read`; mutations require `cdn.manage`; R2 settings require `settings`. Delete and operational action endpoints require explicit confirmation.
+| Flag | Purpose |
+|------|---------|
+| `ENABLE_CDN_NODE_API` | Node-facing `/api/cdn/*`: authenticated heartbeat + central origin pull |
+| `ENABLE_CDN_PROVISIONING` | Privileged provisioning worker (never inside the web container) |
+| `ENABLE_CDN_EDGE_ROUTING` | CDN-P2 only. Rejected by startup validation in CDN-P1 |
 
-## Provisioning flow
+Related settings: `CDN_CENTRAL_BASE_URL` (https, reachable by nodes), `CDN_NODE_SERVE_PORT` (8443), `CDN_NODE_HEARTBEAT_STALE_SECONDS` (90), `CDN_ORIGIN_MAX_OBJECT_BYTES`. `CDN_MANAGEMENT_CIDRS` / `CDN_SERVE_CIDRS` are only env fallbacks for the admin network policy below.
 
-1. Admin saves a target and an encrypted bootstrap credential.
-2. Test SSH performs a bounded reachability probe without exposing credentials.
-3. Provision requires an explicitly confirmed SHA-256 SSH host-key pin and creates an auditable queued run. A privileged isolated worker validates DNS/IP (rejecting loopback, link-local, multicast and unspecified targets), verifies the pinned host key and signed release, and invokes `packaging/cdn/install_debian13.sh`.
-4. The idempotent Debian 13 script installs minimal packages, creates the non-login `ifilm-cdn` user, writes a root-owned configuration, installs a hardened systemd service and verifies it is active. The one-time enrollment credential is then rotated to key-based authentication.
-5. A one-time node heartbeat token is returned once and stored centrally only as a SHA-256 hash. Authenticated heartbeats populate disk, RTT, cache, bandwidth, sync and version fields. Central routing excludes disabled/draining nodes.
+## Network policy (fail closed)
 
-## Production hardening still required
+`Admin → CDN → Servers → Network policy` (`GET|PUT /api/admin/cdn-management/network`, `cdn.provision`):
 
-This pass intentionally supplies an injectable provisioning runner and queued control-plane workflow with mocked safety tests; it does not run live SSH from the web process. Before production, deploy the executor as a separately privileged worker, upgrade heartbeat bearer tokens to the existing mTLS node-identity protocol, publish a signed branch-cache artifact URL, and add a real Debian 13 staging end-to-end test. Firewall policy must be rendered from the operator-approved management and serving CIDRs rather than guessed by the installer.
+| Field | Meaning | Default |
+|-------|---------|---------|
+| Management CIDRs | Networks allowed to administer CDN servers over SSH. Must include the provisioning worker's egress address. | **empty = provisioning refuses the firewall step** |
+| Serve CIDRs | Subscriber/client networks allowed to reach the media port. | **empty = no media ingress rule (port closed in CDN-P1)** |
+
+Rules: every entry is validated as a strict CIDR; at least one management CIDR is required to save; `0.0.0.0/0` / `::/0` are never introduced implicitly and are accepted only when typed explicitly and confirmed (UI dialog, API `confirm_allow_any`). The rendered nftables ruleset contains accept rules for exactly the configured sources.
+
+## Permissions
+
+| Permission | Grants |
+|------------|--------|
+| `cdn.read` | Overview, servers, routes, health, lookups |
+| `cdn.manage` | Create/edit/delete servers; drain, undrain, enable, disable |
+| `cdn.provision` | Test SSH, pin host key, provision, re-provision, upgrade, clear cache, rotate node token |
+| `cdn.routing` | Create/edit/delete prefix rules |
+| `cdn.secrets` | Storage / R2 settings and connection test |
+
+`cdn.manage` and bare `cdn` satisfy all of the above; `settings` also satisfies `cdn.secrets`.
+
+## Admin API
+
+- `GET|PUT /api/admin/cdn-management/r2`, `POST …/r2/test`
+- `GET …/status`, `GET …/overview`
+- `GET|POST …/nodes`, `GET|PATCH|DELETE …/nodes/{id}` (delete needs `?confirm=true`)
+- `POST …/nodes/{id}/test-ssh`, `POST …/nodes/{id}/pin-host-key`
+- `POST …/nodes/{id}/actions/{provision|reprovision|upgrade|drain|undrain|disable|enable|clear-cache}` (body `{"confirm": true}`)
+- `GET …/nodes/{id}/provision-runs`, `POST …/nodes/{id}/heartbeat-token`
+- `GET|POST …/routes`, `PATCH|DELETE …/routes/{id}`, `POST …/routes/lookup`
+
+Node-facing (flag `ENABLE_CDN_NODE_API`, headers `Authorization: Bearer <node token>` + `X-Ifilm-Node-Id`):
+
+- `POST /api/cdn/nodes/{id}/heartbeat` → metrics in, desired state (`draining`, limits) out
+- `GET|HEAD /api/cdn/origin/{asset_id}/{package_id}/{relative_path}` → package object bytes with `X-Ifilm-Sha256`
+
+## Provisioning flow (fresh Debian 13)
+
+1. *Add server*: name, role (`MAIN_CDN` | `CACHE`), host, SSH port/user, bootstrap password or key (encrypted), storage limit, watermarks, priority, serve base URL.
+2. *Test SSH*: authenticated probe (bounded timeouts) returning the observed host-key fingerprint, OS release, sudo availability and disk. Nothing is changed on the host.
+3. *Pin host key*: explicit confirmation. Provisioning and all later SSH refuse unpinned or changed keys.
+4. *Provision*: queues a `cdn_provision_runs` row. The worker claims it (`SKIP LOCKED` on PostgreSQL) and runs idempotent steps: `preflight` (Debian 13, root/sudo, arch, disk) → `packages` → `user_dirs` (`ifilm-cdn`, `/var/lib/ifilm-cdn/cache`, `/etc/ifilm-cdn`) → `bundle` (versioned tarball built from this checkout, SHA-256 verified before extraction, venv + `requirements-branch-cache.txt`) → `config` (`/etc/ifilm-cdn/node.env` 0640 root:ifilm-cdn with a freshly issued node token; edge-grant public key if configured) → `systemd` (hardened unit) → `firewall` (fails closed without management CIDRs; refuses if the worker's own `SSH_CLIENT` source is outside them; `nft -c` syntax check; snapshot of the live ruleset; atomic `nft -f`; then a **fresh** SSH login is verified — on failure the previous ruleset is restored through the still-open session and the run fails with `firewall_verify_failed`; only after verification is `/etc/nftables.conf` written and `nftables` enabled) → `start` → `verify` (`/health`, `/ready` over loopback) → `collect` (disk, version) → `rotate_key` (generate ed25519 key, install to `authorized_keys`, verify key login on a fresh connection, only then encrypt the private key centrally and retire the bootstrap credential) → `finalize` (`provision_status=ready`).
+5. A failed run records `step`, `error_code`, and a redacted log; the next *Provision* resumes from the failed step. *Re-provision* runs everything again; *Upgrade* re-installs the bundle/config; *Clear Cache* stops, wipes the cache root, restarts.
+
+Secrets (passwords, private keys, node tokens) never appear in argv, run logs, exceptions, DB logs or API responses; every recorded line passes through `redact_log`.
+
+`packaging/cdn/install_debian13.sh` is the manual equivalent for hosts that must be installed by hand.
+
+## Node runtime
+
+`ENABLE_CDN_NODE_SERVICE=true` (set only in `/etc/ifilm-cdn/node.env`) starts `app.services.cdn_node`. It refuses to start with any central secret in the environment, reuses the branch-cache data plane (public-key grant verification, confined cache store, single-flight fills, checksum validation, LRU eviction between the configured watermarks) with `CentralHttpOriginFetcher` (fixed https base, no redirects, no proxy trust, size cap, `X-Ifilm-Sha256` check) and a heartbeat thread. Without an edge-grant public key `/v1/obj/*` answers `503 edge_grants_not_configured`; health, ready and metrics still work so the node can be managed before CDN-P2.
+
+## Routing engine
+
+1. Longest matching CIDR prefix wins. 2. Equal prefix length: lower `priority` number wins, then node name. 3. Ineligible preferred node → next eligible matching rule. 4. → eligible cache in the same branch as the preferred node. 5. → default Main CDN → secondary Main CDN nodes by priority. 6. → central iFilm `/api/stream` (always present, always eligible).
+
+Eligibility: enabled, not draining, `provision_status=ready`, heartbeat within `CDN_NODE_HEARTBEAT_STALE_SECONDS`, no failed health state. The admin routing tester shows the client IP, matched CIDR, selected node and the full chain with reasons. In CDN-P1 the decision is informational only.
+
+## Playback security (unchanged in CDN-P1)
+
+Subscribers still authenticate, pass entitlement checks, and stream through `/api/stream/{token}/…`. No edge URL, grant, or renewal endpoint exists on the customer path. Buckets stay private; nodes pull through central, never from storage directly. CDN-P2 will add the routing decision, short-lived ES256 edge grants (`app/services/branch_cache/grants.py`) and player fallback after CDN-P1 passes staging with one real Debian 13 node.
+
+## Staging checklist for the first real node
+
+1. Set `INTEGRATION_SECRETS_KEY`, `CDN_CENTRAL_BASE_URL=https://<central>`, `ENABLE_CDN_NODE_API=true` on the API; run `docker compose --profile cdn up cdn-provisioning-worker` with `ENABLE_CDN_PROVISIONING=true`; save the network policy (management CIDRs must include the worker's egress IP; leave serve CIDRs empty in CDN-P1).
+2. Add the Debian 13 server, Test SSH, pin the fingerprint after out-of-band verification, Provision.
+3. Confirm the node shows `ONLINE` within 60 s, disk/version populated, `Health / Metrics` updating, and the routing tester selecting it for its CIDR.
+4. Keep `ENABLE_CDN_EDGE_ROUTING=false` and serve CIDRs empty: the node media port stays closed until CDN-P2 deliberately opens subscriber prefixes.
