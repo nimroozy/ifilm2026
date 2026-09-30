@@ -71,10 +71,11 @@ function PageLoading({ label = 'Loading catalog' }: { label?: string }) {
 }
 
 function PageError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const { t } = useLang();
   return (
     <div className="min-h-[40vh] flex flex-col items-center justify-center gap-3" data-testid="browse-error" role="alert">
       <p className="text-muted-foreground">{message}</p>
-      <Button onClick={onRetry}>Retry</Button>
+      <Button onClick={onRetry}>{t.common.retry}</Button>
     </div>
   );
 }
@@ -979,7 +980,7 @@ export function SearchPage() {
               {error}
             </p>
             <p className="text-xs text-muted-foreground">This is a search service error, not an empty result.</p>
-            <Button onClick={() => setReloadToken((value) => value + 1)}>Retry</Button>
+            <Button onClick={() => setReloadToken((value) => value + 1)}>{t.common.retry}</Button>
           </div>
         ) : results.length === 0 ? (
           <div className="py-20 text-center text-muted-foreground" data-testid="search-no-results">

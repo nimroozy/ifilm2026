@@ -71,16 +71,17 @@ function HomeLoading() {
 }
 
 function HomeError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const { t } = useLang();
   const safe =
     message.includes('status code') || message.toLowerCase().includes('network')
-      ? 'Unable to load the catalog right now. Check your connection and try again.'
+      ? t.common.loadFailed
       : message;
   return (
     <div className="min-h-[50vh] flex flex-col items-center justify-center gap-4 px-4" data-testid="home-error">
       <p className="text-muted-foreground text-center" role="alert">
         {safe}
       </p>
-      <Button onClick={onRetry}>Retry</Button>
+      <Button onClick={onRetry}>{t.common.retry}</Button>
     </div>
   );
 }
@@ -275,7 +276,7 @@ function ContinueWatchingRow({
         <div className="flex items-center gap-3 text-sm text-muted-foreground">
           <span role="alert">{error}</span>
           <Button variant="outline" size="sm" onClick={() => setReload((value) => value + 1)}>
-            Retry
+            {t.common.retry}
           </Button>
         </div>
       </section>
