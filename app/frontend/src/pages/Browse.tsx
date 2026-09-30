@@ -415,7 +415,7 @@ export function SeriesPage() {
   }, [load]);
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen" data-testid="series-page">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
         <h1 className="text-2xl md:text-3xl font-serif font-bold text-foreground mb-6">{t.nav.series}</h1>
         <div className="flex flex-wrap items-center gap-3 mb-6">

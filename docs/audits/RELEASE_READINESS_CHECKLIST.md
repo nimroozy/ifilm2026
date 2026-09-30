@@ -20,9 +20,10 @@ Status keys: **main** | **draft PR** | **tests** | **browser/staging** | **produ
 | Keyboard focus / button labels | draft PR | #79/#80 a11y labels on hero, browse filters, cards |
 | Duplicate Recently Added / New Releases | draft PR | #80 `Index.tsx` `recHasNewReleases` gate |
 | Empty shelves omitted | main + draft | `ContentRow` returns null when empty |
-| Manual-only hero | main | Hero data from featured catalog; no auto-editorial hero swap in #79/#80 |
+| Manual-only hero | main + real-backend QA | Hero interactions assert no auto-advance |
 | EN/FA/PS + RTL shell; player LTR | main + draft | translations + `VideoPlayer`/`PlayerControls` `dir="ltr"` |
 | Browse clear-filters / labeled controls | draft PR | #80 `moviesBrowseA11y.test.tsx` |
+| Production CSP + font loading | draft PR | `index.html` stylesheet links without inline `onload` (CSP `script-src 'self'`) |
 
 ## Movie and series detail
 
@@ -38,7 +39,7 @@ Status keys: **main** | **draft PR** | **tests** | **browser/staging** | **produ
 |------|--------|----------|
 | Search UI + empty/error/retry | main + draft | `Browse.tsx` SearchPage; retry localized on GUI branch |
 | Typed vs URL query | main | movies genre URL sync; search local state |
-| End-to-end API search on GUI tip | browser TBD | Unit tests mock; live browser after preview |
+| End-to-end API search on GUI tip | real-backend QA | See verification matrix below |
 
 ## Login, sessions, entitlement, devices
 
@@ -46,7 +47,8 @@ Status keys: **main** | **draft PR** | **tests** | **browser/staging** | **produ
 |------|--------|----------|
 | Portal auth contract | main | subscriber/portal routes + docs |
 | Device limits / cross-user isolation | main (code) | backend tests exist; production verified separately historically |
-| GUI tip auth E2E | missing this session | Needs authorized test account |
+| GUI tip auth E2E (local disposable) | local test account | Disposable Portal Voice AI stub + fixture user — **not** live Portal proof |
+| Live Portal QA | NOT RUN | No production Portal credentials this session |
 
 ## Playback, resume, audio, subtitles, casting
 
@@ -54,14 +56,14 @@ Status keys: **main** | **draft PR** | **tests** | **browser/staging** | **produ
 |------|--------|----------|
 | Protected streaming | main / production v1.19.0 | stream 401 unauth smoke historically |
 | Player LTR controls | main | player tests |
-| Playback advances + resume proof on GUI tip | missing | NOT RUN this session without test media account |
+| Playback advances + resume proof on GUI tip | NOT RUN / BLOCKED | Disposable DB has published catalog metadata but **no packaged test media** / streamable packages |
 
 ## Watchlist / Continue Watching / Recommendations / Content Requests
 
 | Item | Status | Evidence |
 |------|--------|----------|
 | Features in main | main | APIs + pages + unit tests |
-| GUI tip browser proof | missing | Preview/browser after start |
+| GUI tip browser proof (My List persistence) | NOT RUN | Auth smoke covered login/logout/session; watchlist add/remove not exercised with packaged content |
 
 ## Admin content / artwork / media
 
@@ -81,8 +83,8 @@ Status keys: **main** | **draft PR** | **tests** | **browser/staging** | **produ
 | Item | Status | Evidence |
 |------|--------|----------|
 | Admin R2 page | main (#91) | `R2SettingsPage` hot tier |
-| Artwork CDN publish | draft #92 | `ENABLE_ARTWORK_CDN_SYNC`; known Ruff F841 in tests at reviewed head |
-| StorageSettingsPage redirect | draft #93 | Must reconcile with #92 controls before merge |
+| Artwork CDN publish | draft #92 | Keep separate from GUI PR #94 |
+| StorageSettingsPage redirect | draft #93 | Keep separate; do not import migration 030 into GUI branch |
 
 ## CDN provisioning / routing / monitoring
 
@@ -112,8 +114,8 @@ Status keys: **main** | **draft PR** | **tests** | **browser/staging** | **produ
 
 | PR | Head | Role |
 |----|------|------|
-| #79 | `17c56899…` | GUI a11y + titles — **cherry-picked** into GUI branch |
-| #80 | `f08be9aa…` | i18n/a11y/homepage rails — **cherry-picked** into GUI branch |
+| #79 | `17c56899…` | GUI a11y + titles — **cherry-picked** into GUI branch (do not close) |
+| #80 | `f08be9aa…` | i18n/a11y/homepage rails — **cherry-picked** into GUI branch (do not close) |
 | #92 | `bdd4ede5…` | R2 artwork CDN — keep separate |
 | #93 | `2003a5cc…` | CDN-P1 — keep separate / Draft |
 | #81–#89 | stacked CDN | Ancestry in main via #90; do not re-merge |
@@ -123,22 +125,71 @@ Status keys: **main** | **draft PR** | **tests** | **browser/staging** | **produ
 ## GUI integration branch
 
 - Branch: `cursor/gui-stabilization-4873`
+- PR: **#94 DRAFT**
 - Base: `origin/main` @ `5adb6d47…`
 - Reused commits (cherry-pick order): `f08be9aa` (#80), then `17c56899` (#79)
-- Follow-up commit(s): localized retry/load-failed strings on home/browse/search
+- Follow-up: localized retry/load-failed strings; CSP-safe fonts; hardened `gui-stabilization-screenshots.mjs`
+- Alembic head on this branch: **029** (do not import #93 migration 030)
 
-## Browser QA (this session)
+---
+
+## Verification layers (do not conflate)
+
+### 1) Automated component / unit tests
 
 | Check | Result | Notes |
 |-------|--------|-------|
-| Mock preview (`VITE_DATA_MODE=mock`) | PASS | Rebuild + preview on `:4173` |
-| EN/FA/PS home + RTL | PASS | FA/PS `dir=rtl`; nav labels localized |
-| Movies mobile 390 + tablet 768 | PASS | Grid, filters, active bottom nav |
-| Search desktop | PASS | Popular searches + titled doc |
-| Movie/series detail titles | PASS | `Movie · iFilm` / `Series · iFilm` |
-| Horizontal overflow | PASS | 0 overflow across captured set |
-| Auth/watchlist/playback advance | NOT RUN | No authorized test account/media this session |
-| Production visual of this tip | NOT RUN | Tip not deployed |
+| `pnpm run lint` / `typecheck` / `test` / `build` | see PR Frontend CI on tip | Run from `app/frontend` |
+| `scan:build-secrets` / `check:bundle-budget` | required on tip | |
 
-Artifacts under `/opt/cursor/artifacts/gui-*.png` and `gui-stabilization/`.
-Preview console still shows `/api/config` 500 on static preview (expected without backend); catalog uses mock fixtures.
+### 2) Mock visual QA (`VITE_DATA_MODE=mock`)
+
+| Check | Result | Notes |
+|-------|--------|-------|
+| Mock preview visual captures | PASS (historical this branch) | Artifacts: `/opt/cursor/artifacts/gui-*.png`, `/opt/cursor/artifacts/gui-mock-qa/` |
+| Data source | mock fixtures | **Not** real-backend proof; keep labeled separately |
+
+### 3) Real-backend browser QA (`VITE_DATA_MODE=api`)
+
+| Check | Result | Notes |
+|-------|--------|-------|
+| Harness | PASS | `app/frontend/scripts/gui-stabilization-screenshots.mjs` — fails on unexpected page/console/5xx/overflow/wrong locale |
+| Environment | disposable local | Isolated DB `ifilm_gui_qa`, alembic **029**, production CSP, API dist |
+| `/api/config` | PASS | 200 |
+| Catalog from real backend | PASS | Featured/home/movies/series from Postgres; not mock fixtures |
+| Home/browse matrix 1920–390 × EN/FA/PS | PASS | Locale `ifilm.locale`; EN=LTR, FA/PS=RTL |
+| Hero manual arrows / no auto-advance | PASS | Interaction case |
+| Movies filter + clear; search empty/results; retry recovery | PASS | |
+| Movie/series detail mobile + desktop | PASS | |
+| Unexpected first-party errors | 0 | CSP font `onload` removed so production CSP stays intact |
+| Review screenshots | `/opt/cursor/artifacts/gui-api-qa/review/` | Includes `summary.json` with commit + dataMode |
+
+### 4) Local test-account authenticated GUI
+
+| Check | Result | Notes |
+|-------|--------|-------|
+| Login / refresh session / logout | PASS | Label: **local disposable Portal Voice AI stub** + fixture user `mobin_user_001` |
+| Live Portal authentication | NOT RUN | Stub token is not a production Portal credential |
+
+### 5) Local test-account playback / resume
+
+| Check | Result | Notes |
+|-------|--------|-------|
+| Playback currentTime advances | BLOCKED | No packaged/streamable test media in disposable DB |
+| Resume near saved position | BLOCKED | Same prerequisite |
+| Player LTR under FA/PS | NOT RUN | Depends on player route with media |
+
+### 6) Live Portal QA / production verification
+
+| Check | Result | Notes |
+|-------|--------|-------|
+| Live Portal | NOT RUN | Out of scope for this GUI validation pass |
+| Production deploy of this tip | NOT RUN | Draft PR only; historical production evidence is **not** current tip verification |
+
+---
+
+## Browser QA artifacts
+
+- **Real-API run:** `/opt/cursor/artifacts/gui-api-qa/` (+ `review/` subset)
+- **Mock visual (separate label):** `/opt/cursor/artifacts/gui-*.png`, `/opt/cursor/artifacts/gui-mock-qa/`
+- Do not overwrite mock captures and relabel them as real-API verification.
