@@ -17,9 +17,9 @@ This document tracks unfinished or experimental backend systems so they are not 
 
 | Area | Current state | Required before production |
 | --- | --- | --- |
-| Encoding | Placeholder HLS package writer only; no real ffmpeg ladder | Real encoding workers, checksums, retries, observability |
-| HLS delivery | Serves generated placeholder playlists/segments | Authenticated playback URLs, packaging QA, CDN origin hardening |
-| CDN sync | Experimental HTTP/no-op sync | Signed sync protocol, conflict handling, monitoring |
+| Encoding | FFmpeg HLS ladder (`encode_hls`) behind `ENABLE_MEDIA_PROCESSING` and `ENABLE_HLS_ENCODING` (default off). Placeholder package writing has been removed. | Production worker deployment, observability, operational sign-off |
+| HLS delivery | Protected `/api/stream/{token}` for completed packages when `ENABLE_LOCAL_STREAMING` is on | Packaging QA and CDN origin hardening |
+| CDN | Hybrid CDN phases, admin CDN management, and optional R2 artwork/trailers exist (flags default off). Legacy `ENABLE_CDN_SYNC` stays off. Full movies are not published to the public artwork CDN. | Live provisioning worker, signed branch-cache artifact, production node runbook |
 | SAS Radius live mode | Unverified client path | Validated against SAS/FreeRADIUS in staging, timeout/retry policy |
 | Uploads | Feature-flagged local file intake | Virus scanning, multipart resume, object storage, authZ audits |
 | Streaming path | Manifest endpoint + static media mount | Tokenized URLs, bandwidth controls, audit logs |
