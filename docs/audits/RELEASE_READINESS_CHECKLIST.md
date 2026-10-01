@@ -1,6 +1,6 @@
 # iFilm release readiness checklist
 
-**Date:** 2026-09-30  
+**Date:** 2026-10-01  
 **Baseline main:** `5adb6d47889f9ed8fb1e825d7b83144461a58855`  
 **Latest stable release:** `v1.19.0` → `42ff05dd06ed2a0c8675dac0d1ea329d6f4e5281`  
 **Live site:** https://ifilm.af (deploy ≠ main tip; host was updated to v1.19.0 on 2026-08-21)  
@@ -24,6 +24,8 @@ Status keys: **main** | **draft PR** | **tests** | **browser/staging** | **produ
 | EN/FA/PS + RTL shell; player LTR | main + draft | translations + `VideoPlayer`/`PlayerControls` `dir="ltr"` |
 | Browse clear-filters / labeled controls | draft PR | #80 `moviesBrowseA11y.test.tsx` |
 | Production CSP + font loading | draft PR | `index.html` stylesheet links without inline `onload` (CSP `script-src 'self'`) |
+| Coming Soon / Unavailable UI labels | draft PR | Routed through translations (hero/movie/browse); EN/FA/PS unit tests |
+| RTL hero synopsis grouping | draft PR | `text-start` block + `dir=auto` isolate inner span |
 
 ## Movie and series detail
 
@@ -31,6 +33,7 @@ Status keys: **main** | **draft PR** | **tests** | **browser/staging** | **produ
 |------|--------|----------|
 | Movie detail muted trailer + reduced-motion | main | `MovieDetailView.tsx` (preserved; #80 minor a11y) |
 | Series trailer manual button | main | series detail path |
+| Mobile detail readability after entrance settle | real-backend QA | Harness waits for finite entrance animations + opacity≥0.999; before/after in `review/` |
 | Production browser QA of this GUI tip | missing | Not on production until merge+release |
 
 ## Search and filtering
@@ -39,7 +42,7 @@ Status keys: **main** | **draft PR** | **tests** | **browser/staging** | **produ
 |------|--------|----------|
 | Search UI + empty/error/retry | main + draft | `Browse.tsx` SearchPage; retry localized on GUI branch |
 | Typed vs URL query | main | movies genre URL sync; search local state |
-| End-to-end API search on GUI tip | real-backend QA | See verification matrix below |
+| End-to-end API search on GUI tip | real-backend QA | empty + results + clear; bottom-nav clearance |
 
 ## Login, sessions, entitlement, devices
 
@@ -47,7 +50,7 @@ Status keys: **main** | **draft PR** | **tests** | **browser/staging** | **produ
 |------|--------|----------|
 | Portal auth contract | main | subscriber/portal routes + docs |
 | Device limits / cross-user isolation | main (code) | backend tests exist; production verified separately historically |
-| GUI tip auth E2E (local disposable) | local test account | Disposable Portal Voice AI stub + fixture user — **not** live Portal proof |
+| GUI tip auth E2E (local disposable) | PASS (LOCAL) | Disposable Portal Voice AI stub + fixture users — **not** live Portal proof |
 | Live Portal QA | NOT RUN | No production Portal credentials this session |
 
 ## Playback, resume, audio, subtitles, casting
@@ -55,15 +58,15 @@ Status keys: **main** | **draft PR** | **tests** | **browser/staging** | **produ
 | Item | Status | Evidence |
 |------|--------|----------|
 | Protected streaming | main / production v1.19.0 | stream 401 unauth smoke historically |
-| Player LTR controls | main | player tests |
-| Playback advances + resume proof on GUI tip | NOT RUN / BLOCKED | Disposable DB has published catalog metadata but **no packaged test media** / streamable packages |
+| Player LTR controls | main + LOCAL QA | FA player `dir=ltr` on player/controls/seek |
+| Playback advances + resume proof on GUI tip | PASS (LOCAL) | Disposable packaged HLS for movie/3; advance past min seconds; resume near saved; Start Over ~0 |
 
 ## Watchlist / Continue Watching / Recommendations / Content Requests
 
 | Item | Status | Evidence |
 |------|--------|----------|
 | Features in main | main | APIs + pages + unit tests |
-| GUI tip browser proof (My List persistence) | NOT RUN | Auth smoke covered login/logout/session; watchlist add/remove not exercised with packaged content |
+| GUI tip browser proof (My List persistence) | PASS (LOCAL) | Add movie+series → reload → remove → reload; second account isolated |
 
 ## Admin content / artwork / media
 
@@ -71,6 +74,7 @@ Status keys: **main** | **draft PR** | **tests** | **browser/staging** | **produ
 |------|--------|----------|
 | Admin CMS / media pipeline | main | upload→probe→package→publish |
 | Artwork upload in editors | partial / missing polish | URL fields; file upload to ARTWORK_ROOT incomplete as productized flow |
+| Disposable representative fixtures | LOCAL QA | Seeded artwork + packages in `ifilm_gui_qa`; missing-artwork case retained |
 
 ## Portal settings
 
@@ -128,7 +132,7 @@ Status keys: **main** | **draft PR** | **tests** | **browser/staging** | **produ
 - PR: **#94 DRAFT**
 - Base: `origin/main` @ `5adb6d47…`
 - Reused commits (cherry-pick order): `f08be9aa` (#80), then `17c56899` (#79)
-- Follow-up: localized retry/load-failed strings; CSP-safe fonts; hardened `gui-stabilization-screenshots.mjs`
+- Follow-up: localized availability labels; RTL hero isolate; entrance-settled captures; shared case finalizer; watchlist + LOCAL playback
 - Alembic head on this branch: **029** (do not import #93 migration 030)
 
 ---
@@ -139,8 +143,8 @@ Status keys: **main** | **draft PR** | **tests** | **browser/staging** | **produ
 
 | Check | Result | Notes |
 |-------|--------|-------|
-| `pnpm run lint` / `typecheck` / `test` / `build` | see PR Frontend CI on tip | Run from `app/frontend` |
-| `scan:build-secrets` / `check:bundle-budget` | required on tip | |
+| `pnpm run lint` / `typecheck` / `test` / `build` | PASS locally on tip | 265 tests; API-mode build + secret scan + bundle budget OK |
+| `scan:build-secrets` / `check:bundle-budget` | PASS locally | Frontend CI must match final head |
 
 ### 2) Mock visual QA (`VITE_DATA_MODE=mock`)
 
@@ -153,16 +157,16 @@ Status keys: **main** | **draft PR** | **tests** | **browser/staging** | **produ
 
 | Check | Result | Notes |
 |-------|--------|-------|
-| Harness | PASS | `app/frontend/scripts/gui-stabilization-screenshots.mjs` — fails on unexpected page/console/5xx/overflow/wrong locale |
+| Harness | PASS | `gui-stabilization-screenshots.mjs` — 84/84; shared `finalizeCase`; entrance settle; decoded artwork or intentional fallback |
 | Environment | disposable local | Isolated DB `ifilm_gui_qa`, alembic **029**, production CSP, API dist |
 | `/api/config` | PASS | 200 |
-| Catalog from real backend | PASS | Featured/home/movies/series from Postgres; not mock fixtures |
+| Catalog from real backend | PASS | Featured/home/movies/series from Postgres; representative + fallback fixtures |
 | Home/browse matrix 1920–390 × EN/FA/PS | PASS | Locale `ifilm.locale`; EN=LTR, FA/PS=RTL |
 | Hero manual arrows / no auto-advance | PASS | Interaction case |
 | Movies filter + clear; search empty/results; retry recovery | PASS | |
-| Movie/series detail mobile + desktop | PASS | |
-| Unexpected first-party errors | 0 | CSP font `onload` removed so production CSP stays intact |
-| Review screenshots | `/opt/cursor/artifacts/gui-api-qa/review/` | Includes `summary.json` with commit + dataMode |
+| Movie/series detail mobile + desktop | PASS | opacity settled; motion + reduced-motion pairs |
+| Unexpected first-party errors | 0 | CSP intact; intentional retry abort filtered |
+| Review screenshots | `/opt/cursor/artifacts/gui-api-qa/review/` | `before/` + `after/` + `summary.json` + `findings.json` |
 
 ### 4) Local test-account authenticated GUI
 
@@ -175,9 +179,11 @@ Status keys: **main** | **draft PR** | **tests** | **browser/staging** | **produ
 
 | Check | Result | Notes |
 |-------|--------|-------|
-| Playback currentTime advances | BLOCKED | No packaged/streamable test media in disposable DB |
-| Resume near saved position | BLOCKED | Same prerequisite |
-| Player LTR under FA/PS | NOT RUN | Depends on player route with media |
+| Playback currentTime advances | PASS (LOCAL) | Packaged HLS via existing media workflow; not manually marked playable |
+| Resume near saved position | PASS (LOCAL) | After threshold; resume dialog/position within margin |
+| Start Over from beginning | PASS (LOCAL) | |
+| Player LTR under FA/PS | PASS (LOCAL) | |
+| Live Portal / production playback | NOT RUN | Out of scope |
 
 ### 6) Live Portal QA / production verification
 
@@ -188,8 +194,22 @@ Status keys: **main** | **draft PR** | **tests** | **browser/staging** | **produ
 
 ---
 
+## Visual review findings (PR #94)
+
+| # | Root cause | Fix type | Test | Remaining limitation |
+|---|------------|----------|------|----------------------|
+| 1 Mobile detail dim | Capture during `animate-fade-in` | Harness settle (opacity≥0.999 + anim done); no global opacity overrides | motion/reduced detail cases | Human visual approval still required |
+| 2 Availability labels | Hard-coded EN in helpers / hero | App: translated labels at call sites | unit EN/FA/PS | EN catalog metadata fallback intentional |
+| 3 RTL hero grouping | `dir=auto` on synopsis block | App: `text-start` + isolate inner span | hero unit + rtl_hero harness | Mixed-script titles still rely on unicode bidi |
+| 4 Representative fixtures | Incomplete-content-only shots | Disposable seed + richer local artwork; keep fallbacks | populated + missing-artwork | Local artwork/packages only; not CDN |
+| 5 Watchlist + playback | Missing packages / identity-mode mismatch for portal subjects | LOCAL seed + `SUBSCRIBER_IDENTITY_MODE=portal` for stub QA | watchlist + playback cases | LOCAL stub ≠ live Portal |
+| 6 Shared finalizer | Detail cases could skip collectors | Shared `finalizeCase` + http404 URLs | full harness 84 | — |
+| 7 Search / mobile nav | Bounded polish request | Clear/empty/results + bottom clearance | search + clearance cases | No search backend redesign |
+
+---
+
 ## Browser QA artifacts
 
-- **Real-API run:** `/opt/cursor/artifacts/gui-api-qa/` (+ `review/` subset)
+- **Real-API run:** `/opt/cursor/artifacts/gui-api-qa/` (+ `review/before`, `review/after`, `summary.json`, `findings.json`)
 - **Mock visual (separate label):** `/opt/cursor/artifacts/gui-*.png`, `/opt/cursor/artifacts/gui-mock-qa/`
 - Do not overwrite mock captures and relabel them as real-API verification.
