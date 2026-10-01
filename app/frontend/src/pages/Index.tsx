@@ -25,6 +25,7 @@ import {
 import { isMockMode } from '@/lib/dataMode';
 import { hasDemoClip, canPlayFullMovie } from '@/lib/catalogPresentation';
 import { catalogAvailabilityBadges } from '@/lib/catalogAvailability';
+import { claimShelfTitle } from '@/lib/homeShelves';
 import {
   localizeRecommendationExplanation,
   localizeRecommendationShelfTitle,
@@ -180,10 +181,41 @@ function ContentRow({
   );
 }
 
+function ClaimedContentRow({
+  title,
+  claimedTitles,
+  items,
+  type = 'movie',
+  eagerCount = 0,
+  showAvailability = false,
+}: {
+  title: string;
+  claimedTitles: Set<string>;
+  items: (CatalogMovie | CatalogSeries)[];
+  type?: 'movie' | 'series';
+  eagerCount?: number;
+  showAvailability?: boolean;
+}) {
+  if (!items.length) return null;
+  const visible = claimShelfTitle(title, claimedTitles);
+  if (!visible) return null;
+  return (
+    <ContentRow
+      title={visible}
+      items={items}
+      type={type}
+      eagerCount={eagerCount}
+      showAvailability={showAvailability}
+    />
+  );
+}
+
 function ContinueWatchingRow({
   preloaded,
+  claimedTitles,
 }: {
   preloaded?: WatchProgressDto[] | null;
+  claimedTitles: Set<string>;
 }) {
   const { t } = useLang();
   const { isLoggedIn } = useAuth();
@@ -285,6 +317,8 @@ function ContinueWatchingRow({
 
   const items = mockMode ? mockItems : apiItems ?? [];
   if (!items.length) return null;
+  const shelfTitle = claimShelfTitle(t.sections.continueWatching, claimedTitles);
+  if (!shelfTitle) return null;
 
   const dismiss = async (assetId: string, title: string) => {
     try {
@@ -301,7 +335,7 @@ function ContinueWatchingRow({
   };
 
   return (
-    <ContentShelf title={t.sections.continueWatching} testId="home-continue-watching">
+    <ContentShelf title={shelfTitle} testId="home-continue-watching">
       {items.map((item) => {
         const episodeLabel =
           'season_number' in item &&
@@ -415,7 +449,13 @@ function RecommendationShelfRow({
   );
 }
 
-function MyListHomeRow({ preloaded }: { preloaded?: WatchlistItemDto[] | null }) {
+function MyListHomeRow({
+  preloaded,
+  claimedTitles,
+}: {
+  preloaded?: WatchlistItemDto[] | null;
+  claimedTitles: Set<string>;
+}) {
   const { t } = useLang();
   const { isLoggedIn } = useAuth();
   const navigate = useNavigate();
@@ -446,8 +486,10 @@ function MyListHomeRow({ preloaded }: { preloaded?: WatchlistItemDto[] | null })
   }, [isLoggedIn, mockMode, preloaded]);
 
   if (!items.length) return null;
+  const shelfTitle = claimShelfTitle(t.sections.myList || t.nav.myList, claimedTitles);
+  if (!shelfTitle) return null;
   return (
-    <ContentShelf title={t.sections.myList || t.nav.myList} testId="home-my-list">
+    <ContentShelf title={shelfTitle} testId="home-my-list">
       {items.map((item) => (
         <MediaCard
           key={`wl-${item.id}`}
@@ -465,11 +507,13 @@ function MyListHomeRow({ preloaded }: { preloaded?: WatchlistItemDto[] | null })
 
 function HomeRecommendationShelves({
   usedIds,
+  claimedTitles,
   preloaded,
   firstShelfOnly = false,
   eagerCount = 0,
 }: {
   usedIds: Set<string>;
+  claimedTitles: Set<string>;
   preloaded?: HomeRecommendationsDto | null;
   /** When true, render only the first non-empty recommendation shelf (above-fold). */
   firstShelfOnly?: boolean;
@@ -510,15 +554,21 @@ function HomeRecommendationShelves({
     if (shelf.shelf_type === 'editorial_collections') continue;
     const items = (shelf.items || []).filter((item) => {
       const key = `${item.content_type}:${item.id}`;
-      if (usedIds.has(key)) return false;
-      usedIds.add(key);
-      return true;
+      return !usedIds.has(key);
     });
     if (!items.length) continue;
+    const title = claimShelfTitle(
+      localizeRecommendationShelfTitle(shelf, t.sections as Record<string, string>),
+      claimedTitles
+    );
+    if (!title) continue;
+    for (const item of items) {
+      usedIds.add(`${item.content_type}:${item.id}`);
+    }
     rows.push(
       <RecommendationShelfRow
         key={`${shelf.shelf_type}-${shelf.title}`}
-        title={localizeRecommendationShelfTitle(shelf, t.sections as Record<string, string>)}
+        title={title}
         items={items}
         testId={`home-shelf-${shelf.shelf_type}`}
         eagerCount={rows.length === 0 ? eagerCount : 0}
@@ -626,28 +676,30 @@ export default function HomePage() {
     .filter(({ items }) => items.length > 0);
 
   const usedIds = new Set<string>();
+  const claimedTitles = new Set<string>();
   const hasRecShelves = Boolean(recommendations?.shelves?.some((s) => s.shelf_type !== 'editorial_collections' && (s.items?.length ?? 0) > 0));
-  const recHasNewReleases = Boolean(
-    recommendations?.shelves?.some(
-      (s) => s.shelf_type === 'new_releases' && (s.items?.length ?? 0) > 0
-    )
-  );
 
   return (
     <div className="pb-8">
       <HeroCarousel featured={data.featured} />
       <div className="relative z-10 -mt-10 space-y-1 md:-mt-14">
-        <ContinueWatchingRow preloaded={continueWatching} />
-        <MyListHomeRow preloaded={watchlist} />
+        <ContinueWatchingRow preloaded={continueWatching} claimedTitles={claimedTitles} />
+        <MyListHomeRow preloaded={watchlist} claimedTitles={claimedTitles} />
         {hasRecShelves ? (
           <HomeRecommendationShelves
             usedIds={usedIds}
+            claimedTitles={claimedTitles}
             preloaded={recommendations}
             firstShelfOnly
             eagerCount={4}
           />
         ) : (
-          <ContentRow title={t.sections.recentlyAdded} items={newReleases} eagerCount={4} />
+          <ClaimedContentRow
+            title={t.sections.recentlyAdded}
+            claimedTitles={claimedTitles}
+            items={newReleases}
+            eagerCount={4}
+          />
         )}
         <div className="px-4 sm:px-6 lg:px-8">
           <Button asChild variant="secondary" className="mt-2" data-testid="home-what-to-watch-cta">
@@ -657,30 +709,60 @@ export default function HomePage() {
         {showBelowFold ? (
           <>
             {hasRecShelves ? (
-              <HomeRecommendationShelves usedIds={usedIds} preloaded={recommendations} />
+              <HomeRecommendationShelves
+                usedIds={usedIds}
+                claimedTitles={claimedTitles}
+                preloaded={recommendations}
+              />
             ) : null}
             {collectionShelves.map(({ collection, items }) => (
-              <ContentRow key={`collection-${collection.id}`} title={collection.title} items={items} />
+              <ClaimedContentRow
+                key={`collection-${collection.id}`}
+                title={collection.title}
+                claimedTitles={claimedTitles}
+                items={items}
+              />
             ))}
-            {hasRecShelves && !recHasNewReleases ? (
-              <ContentRow title={t.sections.recentlyAdded} items={newReleases} />
-            ) : null}
-            <ContentRow title={t.sections.popularMovies} items={data.popular} />
-            <ContentRow title={t.sections.popularSeries} items={data.popularSeries} type="series" />
-            <ContentRow title={t.sections.trending} items={data.trending} />
-            <ContentRow title={t.sections.topRated || 'Top Rated'} items={topRated} />
-            <ContentRow title={t.sections.action} items={data.actionMovies} />
-            <ContentRow title={t.sections.drama} items={dramaMovies} />
-            <ContentRow title={t.sections.comedy} items={data.comedyMovies} />
-            <ContentRow title={t.sections.animationFamily} items={animationFamily} />
-            <ContentRow title={t.sections.afghanMovies} items={data.afghanMovies} />
-            <ContentRow
+            <ClaimedContentRow
+              title={t.sections.recentlyAdded}
+              claimedTitles={claimedTitles}
+              items={newReleases}
+            />
+            <ClaimedContentRow
+              title={t.sections.popularMovies}
+              claimedTitles={claimedTitles}
+              items={data.popular}
+            />
+            <ClaimedContentRow
+              title={t.sections.popularSeries}
+              claimedTitles={claimedTitles}
+              items={data.popularSeries}
+              type="series"
+            />
+            <ClaimedContentRow title={t.sections.trending} claimedTitles={claimedTitles} items={data.trending} />
+            <ClaimedContentRow title={t.sections.topRated} claimedTitles={claimedTitles} items={topRated} />
+            <ClaimedContentRow title={t.sections.action} claimedTitles={claimedTitles} items={data.actionMovies} />
+            <ClaimedContentRow title={t.sections.drama} claimedTitles={claimedTitles} items={dramaMovies} />
+            <ClaimedContentRow title={t.sections.comedy} claimedTitles={claimedTitles} items={data.comedyMovies} />
+            <ClaimedContentRow
+              title={t.sections.animationFamily}
+              claimedTitles={claimedTitles}
+              items={animationFamily}
+            />
+            <ClaimedContentRow
+              title={t.sections.afghanMovies}
+              claimedTitles={claimedTitles}
+              items={data.afghanMovies}
+            />
+            <ClaimedContentRow
               title={t.sections.persianDubbed}
+              claimedTitles={claimedTitles}
               items={data.persianDubbed}
               showAvailability
             />
-            <ContentRow
+            <ClaimedContentRow
               title={t.sections.pashtoDubbed}
+              claimedTitles={claimedTitles}
               items={data.pashtoDubbed}
               showAvailability
             />
