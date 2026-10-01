@@ -6,9 +6,11 @@ import hashlib
 import hmac
 import ipaddress
 import json
+import logging
 import re
 import secrets
 import socket
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlparse
@@ -20,13 +22,27 @@ from app.models.admin import AdminUser
 from app.models.cdn_management import CDNPrefixRoute, CDNProvisionRun, ManagedCDNNode
 from app.models.integration_config import IntegrationConfig
 from app.services.integration_secrets import IntegrationSecretsError, decrypt_secret, encrypt_secret
+from app.services.object_storage.s3_compatible import S3CompatibleConfig, probe_s3_connection
+from app.services.object_storage.tiers import StorageProviderKind, StorageRole
+
+logger = logging.getLogger(__name__)
 
 R2_PROVIDER = "cloudflare_r2"
+STORAGE_PROVIDERS = ("cloudflare_r2", "s3_compatible")
 HOST_KEY_RE = re.compile(r"^SHA256:[A-Za-z0-9+/]{20,}={0,2}$")
+KEY_PREFIX_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 
 
 class CDNManagementError(ValueError):
     pass
+
+
+def _iso(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.isoformat()
 
 
 def _encrypt_json(value: dict[str, str], settings: Settings) -> bytes:
@@ -42,21 +58,69 @@ def _encrypt_json(value: dict[str, str], settings: Settings) -> bytes:
         raise CDNManagementError("Unable to encrypt credentials") from exc
 
 
+def _decrypt_json(ciphertext: bytes | None, settings: Settings) -> dict[str, str]:
+    if not ciphertext:
+        return {}
+    if not settings.integration_secrets_key:
+        raise CDNManagementError(
+            "INTEGRATION_SECRETS_KEY must be configured before reading credentials"
+        )
+    try:
+        parsed = json.loads(
+            decrypt_secret(ciphertext=ciphertext, master_key=settings.integration_secrets_key)
+        )
+    except (IntegrationSecretsError, json.JSONDecodeError) as exc:
+        raise CDNManagementError("Unable to decrypt stored credentials") from exc
+    return {str(k): str(v) for k, v in dict(parsed).items()}
+
+
+def _storage_row(db: Session) -> IntegrationConfig | None:
+    return db.query(IntegrationConfig).filter_by(provider=R2_PROVIDER).one_or_none()
+
+
+def _reject_private_hostname(hostname: str, *, field: str) -> None:
+    """Block localhost / link-local / private targets (basic SSRF guard)."""
+    host = (hostname or "").strip().lower().rstrip(".")
+    if not host:
+        raise CDNManagementError(f"{field} host is required")
+    if host in {"localhost", "metadata", "metadata.google.internal"}:
+        raise CDNManagementError(f"{field} must not target a private or local host")
+    if host.endswith(".local") or host.endswith(".internal"):
+        raise CDNManagementError(f"{field} must not target a private or local host")
+    try:
+        addr = ipaddress.ip_address(host)
+    except ValueError:
+        return
+    if (
+        addr.is_private
+        or addr.is_loopback
+        or addr.is_link_local
+        or addr.is_reserved
+        or addr.is_multicast
+        or addr.is_unspecified
+    ):
+        raise CDNManagementError(f"{field} must not target a private or local address")
+
+
+def _validate_https_url(url: str, *, field: str) -> str:
+    parsed = urlparse((url or "").strip())
+    if parsed.scheme != "https" or not parsed.hostname:
+        raise CDNManagementError(f"{field} must be a valid HTTPS URL")
+    if parsed.username or parsed.password:
+        raise CDNManagementError(f"{field} must not embed credentials")
+    if parsed.query or parsed.fragment:
+        raise CDNManagementError(f"{field} must not contain a query or fragment")
+    _reject_private_hostname(parsed.hostname, field=field)
+    return parsed.geturl().rstrip("/") if field == "public_base_url" else parsed.geturl()
+
+
 def resolve_r2_runtime(db: Session, settings: Settings | None = None) -> dict[str, Any] | None:
     """Resolve the private hot-tier runtime configuration; never use this in an API response."""
     cfg = settings or get_settings()
-    row = db.query(IntegrationConfig).filter_by(provider=R2_PROVIDER).one_or_none()
+    row = _storage_row(db)
     if row is None or not row.enabled or not row.secret_ciphertext:
         return None
-    try:
-        credentials = json.loads(
-            decrypt_secret(
-                ciphertext=row.secret_ciphertext,
-                master_key=cfg.integration_secrets_key,
-            )
-        )
-    except (IntegrationSecretsError, json.JSONDecodeError) as exc:
-        raise CDNManagementError("Unable to decrypt R2 credentials") from exc
+    credentials = _decrypt_json(row.secret_ciphertext, cfg)
     data = dict(row.config_json or {})
     return {**data, **credentials, "enabled": True}
 
@@ -69,38 +133,39 @@ def resolve_r2_credentials_for_artwork(
     Never return this dict from an API response.
     """
     cfg = settings or get_settings()
-    row = db.query(IntegrationConfig).filter_by(provider=R2_PROVIDER).one_or_none()
+    row = _storage_row(db)
     if row is None or not row.secret_ciphertext:
         return None
     data = dict(row.config_json or {})
     # Admin may store credentials for artwork CDN without enabling the movie hot tier.
     if not row.enabled and not bool(data.get("artwork_cdn_enabled")):
         return None
-    try:
-        credentials = json.loads(
-            decrypt_secret(
-                ciphertext=row.secret_ciphertext,
-                master_key=cfg.integration_secrets_key,
-            )
-        )
-    except (IntegrationSecretsError, json.JSONDecodeError) as exc:
-        raise CDNManagementError("Unable to decrypt R2 credentials") from exc
+    credentials = _decrypt_json(row.secret_ciphertext, cfg)
     return {**data, **credentials}
 
 
 def get_r2(db: Session) -> dict[str, Any]:
-    row = db.query(IntegrationConfig).filter_by(provider=R2_PROVIDER).one_or_none()
+    """Secret-free Storage / R2 settings DTO (compatible with future Storage settings UI)."""
+    row = _storage_row(db)
     data = dict(row.config_json or {}) if row else {}
+    provider = str(data.get("provider") or "cloudflare_r2")
     return {
         "enabled": bool(row.enabled) if row else False,
+        "provider": provider,
         "endpoint_url": data.get("endpoint_url", ""),
         "account_id": data.get("account_id"),
         "bucket": data.get("bucket", ""),
         "region": data.get("region", "auto"),
+        "object_key_prefix": data.get("object_key_prefix", "ifilm"),
         "public_base_url": data.get("public_base_url", ""),
         "artwork_cdn_enabled": bool(data.get("artwork_cdn_enabled")),
         "credentials_configured": bool(row and row.secret_ciphertext),
-        "updated_at": row.updated_at.isoformat() if row and row.updated_at else None,
+        "updated_at": _iso(row.updated_at) if row else None,
+        "last_test_at": data.get("last_test_at"),
+        "last_test_ok": data.get("last_test_ok"),
+        "last_test_reachable": data.get("last_test_reachable"),
+        "last_test_bucket_accessible": data.get("last_test_bucket_accessible"),
+        "last_test_message": data.get("last_test_message"),
     }
 
 
@@ -108,9 +173,21 @@ def update_r2(
     db: Session, admin: AdminUser, payload: dict[str, Any], settings: Settings | None = None
 ) -> dict[str, Any]:
     cfg = settings or get_settings()
-    parsed = urlparse(str(payload.get("endpoint_url") or ""))
-    if parsed.scheme != "https" or not parsed.hostname:
-        raise CDNManagementError("R2 endpoint must be a valid HTTPS URL")
+    row = _storage_row(db)
+    if row is None:
+        row = IntegrationConfig(provider=R2_PROVIDER, enabled=False, config_json={})
+    data = dict(row.config_json or {})
+
+    provider = str(payload.get("provider") or data.get("provider") or "cloudflare_r2").strip().lower()
+    if provider not in STORAGE_PROVIDERS:
+        raise CDNManagementError("Provider must be cloudflare_r2 or s3_compatible")
+    prefix = str(payload.get("object_key_prefix") or data.get("object_key_prefix") or "ifilm")
+    prefix = prefix.strip().strip("/")
+    if not KEY_PREFIX_RE.fullmatch(prefix):
+        raise CDNManagementError(
+            "Object key prefix may contain letters, digits, dot, dash, underscore"
+        )
+
     public_base = str(payload.get("public_base_url") or "").strip().rstrip("/")
     artwork_cdn = bool(payload.get("artwork_cdn_enabled"))
     if artwork_cdn:
@@ -118,33 +195,52 @@ def update_r2(
             raise CDNManagementError(
                 "public_base_url is required when artwork CDN publishing is enabled"
             )
-        pub = urlparse(public_base)
-        if pub.scheme != "https" or not pub.hostname:
-            raise CDNManagementError("public_base_url must be a valid HTTPS URL")
-    row = db.query(IntegrationConfig).filter_by(provider=R2_PROVIDER).one_or_none()
-    if row is None:
-        row = IntegrationConfig(provider=R2_PROVIDER, enabled=False, config_json={})
-    data = {
-        "endpoint_url": str(payload["endpoint_url"]).strip(),
-        "account_id": (payload.get("account_id") or "").strip() or None,
-        "bucket": str(payload["bucket"]).strip(),
-        "region": str(payload.get("region") or "auto").strip(),
-        "public_base_url": public_base,
-        "artwork_cdn_enabled": artwork_cdn,
-    }
+        public_base = _validate_https_url(public_base, field="public_base_url")
+
+    data.update(
+        {
+            "provider": provider,
+            "endpoint_url": _validate_https_url(
+                str(payload.get("endpoint_url") or ""), field="endpoint_url"
+            ),
+            "account_id": (payload.get("account_id") or "").strip() or None,
+            "bucket": str(payload.get("bucket") or "").strip(),
+            "region": str(payload.get("region") or "auto").strip() or "auto",
+            "object_key_prefix": prefix,
+            "public_base_url": public_base,
+            "artwork_cdn_enabled": artwork_cdn,
+        }
+    )
+    if not data["bucket"]:
+        raise CDNManagementError("Bucket is required")
+
     access = (payload.get("access_key_id") or "").strip()
     secret = (payload.get("secret_access_key") or "").strip()
     if bool(access) != bool(secret):
         raise CDNManagementError("Access key and secret key must be supplied together")
     if payload.get("remove_credentials"):
+        if not payload.get("confirm"):
+            raise CDNManagementError("Removing credentials requires explicit confirmation")
         row.secret_ciphertext = None
+        logger.info("cdn_storage_event event=credentials_removed admin_id=%s", admin.id)
     elif access and secret:
         row.secret_ciphertext = _encrypt_json(
             {"access_key_id": access, "secret_access_key": secret}, cfg
         )
+        for key in (
+            "last_test_at",
+            "last_test_ok",
+            "last_test_reachable",
+            "last_test_bucket_accessible",
+            "last_test_message",
+        ):
+            data.pop(key, None)
+        logger.info("cdn_storage_event event=credentials_replaced admin_id=%s", admin.id)
+    # Blank credentials preserve the existing ciphertext.
+
     row.enabled = bool(payload.get("enabled"))
     if row.enabled and not row.secret_ciphertext:
-        raise CDNManagementError("R2 cannot be enabled without stored credentials")
+        raise CDNManagementError("Storage cannot be enabled without stored credentials")
     if artwork_cdn and not row.secret_ciphertext:
         raise CDNManagementError("Artwork CDN cannot be enabled without stored credentials")
     row.config_json = data
@@ -152,7 +248,72 @@ def update_r2(
     row.updated_at = datetime.now(UTC)
     db.add(row)
     db.commit()
+    logger.info("cdn_storage_event event=settings_updated admin_id=%s", admin.id)
     return get_r2(db)
+
+
+ProbeFn = Callable[[S3CompatibleConfig], dict[str, Any]]
+
+
+def test_r2_connection(
+    db: Session,
+    admin: AdminUser,
+    settings: Settings | None = None,
+    probe: ProbeFn = probe_s3_connection,
+) -> dict[str, Any]:
+    """Run a bounded connectivity probe with stored credentials; persist a summary."""
+    cfg = settings or get_settings()
+    row = _storage_row(db)
+    if row is None or not row.secret_ciphertext:
+        raise CDNManagementError("Save storage credentials before testing the connection")
+    data = dict(row.config_json or {})
+    credentials = _decrypt_json(row.secret_ciphertext, cfg)
+    provider = str(data.get("provider") or "cloudflare_r2")
+    config = S3CompatibleConfig(
+        endpoint_url=str(data.get("endpoint_url") or ""),
+        bucket=str(data.get("bucket") or ""),
+        region=str(data.get("region") or "auto"),
+        access_key_id=credentials.get("access_key_id", ""),
+        secret_access_key=credentials.get("secret_access_key", ""),
+        force_path_style=provider == "s3_compatible",
+        provider_kind=(
+            StorageProviderKind.R2
+            if provider == "cloudflare_r2"
+            else StorageProviderKind.S3_COMPATIBLE
+        ),
+        role=StorageRole.HOT_CDN,
+    )
+    result = probe(config)
+    tested_at = datetime.now(UTC).isoformat()
+    data.update(
+        {
+            "last_test_at": tested_at,
+            "last_test_ok": bool(result.get("ok")),
+            "last_test_reachable": bool(result.get("reachable")),
+            "last_test_bucket_accessible": bool(result.get("bucket_accessible")),
+            "last_test_message": str(result.get("message") or "")[:500],
+        }
+    )
+    row.config_json = data
+    row.updated_at = datetime.now(UTC)
+    db.add(row)
+    db.commit()
+    logger.info(
+        "cdn_storage_event event=connection_test admin_id=%s ok=%s reachable=%s bucket=%s",
+        admin.id,
+        bool(result.get("ok")),
+        bool(result.get("reachable")),
+        bool(result.get("bucket_accessible")),
+    )
+    return {
+        "ok": bool(result.get("ok")),
+        "reachable": bool(result.get("reachable")),
+        "bucket_accessible": bool(result.get("bucket_accessible")),
+        "endpoint_host": result.get("endpoint_host"),
+        "message": str(result.get("message") or ""),
+        "tested_at": tested_at,
+        "settings": get_r2(db),
+    }
 
 
 def _node_public(node: ManagedCDNNode) -> dict[str, Any]:

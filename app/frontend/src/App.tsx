@@ -108,6 +108,7 @@ const PlaybackSessionsPage = lazy(() => import('@/pages/admin/PlaybackSessionsPa
 const SystemUpdatesPage = lazy(() => import('@/pages/admin/SystemUpdatesPage'));
 const PortalSettingsPage = lazy(() => import('@/pages/admin/PortalSettingsPage'));
 const R2SettingsPage = lazy(() => import('@/pages/admin/R2SettingsPage'));
+const StorageSettingsPage = lazy(() => import('@/pages/admin/StorageSettingsPage'));
 const CDNManagementPage = lazy(() => import('@/pages/admin/CDNManagementPage'));
 const TmdbToolsPage = lazy(() => import('@/pages/admin/TmdbToolsPage'));
 const AdminPlaceholderPage = lazy(() => import('@/pages/admin/AdminPlaceholderPage'));
@@ -274,6 +275,7 @@ const router = createBrowserRouter([
           { path: 'media/:assetId', element: <LazyPage><MediaAssetDetailPage /></LazyPage> },
           { path: 'system/updates', element: <LazyPage><SystemUpdatesPage /></LazyPage> },
           { path: 'settings/portal', element: <LazyPage><PortalSettingsPage /></LazyPage> },
+          { path: 'settings/storage', element: <LazyPage><StorageSettingsPage /></LazyPage> },
           { path: 'settings/r2', element: <LazyPage><R2SettingsPage /></LazyPage> },
           { path: 'tools/encoding', element: <LazyPage><AdminPlaceholderPage section="encoding" /></LazyPage> },
           { path: 'tools/cdn', element: <LazyPage><CDNManagementPage /></LazyPage> },

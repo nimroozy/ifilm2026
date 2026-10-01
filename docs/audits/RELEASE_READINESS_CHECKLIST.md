@@ -14,18 +14,18 @@ Status keys: **main** | **draft PR** | **tests** | **browser/staging** | **produ
 
 | Item | Status | Evidence |
 |------|--------|----------|
-| Document titles (customer + player) | draft PR (GUI integration) | #79 `CustomerDocumentTitle` + player title; integrated on `cursor/gui-stabilization-4873` |
-| Homepage h1 when hero uses logo image | draft PR | #79 `HeroCarousel` sr-only `h1` |
-| Desktop/mobile nav + `aria-current` | main + draft polish | `CustomerLayout.tsx` active states; #80 touch/RTL polish |
-| Keyboard focus / button labels | draft PR | #79/#80 a11y labels on hero, browse filters, cards |
-| Duplicate Recently Added / New Releases | draft PR | #80 `Index.tsx` `recHasNewReleases` gate |
-| Empty shelves omitted | main + draft | `ContentRow` returns null when empty |
+| Document titles (customer + player) | main (#94) | #79 `CustomerDocumentTitle` + player title; merged via #94 |
+| Homepage h1 when hero uses logo image | main (#94) | #79 `HeroCarousel` sr-only `h1` |
+| Desktop/mobile nav + `aria-current` | main (#94) | `CustomerLayout.tsx` active states; #80 touch/RTL polish |
+| Keyboard focus / button labels | main (#94) | #79/#80 a11y labels on hero, browse filters, cards |
+| Duplicate Recently Added / New Releases | main (#94) | #80 `Index.tsx` `recHasNewReleases` gate |
+| Empty shelves omitted | main (#94) | `ContentRow` returns null when empty |
 | Manual-only hero | main + real-backend QA | Hero interactions assert no auto-advance |
-| EN/FA/PS + RTL shell; player LTR | main + draft | translations + `VideoPlayer`/`PlayerControls` `dir="ltr"` |
-| Browse clear-filters / labeled controls | draft PR | #80 `moviesBrowseA11y.test.tsx` |
-| Production CSP + font loading | draft PR | `index.html` stylesheet links without inline `onload` (CSP `script-src 'self'`) |
-| Coming Soon / Unavailable UI labels | draft PR | Routed through translations (hero/movie/browse); EN/FA/PS unit tests |
-| RTL hero synopsis grouping | draft PR | `text-start` block + `dir=auto` isolate inner span |
+| EN/FA/PS + RTL shell; player LTR | main (#94) | translations + `VideoPlayer`/`PlayerControls` `dir="ltr"` |
+| Browse clear-filters / labeled controls | main (#94) | #80 `moviesBrowseA11y.test.tsx` |
+| Production CSP + font loading | main (#94) | `index.html` stylesheet links without inline `onload` (CSP `script-src 'self'`) |
+| Coming Soon / Unavailable UI labels | main (#94) | Routed through translations (hero/movie/browse); EN/FA/PS unit tests |
+| RTL hero synopsis grouping | main (#94) | `text-start` block + `dir=auto` isolate inner span |
 
 ## Movie and series detail
 
@@ -34,7 +34,7 @@ Status keys: **main** | **draft PR** | **tests** | **browser/staging** | **produ
 | Movie detail muted trailer + reduced-motion | main | `MovieDetailView.tsx` (preserved; #80 minor a11y) |
 | Series trailer manual button | main | series detail path |
 | Mobile detail readability after entrance settle | real-backend QA | Harness waits for finite entrance animations + opacity≥0.999; before/after in `review/` |
-| Production browser QA of this GUI tip | missing | Not on production until merge+release |
+| Production browser QA of GUI (#94 on main) | pending | Merged into main; production verification still pending (no release/deploy) |
 
 ## Search and filtering
 
@@ -86,9 +86,9 @@ Status keys: **main** | **draft PR** | **tests** | **browser/staging** | **produ
 
 | Item | Status | Evidence |
 |------|--------|----------|
-| Admin R2 page | main (#91) | `R2SettingsPage` hot tier |
-| Artwork CDN publish | draft #92 | Keep separate from GUI PR #94 |
-| StorageSettingsPage redirect | draft #93 | Keep separate; do not import migration 030 into GUI branch |
+| Admin Storage / CDN settings | draft (R2 integration) | `StorageSettingsPage` at `/admin/settings/storage`; `/settings/r2` redirects |
+| Artwork CDN publish + local fallback | draft (R2 integration) | Reuses #92 tip `bdd4ede5…` on `cursor/r2-artwork-storage-integration-4873` |
+| PR #93 Storage/CDN ops UI | draft #93 | Keep separate; do not merge; no migration 030; no Debian provisioning |
 
 ## CDN provisioning / routing / monitoring
 
@@ -110,7 +110,7 @@ Status keys: **main** | **draft PR** | **tests** | **browser/staging** | **produ
 | Item | Status | Evidence |
 |------|--------|----------|
 | Signed release + update-agent | main / production | v1.19.0 published; host update path proven historically |
-| This GUI tip release | missing | Draft PR only; no tag/deploy |
+| GUI #94 release / production deploy | pending | Merged to main; no tag/deploy yet |
 
 ---
 
@@ -118,10 +118,10 @@ Status keys: **main** | **draft PR** | **tests** | **browser/staging** | **produ
 
 | PR | Head | Role |
 |----|------|------|
-| #79 | `17c56899…` | GUI a11y + titles — **cherry-picked** into GUI branch (do not close) |
-| #80 | `f08be9aa…` | i18n/a11y/homepage rails — **cherry-picked** into GUI branch (do not close) |
-| #92 | `bdd4ede5…` | R2 artwork CDN — keep separate |
-| #93 | `2003a5cc…` | CDN-P1 — keep separate / Draft |
+| #79 | `17c56899…` | GUI a11y + titles — **superseded/closed** via #94 (branch retained) |
+| #80 | `f08be9aa…` | i18n/a11y/homepage rails — **superseded/closed** via #94 (branch retained) |
+| #92 | `bdd4ede5…` | R2 artwork CDN — source for R2 integration branch (do not force-push) |
+| #93 | `2003a5cc…` | CDN-P1 — keep separate / Draft (do not merge) |
 | #81–#89 | stacked CDN | Ancestry in main via #90; do not re-merge |
 | #65 | audit docs | Historical roadmap only |
 | #67 | T0 docs | Do not use as implementation base |

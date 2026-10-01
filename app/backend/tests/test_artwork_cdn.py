@@ -63,7 +63,8 @@ def test_publish_artwork_file_uploads_and_builds_public_url(tmp_path: Path):
     src = tmp_path / "poster.jpg"
     src.write_bytes(b"\xff\xd8\xff" + b"0" * 32)
     store = MagicMock()
-    store.exists.return_value = False
+    # First exists() is skip-check (False); second is post-upload verify (True).
+    store.exists.side_effect = [False, True]
     settings = _settings(
         enable_artwork_cdn_sync=True,
         artwork_cdn_public_base_url="https://cdn.example.com",
@@ -82,6 +83,7 @@ def test_publish_artwork_file_uploads_and_builds_public_url(tmp_path: Path):
     assert result.object_key == "ifilm/v1/posters/tmdb-poster-9-abcdef123456.jpg"
     assert result.public_url == "https://cdn.example.com/ifilm/v1/posters/tmdb-poster-9-abcdef123456.jpg"
     store.put_file.assert_called_once()
+    assert store.exists.call_count == 2
 
 
 def test_try_publish_returns_none_on_failure(tmp_path: Path):
@@ -114,18 +116,14 @@ def test_store_artwork_bytes_uses_cdn_url_when_enabled(tmp_path: Path, monkeypat
         "app.services.object_storage.artwork_cdn.try_publish_artwork_file",
         fake_publish,
     )
-    # Minimal valid JPEG header for store_artwork_bytes validation
-    data = b"\xff\xd8\xff\xd9"
-    # store_artwork_bytes also checks pillow/mime — use content_type jpeg and magic bytes
-    # Need enough for validation - empty after SOI/EOI may fail dimensions
-    # Use a tiny valid approach: monkeypatch _validate_image_bytes
+    # store_artwork_bytes validates bytes via _validate_image_bytes — stub geometry.
     monkeypatch.setattr(
         "app.services.tmdb.artwork._validate_image_bytes",
-        lambda data, content_type: ("jpg", 10, 10),
+        lambda payload, content_type: ("jpg", 10, 10),
     )
     stored = store_artwork_bytes(
         settings,
-        b"fake-image-bytes",
+        b"\xff\xd8\xff\xd9",
         kind="poster",
         tmdb_id=42,
         content_type="image/jpeg",

@@ -48,6 +48,18 @@ def put_r2(
         raise bad(exc) from exc
 
 
+@router.post("/r2/test")
+def test_r2(
+    db: DbSession,
+    admin: Annotated[AdminUser, Depends(require_permissions("settings"))],
+) -> dict[str, Any]:
+    """Test Connection: endpoint reachability + credential/bucket access (secret-free)."""
+    try:
+        return svc.test_r2_connection(db, admin)
+    except svc.CDNManagementError as exc:
+        raise bad(exc) from exc
+
+
 @router.get("/nodes")
 def nodes(
     db: DbSession, _: Annotated[AdminUser, Depends(require_permissions("cdn.read"))]

@@ -132,13 +132,25 @@ def publish_artwork_file(
     if not source.is_file():
         raise ArtworkCdnError("Artwork source file is missing")
 
-    keys = ObjectKeyBuilder(prefix=(cfg.media_object_key_prefix or "ifilm").strip() or "ifilm")
+    prefix = (cfg.media_object_key_prefix or "ifilm").strip() or "ifilm"
+    if db is not None:
+        from app.services.cdn_management import get_r2
+
+        admin_prefix = str(get_r2(db).get("object_key_prefix") or "").strip()
+        if admin_prefix:
+            prefix = admin_prefix
+    keys = ObjectKeyBuilder(prefix=prefix)
+    # Filenames under ARTWORK_ROOT are content-addressed (hash segment) so
+    # replacements mint a new object key and avoid stale CDN caches.
     object_key = keys.artwork_relative_key(relative_path=relative_path)
     skipped = False
     if skip_if_exists and store.exists(key=object_key):
         skipped = True
     else:
         store.put_file(key=object_key, source=source, content_type=_guess_content_type(source))
+        # Verify the object is readable before returning a public CDN URL.
+        if not store.exists(key=object_key):
+            raise ArtworkCdnError("Artwork CDN upload could not be verified")
     return ArtworkCdnPublishResult(
         object_key=object_key,
         public_url=public_cdn_url(base_url=base, object_key=object_key),

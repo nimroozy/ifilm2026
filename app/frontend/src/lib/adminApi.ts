@@ -850,6 +850,11 @@ export const adminApi = {
 
   async getR2(): Promise<R2SettingsDto> { return (await adminHttp.get('/admin/cdn-management/r2')).data; },
   async updateR2(payload: R2SettingsPayload): Promise<R2SettingsDto> { return (await adminHttp.put('/admin/cdn-management/r2', payload)).data; },
+  async testR2(): Promise<R2TestDto> { return (await adminHttp.post('/admin/cdn-management/r2/test')).data; },
+  // Aliases for the Storage / CDN settings UI (#93-compatible shape).
+  async getStorage(): Promise<R2SettingsDto> { return this.getR2(); },
+  async updateStorage(payload: R2SettingsPayload): Promise<R2SettingsDto> { return this.updateR2(payload); },
+  async testStorage(): Promise<R2TestDto> { return this.testR2(); },
   async listCDNNodes(): Promise<ManagedCDNNodeDto[]> { return (await adminHttp.get('/admin/cdn-management/nodes')).data; },
   async createCDNNode(payload: ManagedCDNNodePayload): Promise<ManagedCDNNodeCreatedDto> { return (await adminHttp.post('/admin/cdn-management/nodes', payload)).data; },
   async cdnNodeAction(id: string, action: string) { return (await adminHttp.post(`/admin/cdn-management/nodes/${id}/actions/${action}`, { confirm: true })).data; },
@@ -857,28 +862,48 @@ export const adminApi = {
   async createCDNRoute(payload: { cidr: string; node_id: string; priority: number; enabled: boolean }): Promise<CDNPrefixRouteDto> { return (await adminHttp.post('/admin/cdn-management/routes', payload)).data; },
 };
 
+export type StorageProvider = 'cloudflare_r2' | 's3_compatible';
 export type R2SettingsDto = {
   enabled: boolean;
+  provider?: StorageProvider;
   endpoint_url: string;
   account_id?: string | null;
   bucket: string;
   region: string;
+  object_key_prefix?: string;
   public_base_url?: string;
   artwork_cdn_enabled?: boolean;
   credentials_configured: boolean;
   updated_at?: string | null;
+  last_test_at?: string | null;
+  last_test_ok?: boolean | null;
+  last_test_reachable?: boolean | null;
+  last_test_bucket_accessible?: boolean | null;
+  last_test_message?: string | null;
 };
 export type R2SettingsPayload = {
   enabled: boolean;
+  provider?: StorageProvider;
   endpoint_url: string;
   account_id?: string;
   bucket: string;
   region: string;
+  object_key_prefix?: string;
   public_base_url?: string;
   artwork_cdn_enabled?: boolean;
   access_key_id?: string;
   secret_access_key?: string;
   remove_credentials?: boolean;
+  confirm?: boolean;
+};
+export type R2TestDto = {
+  ok: boolean;
+  reachable: boolean;
+  bucket_accessible: boolean;
+  endpoint_host?: string | null;
+  message: string;
+  tested_at: string;
+  settings: R2SettingsDto;
 };
 export type ManagedCDNNodeDto = { id: string; name: string; role: 'main'|'cache'; host: string; ssh_port: number; ssh_username: string; credential_type: string; credential_configured: boolean; branch?: string; location?: string; notes?: string; enabled: boolean; draining: boolean; is_default: boolean; cache_limit_bytes?: number; disk_total_bytes?: number; disk_free_bytes?: number; cached_objects: number; cached_titles: number; hit_rate?: number; bandwidth_bytes: number; rtt_ms?: number; software_version?: string; health_status: string; provision_status: string; last_sync_at?: string; last_heartbeat_at?: string };
 export type ManagedCDNNodeCreatedDto = { node: ManagedCDNNodeDto; heartbeat_token: string | null };

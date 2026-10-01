@@ -103,9 +103,15 @@ def get_artwork_cdn_storage(
     region = (runtime or {}).get("region") or cfg.r2_region or "auto"
     access_key = (runtime or {}).get("access_key_id") or cfg.r2_access_key_id
     secret_key = (runtime or {}).get("secret_access_key") or cfg.r2_secret_access_key
+    provider = str((runtime or {}).get("provider") or "cloudflare_r2").strip().lower()
 
     if not all(
-        (str(endpoint or "").strip(), str(bucket or "").strip(), str(access_key or "").strip(), str(secret_key or "").strip())
+        (
+            str(endpoint or "").strip(),
+            str(bucket or "").strip(),
+            str(access_key or "").strip(),
+            str(secret_key or "").strip(),
+        )
     ):
         return None
 
@@ -116,8 +122,12 @@ def get_artwork_cdn_storage(
             region=str(region).strip() or "auto",
             access_key_id=str(access_key).strip(),
             secret_access_key=str(secret_key).strip(),
-            force_path_style=False,
-            provider_kind=StorageProviderKind.R2,
+            force_path_style=provider == "s3_compatible",
+            provider_kind=(
+                StorageProviderKind.R2
+                if provider == "cloudflare_r2"
+                else StorageProviderKind.S3_COMPATIBLE
+            ),
             role=StorageRole.ARTWORK_CDN,
         )
     )
