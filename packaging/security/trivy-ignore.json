@@ -14,149 +14,149 @@
     {
       "id": "CVE-2026-58016",
       "component": "libglib2.0-0t64",
-      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-08-01. Tracked for base-image refresh.",
+      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-10-01. Tracked for base-image refresh.",
       "owner": "platform",
-      "expiry": "2026-09-15"
+      "expiry": "2026-12-15"
     },
     {
       "id": "CVE-2026-34873",
       "component": "libmbedcrypto16",
-      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-08-01. Tracked for base-image refresh.",
+      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-10-01. Tracked for base-image refresh.",
       "owner": "platform",
-      "expiry": "2026-09-15"
+      "expiry": "2026-12-15"
     },
     {
       "id": "CVE-2026-34875",
       "component": "libmbedcrypto16",
-      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-08-01. Tracked for base-image refresh.",
+      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-10-01. Tracked for base-image refresh.",
       "owner": "platform",
-      "expiry": "2026-09-15"
+      "expiry": "2026-12-15"
     },
     {
       "id": "CVE-2026-13221",
       "component": "libperl5.40",
-      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-08-01. Tracked for base-image refresh.",
+      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-10-01. Tracked for base-image refresh.",
       "owner": "platform",
-      "expiry": "2026-09-15"
+      "expiry": "2026-12-15"
     },
     {
       "id": "CVE-2026-42496",
       "component": "libperl5.40",
-      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-08-01. Tracked for base-image refresh.",
+      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-10-01. Tracked for base-image refresh.",
       "owner": "platform",
-      "expiry": "2026-09-15"
+      "expiry": "2026-12-15"
     },
     {
       "id": "CVE-2026-57433",
       "component": "libperl5.40",
-      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-08-01. Tracked for base-image refresh.",
+      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-10-01. Tracked for base-image refresh.",
       "owner": "platform",
-      "expiry": "2026-09-15"
+      "expiry": "2026-12-15"
     },
     {
       "id": "CVE-2026-8376",
       "component": "libperl5.40",
-      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-08-01. Tracked for base-image refresh.",
+      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-10-01. Tracked for base-image refresh.",
       "owner": "platform",
-      "expiry": "2026-09-15"
+      "expiry": "2026-12-15"
     },
     {
       "id": "CVE-2026-6653",
       "component": "libxml2",
-      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-08-01. Tracked for base-image refresh.",
+      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-10-01. Tracked for base-image refresh.",
       "owner": "platform",
-      "expiry": "2026-09-15"
+      "expiry": "2026-12-15"
     },
     {
       "id": "CVE-2026-43185",
       "component": "linux-libc-dev",
-      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-08-01. Tracked for base-image refresh.",
+      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-10-01. Tracked for base-image refresh.",
       "owner": "platform",
-      "expiry": "2026-09-15"
+      "expiry": "2026-12-15"
     },
     {
       "id": "CVE-2026-13221",
       "component": "perl",
-      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-08-01. Tracked for base-image refresh.",
+      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-10-01. Tracked for base-image refresh.",
       "owner": "platform",
-      "expiry": "2026-09-15"
+      "expiry": "2026-12-15"
     },
     {
       "id": "CVE-2026-42496",
       "component": "perl",
-      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-08-01. Tracked for base-image refresh.",
+      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-10-01. Tracked for base-image refresh.",
       "owner": "platform",
-      "expiry": "2026-09-15"
+      "expiry": "2026-12-15"
     },
     {
       "id": "CVE-2026-57433",
       "component": "perl",
-      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-08-01. Tracked for base-image refresh.",
+      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-10-01. Tracked for base-image refresh.",
       "owner": "platform",
-      "expiry": "2026-09-15"
+      "expiry": "2026-12-15"
     },
     {
       "id": "CVE-2026-8376",
       "component": "perl",
-      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-08-01. Tracked for base-image refresh.",
+      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-10-01. Tracked for base-image refresh.",
       "owner": "platform",
-      "expiry": "2026-09-15"
+      "expiry": "2026-12-15"
     },
     {
       "id": "CVE-2026-13221",
       "component": "perl-base",
-      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-08-01. Tracked for base-image refresh.",
+      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-10-01. Tracked for base-image refresh.",
       "owner": "platform",
-      "expiry": "2026-09-15"
+      "expiry": "2026-12-15"
     },
     {
       "id": "CVE-2026-42496",
       "component": "perl-base",
-      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-08-01. Tracked for base-image refresh.",
+      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-10-01. Tracked for base-image refresh.",
       "owner": "platform",
-      "expiry": "2026-09-15"
+      "expiry": "2026-12-15"
     },
     {
       "id": "CVE-2026-57433",
       "component": "perl-base",
-      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-08-01. Tracked for base-image refresh.",
+      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-10-01. Tracked for base-image refresh.",
       "owner": "platform",
-      "expiry": "2026-09-15"
+      "expiry": "2026-12-15"
     },
     {
       "id": "CVE-2026-8376",
       "component": "perl-base",
-      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-08-01. Tracked for base-image refresh.",
+      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-10-01. Tracked for base-image refresh.",
       "owner": "platform",
-      "expiry": "2026-09-15"
+      "expiry": "2026-12-15"
     },
     {
       "id": "CVE-2026-13221",
       "component": "perl-modules-5.40",
-      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-08-01. Tracked for base-image refresh.",
+      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-10-01. Tracked for base-image refresh.",
       "owner": "platform",
-      "expiry": "2026-09-15"
+      "expiry": "2026-12-15"
     },
     {
       "id": "CVE-2026-42496",
       "component": "perl-modules-5.40",
-      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-08-01. Tracked for base-image refresh.",
+      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-10-01. Tracked for base-image refresh.",
       "owner": "platform",
-      "expiry": "2026-09-15"
+      "expiry": "2026-12-15"
     },
     {
       "id": "CVE-2026-57433",
       "component": "perl-modules-5.40",
-      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-08-01. Tracked for base-image refresh.",
+      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-10-01. Tracked for base-image refresh.",
       "owner": "platform",
-      "expiry": "2026-09-15"
+      "expiry": "2026-12-15"
     },
     {
       "id": "CVE-2026-8376",
       "component": "perl-modules-5.40",
-      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-08-01. Tracked for base-image refresh.",
+      "justification": "No FixedVersion in Debian 13.6 for python:3.12-slim runtime as of 2026-10-01. Tracked for base-image refresh.",
       "owner": "platform",
-      "expiry": "2026-09-15"
+      "expiry": "2026-12-15"
     }
   ]
 }
