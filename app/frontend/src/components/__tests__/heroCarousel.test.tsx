@@ -128,9 +128,15 @@ describe('HeroCarousel G1 manual navigation', () => {
     );
   });
 
-  it('marks synopsis for automatic text direction', () => {
+  it('keeps synopsis block aligned to UI direction while isolating mixed-script text', () => {
+    window.localStorage.setItem('ifilm.locale', 'fa');
     renderHero([movie({ id: 1, title: 'Alpha', description: 'English synopsis with فارسی' })]);
-    expect(screen.getByTestId('hero-synopsis')).toHaveAttribute('dir', 'auto');
+    const synopsis = screen.getByTestId('hero-synopsis');
+    expect(synopsis).not.toHaveAttribute('dir', 'auto');
+    expect(synopsis.className).toMatch(/text-start/);
+    const isolated = synopsis.querySelector('[dir="auto"]');
+    expect(isolated).toBeTruthy();
+    expect(isolated).toHaveTextContent('English synopsis with فارسی');
   });
 
   it('localizes demo-clip CTA label', () => {
@@ -145,5 +151,32 @@ describe('HeroCarousel G1 manual navigation', () => {
       }),
     ]);
     expect(screen.getByTestId('hero-play')).toHaveTextContent('پخش کلیپ دمو');
+  });
+
+  it('localizes Coming Soon availability for FA and PS', () => {
+    window.localStorage.setItem('ifilm.locale', 'fa');
+    const { unmount } = renderHero([
+      movie({
+        id: 1,
+        title: 'Soon Film',
+        playable: false,
+        hasPlayablePackage: false,
+        hasDemoClip: false,
+      }),
+    ]);
+    expect(screen.getByTestId('hero-unavailable')).toHaveTextContent('به‌زودی');
+    unmount();
+
+    window.localStorage.setItem('ifilm.locale', 'ps');
+    renderHero([
+      movie({
+        id: 2,
+        title: 'Soon Film PS',
+        playable: false,
+        hasPlayablePackage: false,
+        hasDemoClip: false,
+      }),
+    ]);
+    expect(screen.getByTestId('hero-unavailable')).toHaveTextContent('ژر راځي');
   });
 });

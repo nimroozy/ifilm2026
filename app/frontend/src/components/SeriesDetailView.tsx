@@ -559,8 +559,16 @@ export function SeriesDetailView({
 
                 {series.description ? (
                   <div className="hidden md:block" data-testid="series-hero-overview">
-                    <p className={cn(typography.bodySm, 'max-w-xl', !overviewExpanded && 'line-clamp-3')}>
-                      {series.description}
+                    <p
+                      className={cn(
+                        typography.bodySm,
+                        'max-w-xl text-start',
+                        !overviewExpanded && 'line-clamp-3',
+                      )}
+                    >
+                      <span dir="auto" className="[unicode-bidi:isolate]">
+                        {series.description}
+                      </span>
                     </p>
                     {series.description.length > 160 ? (
                       <button
@@ -635,11 +643,13 @@ export function SeriesDetailView({
             <p
               className={cn(
                 typography.body,
-                'max-w-3xl text-foreground/90',
+                'max-w-3xl text-start text-foreground/90',
                 !overviewExpanded && 'line-clamp-5'
               )}
             >
-              {series.description}
+              <span dir="auto" className="[unicode-bidi:isolate]">
+                {series.description}
+              </span>
             </p>
             {series.description.length > 160 ? (
               <button

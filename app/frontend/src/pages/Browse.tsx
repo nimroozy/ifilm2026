@@ -948,7 +948,8 @@ export function SearchPage() {
               size="icon"
               onClick={() => setQuery('')}
               className="absolute right-2 top-1/2 -translate-y-1/2"
-              aria-label="Clear search"
+              aria-label={t.search.clear}
+              data-testid="search-clear"
             >
               <X className="h-5 w-5" />
             </Button>
@@ -985,6 +986,7 @@ export function SearchPage() {
         ) : results.length === 0 ? (
           <div className="py-20 text-center text-muted-foreground" data-testid="search-no-results">
             <p className="text-lg">{t.search.noResults}</p>
+            <p className="mt-2 text-sm">{t.search.emptyHint}</p>
           </div>
         ) : (
           <div

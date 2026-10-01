@@ -46,16 +46,40 @@ export function canShowPlayButton(item: unknown): boolean {
   return isPublishedCatalogItem(item) && canPlayFullMovie(item);
 }
 
-/** Prefer Coming Soon / Unavailable — not the old "Full Movie Unavailable" copy. */
-export function movieUnavailableLabel(opts?: { hasTrailer?: boolean; published?: boolean }): string {
-  if (opts?.hasTrailer) return 'Unavailable';
-  if (opts?.published === false) return 'Coming Soon';
-  return 'Coming Soon';
+/** Status key for unavailable / coming-soon CTAs — map through translations at the call site. */
+export type MovieUnavailableStatus = 'coming_soon' | 'unavailable';
+
+export function movieUnavailableStatus(opts?: {
+  hasTrailer?: boolean;
+  published?: boolean;
+}): MovieUnavailableStatus {
+  if (opts?.hasTrailer) return 'unavailable';
+  // Unpublished and published-without-package both surface Coming Soon (not playable yet).
+  void opts?.published;
+  return 'coming_soon';
+}
+
+/**
+ * Prefer Coming Soon / Unavailable — not the old "Full Movie Unavailable" copy.
+ * Pass `labels` from the active locale; English defaults remain for unit tests.
+ */
+export function movieUnavailableLabel(
+  opts?: { hasTrailer?: boolean; published?: boolean },
+  labels?: Partial<Record<MovieUnavailableStatus, string>>,
+): string {
+  const status = movieUnavailableStatus(opts);
+  const defaults: Record<MovieUnavailableStatus, string> = {
+    coming_soon: 'Coming Soon',
+    unavailable: 'Unavailable',
+  };
+  return labels?.[status] ?? defaults[status];
 }
 
 /** @deprecated Use movieUnavailableLabel — kept for transitional callers. */
-export function fullMovieUnavailableLabel(): string {
-  return movieUnavailableLabel();
+export function fullMovieUnavailableLabel(
+  labels?: Partial<Record<MovieUnavailableStatus, string>>,
+): string {
+  return movieUnavailableLabel(undefined, labels);
 }
 
 /** Primary CTA order for movie detail: Play → Demo → Trailer → Coming Soon. */

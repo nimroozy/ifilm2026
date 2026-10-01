@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { MetaChip, heroSizing, typography } from '@/design-system';
 import { useAuth, useLang } from '@/components/CustomerLayout';
 import type { CatalogMovie } from '@/lib/catalogData';
-import { canPlayFullMovie, fullMovieUnavailableLabel, hasDemoClip } from '@/lib/catalogPresentation';
+import { canPlayFullMovie, hasDemoClip, movieUnavailableLabel } from '@/lib/catalogPresentation';
 import { heroBackdropSrcSet } from '@/lib/imageUrls';
 import { WatchlistButton } from '@/components/WatchlistButton';
 import { cn } from '@/lib/utils';
@@ -232,11 +232,13 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
             </div>
 
             <p
-              className="max-w-xl text-sm leading-relaxed text-foreground/85 line-clamp-2 md:max-w-2xl md:text-base md:leading-relaxed md:text-foreground/90 md:line-clamp-3"
-              dir="auto"
+              className="max-w-xl text-start text-sm leading-relaxed text-foreground/85 line-clamp-2 md:max-w-2xl md:text-base md:leading-relaxed md:text-foreground/90 md:line-clamp-3"
               data-testid="hero-synopsis"
             >
-              {movie.description}
+              {/* Keep block alignment with UI dir; isolate embedded LTR/RTL fallback text. */}
+              <span dir="auto" className="[unicode-bidi:isolate]">
+                {movie.description}
+              </span>
             </p>
 
             {/* Mobile: wrap actions so RTL labels are not truncated; Desktop: full-label actions */}
@@ -263,8 +265,11 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
                   <span>{demo && !playable ? t.hero.playDemoClip : t.hero.play}</span>
                 </Button>
               ) : (
-                <Badge variant="secondary" className="px-3 py-2 text-sm">
-                  {fullMovieUnavailableLabel()}
+                <Badge variant="secondary" className="px-3 py-2 text-sm" data-testid="hero-unavailable">
+                  {movieUnavailableLabel(undefined, {
+                    coming_soon: t.hero.comingSoon,
+                    unavailable: t.hero.unavailable,
+                  })}
                 </Badge>
               )}
               <Button

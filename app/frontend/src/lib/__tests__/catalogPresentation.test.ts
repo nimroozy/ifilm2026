@@ -8,6 +8,7 @@ import {
   isPublishedCatalogItem,
   movieDetailPrimaryActions,
   movieUnavailableLabel,
+  movieUnavailableStatus,
   shouldAutoplayTrailerHero,
 } from '@/lib/catalogPresentation';
 
@@ -74,6 +75,18 @@ describe('catalogPresentation', () => {
   it('replaces Full Movie Unavailable copy with Coming Soon', () => {
     expect(fullMovieUnavailableLabel()).toBe('Coming Soon');
     expect(movieUnavailableLabel({ hasTrailer: true })).toBe('Unavailable');
+    expect(movieUnavailableStatus()).toBe('coming_soon');
+    expect(movieUnavailableStatus({ hasTrailer: true })).toBe('unavailable');
+  });
+
+  it('resolves availability labels from supplied locale strings', () => {
+    const fa = { coming_soon: 'به‌زودی', unavailable: 'در دسترس نیست' };
+    const ps = { coming_soon: 'ژر راځي', unavailable: 'شته نه دي' };
+    expect(movieUnavailableLabel(undefined, fa)).toBe('به‌زودی');
+    expect(movieUnavailableLabel({ hasTrailer: true }, fa)).toBe('در دسترس نیست');
+    expect(movieUnavailableLabel(undefined, ps)).toBe('ژر راځي');
+    expect(movieUnavailableLabel({ hasTrailer: true }, ps)).toBe('شته نه دي');
+    expect(fullMovieUnavailableLabel(fa)).toBe('به‌زودی');
   });
 
   it('autoplays trailer hero only when allowed', () => {
