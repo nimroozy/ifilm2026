@@ -156,8 +156,7 @@ services:
       MEDIA_PROCESSING_WORKER_ID: ${MEDIA_PROCESSING_WORKER_ID:-staging-media-1}
     volumes:
       # Share all API upload categories (not just originals) so probe can read files.
-      # Originals RW for remote_media_import finalize into protected MEDIA_ROOT.
-      - staging_media_originals:/data/media/originals
+      - staging_media_originals:/data/media/originals:ro
       - staging_media_trailers:/data/media/trailers:ro
       - staging_media_subtitles:/data/media/subtitles:ro
       - staging_media_audio:/data/media/audio:ro
@@ -176,6 +175,42 @@ services:
         [
           "CMD-SHELL",
           "set -a; . /run/ifilm/runtime.env; set +a; python -m app.workers.media_processing --healthcheck",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks: [staging_net]
+
+  remote-media-import-worker:
+    build:
+      context: ../../app/backend
+      dockerfile: Dockerfile.staging
+    restart: unless-stopped
+    labels:
+      - "ifilm.pipeline.role=remote-import"
+      - "ifilm.compose.profile=always-on"
+    command: ["python", "-m", "app.workers.remote_media_import"]
+    env_file:
+      - path: .env.staging
+        required: false
+    environment:
+      <<: *api_env
+      ENABLE_REMOTE_MEDIA_IMPORT: ${ENABLE_REMOTE_MEDIA_IMPORT:-false}
+      MEDIA_PROCESSING_WORKER_ID: ${REMOTE_MEDIA_IMPORT_WORKER_ID:-staging-remote-import-1}
+    volumes:
+      - staging_media_originals:/data/media/originals
+      - staging_media_temp:/data/media/temp
+    depends_on:
+      postgres:
+        condition: service_healthy
+      backend-api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "set -a; . /run/ifilm/runtime.env; set +a; python -m app.workers.remote_media_import --healthcheck",
         ]
       interval: 30s
       timeout: 10s

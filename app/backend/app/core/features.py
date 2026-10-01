@@ -13,6 +13,20 @@ def require_feature(flag_name: str, settings: Settings | None = None) -> None:
         )
 
 
+def require_remote_media_import(settings: Settings | None = None) -> None:
+    """Require ENABLE_UPLOADS and ENABLE_REMOTE_MEDIA_IMPORT.
+
+    Remote import creates managed MediaAsset rows under the upload pipeline, so
+    both flags must be true. Neither flag alone is sufficient.
+    """
+    cfg = settings or get_settings()
+    if not cfg.enable_uploads or not cfg.enable_remote_media_import:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Remote media import is disabled",
+        )
+
+
 def require_hls_encoding(settings: Settings | None = None) -> None:
     """Require media processing and HLS encoding flags.
 

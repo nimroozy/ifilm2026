@@ -1553,6 +1553,16 @@ def test_fresh_database_reaches_current_head(postgres_url):
     history = _run_alembic(postgres_url, "history")
     assert history.returncode == 0
     assert "027_branch_cache_control_plane_v1" in (history.stdout + history.stderr)
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        tables = {
+            row[0]
+            for row in conn.execute(
+                text("SELECT tablename FROM pg_tables WHERE schemaname='public'")
+            )
+        }
+    engine.dispose()
+    assert "remote_media_imports" in tables
 
 
 def test_integration_configs_migration_025_roundtrip(postgres_url):

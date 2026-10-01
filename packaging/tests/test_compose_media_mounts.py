@@ -103,13 +103,11 @@ class ComposeMediaMountTests(unittest.TestCase):
                     )
 
     def test_worker_source_categories_are_read_only(self) -> None:
-        """Non-original upload categories stay :ro; originals is RW for remote_media_import."""
-        ro_categories = tuple(c for c in UPLOAD_CATEGORIES if c != "originals")
         for compose in COMPOSE_FILES:
             with self.subTest(compose=str(compose.relative_to(ROOT))):
                 body = _service_block(compose.read_text(), "media-processing-worker")
                 modes = _volume_modes(body)
-                for category in ro_categories:
+                for category in UPLOAD_CATEGORIES:
                     target = f"/data/media/{category}"
                     self.assertEqual(
                         modes.get(target),
@@ -117,12 +115,51 @@ class ComposeMediaMountTests(unittest.TestCase):
                         f"{compose.relative_to(ROOT)}: worker {target} must be :ro "
                         f"(got {modes.get(target)!r})",
                     )
-                originals_mode = modes.get("/data/media/originals")
+
+    def test_remote_media_import_worker_least_privilege_mounts(self) -> None:
+        for compose in COMPOSE_FILES:
+            with self.subTest(compose=str(compose.relative_to(ROOT))):
+                text = compose.read_text()
+                self.assertIn(
+                    "remote-media-import-worker:",
+                    text,
+                    f"{compose.relative_to(ROOT)}: missing remote-media-import-worker",
+                )
+                body = _service_block(text, "remote-media-import-worker")
+                modes = _volume_modes(body)
+                targets = _volume_targets(body)
+                self.assertIn("/data/media/originals", targets)
+                self.assertIn("/data/media/temp", targets)
                 self.assertNotEqual(
-                    originals_mode,
+                    modes.get("/data/media/originals"),
                     "ro",
-                    f"{compose.relative_to(ROOT)}: worker /data/media/originals must be "
-                    f"read-write for remote_media_import finalize (got {originals_mode!r})",
+                    f"{compose.relative_to(ROOT)}: remote-import originals must be RW",
+                )
+                self.assertNotEqual(
+                    modes.get("/data/media/temp"),
+                    "ro",
+                    f"{compose.relative_to(ROOT)}: remote-import temp must be RW",
+                )
+                for category in ("trailers", "subtitles", "audio", "posters", "backdrops"):
+                    self.assertNotIn(
+                        f"/data/media/{category}",
+                        targets,
+                        f"{compose.relative_to(ROOT)}: remote-import must not mount "
+                        f"{category} (least privilege)",
+                    )
+                self.assertIn("app.workers.remote_media_import", body)
+                self.assertIn("healthcheck:", body)
+                self.assertIn("--healthcheck", body)
+                self.assertNotIn(
+                    "curl",
+                    body.lower(),
+                    f"{compose.relative_to(ROOT)}: remote-import healthcheck must not curl API",
+                )
+                self.assertNotIn("127.0.0.1:8000", body)
+                # Feature defaults OFF in compose env interpolation.
+                self.assertRegex(
+                    body,
+                    r"ENABLE_REMOTE_MEDIA_IMPORT:\s*\$\{ENABLE_REMOTE_MEDIA_IMPORT:-false\}",
                 )
 
     def test_api_and_worker_share_same_upload_targets(self) -> None:

@@ -591,3 +591,158 @@ def test_max_bytes_enforced_during_transfer(
 
     part = media_root() / "temp" / f"remote-import-{asset.id}.part"
     assert not part.exists()
+
+
+def test_feature_flag_requires_both_uploads_and_remote_import(
+    client, admin_headers, db_session, encryption_key, monkeypatch
+):
+    movie = _movie(db_session)
+    payload = {
+        "url": "https://cdn.example.com/a.mp4",
+        "owner_type": "movie",
+        "owner_id": movie.id,
+        "destination": "local_origin",
+    }
+
+    monkeypatch.setenv("ENABLE_UPLOADS", "true")
+    monkeypatch.setenv("ENABLE_REMOTE_MEDIA_IMPORT", "false")
+    get_settings.cache_clear()
+    denied = client.post("/api/admin/media/remote-import/validate", headers=admin_headers, json={"url": payload["url"]})
+    assert denied.status_code == 503
+    denied_start = client.post("/api/admin/media/remote-import", headers=admin_headers, json=payload)
+    assert denied_start.status_code == 503
+
+    monkeypatch.setenv("ENABLE_UPLOADS", "false")
+    monkeypatch.setenv("ENABLE_REMOTE_MEDIA_IMPORT", "true")
+    get_settings.cache_clear()
+    denied2 = client.post("/api/admin/media/remote-import", headers=admin_headers, json=payload)
+    assert denied2.status_code == 503
+
+    class FakeValidation:
+        url = payload["url"]
+        kind = "mp4"
+        content_type = "video/mp4"
+        content_length = 100
+        accept_ranges = False
+        validated_at = __import__("datetime").datetime.now(__import__("datetime").UTC)
+
+    monkeypatch.setenv("ENABLE_UPLOADS", "true")
+    monkeypatch.setenv("ENABLE_REMOTE_MEDIA_IMPORT", "true")
+    get_settings.cache_clear()
+    monkeypatch.setattr(
+        "app.services.media_remote_import.validate_external_media_url",
+        lambda *a, **k: FakeValidation(),
+    )
+    monkeypatch.setattr(
+        "app.services.media_remote_import.assert_safe_external_url",
+        lambda u: (u, "cdn.example.com"),
+    )
+    ok = client.post("/api/admin/media/remote-import/validate", headers=admin_headers, json={"url": payload["url"]})
+    assert ok.status_code == 200, ok.text
+
+
+def test_workers_cannot_steal_cross_type_jobs(db_session, import_settings, encryption_key, monkeypatch):
+    from app.models.media_assets import MediaAsset, new_uuid
+    from app.models.media_processing import (
+        JOB_TYPE_PROBE,
+        MEDIA_PROCESSING_WORKER_JOB_TYPES,
+        REMOTE_MEDIA_IMPORT_WORKER_JOB_TYPES,
+        MediaProcessingJob,
+    )
+    from app.services.media_processing.jobs import claim_next_job
+
+    movie = _movie(db_session)
+    asset = MediaAsset(
+        id=new_uuid(),
+        movie_id=movie.id,
+        original_filename="probe.mp4",
+        stored_filename="probe.mp4",
+        mime_type="video/mp4",
+        extension=".mp4",
+        size_bytes=10,
+        storage_backend="local",
+        category="originals",
+        upload_status="completed",
+        processing_status="none",
+        source_type="uploaded",
+    )
+    db_session.add(asset)
+    db_session.flush()
+    probe_job = MediaProcessingJob(
+        id=new_uuid(),
+        media_asset_id=asset.id,
+        job_type=JOB_TYPE_PROBE,
+        status="queued",
+        priority=50,
+        max_attempts=3,
+    )
+    db_session.add(probe_job)
+    db_session.commit()
+
+    class FakeValidation:
+        url = "https://cdn.example.com/steal.mp4"
+        kind = "mp4"
+        content_type = "video/mp4"
+        content_length = 100
+        accept_ranges = False
+        validated_at = __import__("datetime").datetime.now(__import__("datetime").UTC)
+
+    monkeypatch.setattr(
+        "app.services.media_remote_import.validate_external_media_url",
+        lambda *a, **k: FakeValidation(),
+    )
+    monkeypatch.setattr(
+        "app.services.media_remote_import.assert_safe_external_url",
+        lambda u: (u, "cdn.example.com"),
+    )
+    import_job, _, _ = queue_remote_media_import(
+        db_session,
+        settings=import_settings,
+        url=FakeValidation.url,
+        owner_type="movie",
+        owner_id=movie.id,
+        destination="local_origin",
+        admin_id=1,
+    )
+
+    # Processing worker must not claim remote import.
+    stolen = claim_next_job(
+        db_session,
+        settings=import_settings,
+        worker_id="media-proc",
+        allowed_job_types=MEDIA_PROCESSING_WORKER_JOB_TYPES,
+    )
+    assert stolen is not None
+    assert stolen.job_type == JOB_TYPE_PROBE
+    assert stolen.id == probe_job.id
+
+    # Remote import worker must not claim probe (already claimed) and should get import.
+    remote = claim_next_job(
+        db_session,
+        settings=import_settings,
+        worker_id="remote-import",
+        allowed_job_types=REMOTE_MEDIA_IMPORT_WORKER_JOB_TYPES,
+    )
+    assert remote is not None
+    assert remote.job_type == JOB_TYPE_REMOTE_MEDIA_IMPORT
+    assert remote.id == import_job.id
+
+    # No further cross-claims.
+    assert (
+        claim_next_job(
+            db_session,
+            settings=import_settings,
+            worker_id="media-proc-2",
+            allowed_job_types=MEDIA_PROCESSING_WORKER_JOB_TYPES,
+        )
+        is None
+    )
+    assert (
+        claim_next_job(
+            db_session,
+            settings=import_settings,
+            worker_id="remote-import-2",
+            allowed_job_types=REMOTE_MEDIA_IMPORT_WORKER_JOB_TYPES,
+        )
+        is None
+    )

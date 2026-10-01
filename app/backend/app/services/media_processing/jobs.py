@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import socket
+from collections.abc import Collection
 from datetime import timedelta
 from typing import Any
 
@@ -389,36 +390,58 @@ def _eligible_claim_filter(now):
     )
 
 
-def claim_next_job(db: Session, *, settings: Settings, worker_id: str) -> MediaProcessingJob | None:
-    """Atomically claim one eligible job. Uses SKIP LOCKED on PostgreSQL."""
+def claim_next_job(
+    db: Session,
+    *,
+    settings: Settings,
+    worker_id: str,
+    allowed_job_types: Collection[str] | None = None,
+) -> MediaProcessingJob | None:
+    """Atomically claim one eligible job. Uses SKIP LOCKED on PostgreSQL.
+
+    When ``allowed_job_types`` is provided, only those ``job_type`` values are
+    claimable. Production workers must pass an explicit set so the general
+    media-processing worker never steals ``remote_media_import`` jobs (and
+    vice versa).
+    """
     now = utcnow()
     dialect = db.bind.dialect.name if db.bind is not None else ""
+    type_filter = tuple(sorted({str(t) for t in allowed_job_types})) if allowed_job_types else None
 
     if dialect == "postgresql":
+        type_clause = ""
+        params: dict[str, Any] = {"now": now}
+        if type_filter is not None:
+            type_clause = "AND job_type = ANY(:job_types)"
+            params["job_types"] = list(type_filter)
         row = db.execute(
             text(
-                """
+                f"""
                 SELECT id FROM media_processing_jobs
                 WHERE (
                     status = 'queued'
                     OR (status = 'retry_wait' AND (next_retry_at IS NULL OR next_retry_at <= :now))
                 )
                 AND cancel_requested = false
+                {type_clause}
                 ORDER BY priority ASC, queued_at ASC
                 FOR UPDATE SKIP LOCKED
                 LIMIT 1
                 """
             ),
-            {"now": now},
+            params,
         ).first()
         if row is None:
             return None
         job = db.get(MediaProcessingJob, row[0])
     else:
+        query = db.query(MediaProcessingJob).filter(
+            _eligible_claim_filter(now), MediaProcessingJob.cancel_requested.is_(False)
+        )
+        if type_filter is not None:
+            query = query.filter(MediaProcessingJob.job_type.in_(type_filter))
         job = (
-            db.query(MediaProcessingJob)
-            .filter(_eligible_claim_filter(now), MediaProcessingJob.cancel_requested.is_(False))
-            .order_by(MediaProcessingJob.priority.asc(), MediaProcessingJob.queued_at.asc())
+            query.order_by(MediaProcessingJob.priority.asc(), MediaProcessingJob.queued_at.asc())
             .with_for_update()
             .first()
         )
@@ -454,19 +477,26 @@ def heartbeat_job(db: Session, job: MediaProcessingJob) -> None:
     db.commit()
 
 
-def recover_stale_jobs(db: Session, *, settings: Settings) -> int:
-    """Move stale running jobs to retry_wait or failed. Returns count recovered."""
+def recover_stale_jobs(
+    db: Session,
+    *,
+    settings: Settings,
+    allowed_job_types: Collection[str] | None = None,
+) -> int:
+    """Move stale running jobs to retry_wait or failed. Returns count recovered.
+
+    When ``allowed_job_types`` is set, only those job types are recovered so
+    workers do not interfere with each other's in-flight heartbeats.
+    """
     threshold = utcnow() - timedelta(seconds=settings.media_processing_stale_after_seconds)
-    stale = (
-        db.query(MediaProcessingJob)
-        .filter(
-            MediaProcessingJob.status == "running",
-            MediaProcessingJob.heartbeat_at.is_not(None),
-            MediaProcessingJob.heartbeat_at < threshold,
-        )
-        .with_for_update()
-        .all()
+    query = db.query(MediaProcessingJob).filter(
+        MediaProcessingJob.status == "running",
+        MediaProcessingJob.heartbeat_at.is_not(None),
+        MediaProcessingJob.heartbeat_at < threshold,
     )
+    if allowed_job_types is not None:
+        query = query.filter(MediaProcessingJob.job_type.in_(tuple(allowed_job_types)))
+    stale = query.with_for_update().all()
     count = 0
     for job in stale:
         count += 1

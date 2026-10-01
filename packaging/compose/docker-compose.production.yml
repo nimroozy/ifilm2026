@@ -162,8 +162,7 @@ services:
       # Must share every category the API can finalize uploads into.
       # Missing mounts create empty container-local dirs (ensure_media_layout)
       # and probe fails with "Uploaded media file is missing" (prod trailers bug).
-      # Originals are RW for remote_media_import finalize (temp → originals).
-      - /var/lib/ifilm/media/originals:/data/media/originals
+      - /var/lib/ifilm/media/originals:/data/media/originals:ro
       - /var/lib/ifilm/media/trailers:/data/media/trailers:ro
       - /var/lib/ifilm/media/subtitles:/data/media/subtitles:ro
       - /var/lib/ifilm/media/audio:/data/media/audio:ro
@@ -177,6 +176,34 @@ services:
     healthcheck:
       # Fail unhealthy when ffmpeg/ffprobe or a required upload category mount is missing.
       test: ["CMD", "python", "-m", "app.workers.media_processing", "--healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks: [ifilm_net]
+
+  remote-media-import-worker:
+    image: ${IFILM_IMAGE_BACKEND_API:?immutable GHCR digest required}
+    pull_policy: always
+    restart: unless-stopped
+    # Dedicated remote URL import — least privilege (temp + originals RW only).
+    labels:
+      - "ifilm.pipeline.role=remote-import"
+      - "ifilm.compose.profile=always-on"
+    command: ["python", "-m", "app.workers.remote_media_import"]
+    environment:
+      <<: *api_env
+      # Explicit default OFF even when api_env is reused/overridden.
+      ENABLE_REMOTE_MEDIA_IMPORT: ${ENABLE_REMOTE_MEDIA_IMPORT:-false}
+      MEDIA_PROCESSING_WORKER_ID: ${REMOTE_MEDIA_IMPORT_WORKER_ID:-prod-remote-import-1}
+    volumes:
+      - /var/lib/ifilm/media/originals:/data/media/originals
+      - /var/lib/ifilm/media/temp:/data/media/temp
+    depends_on:
+      backend-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.workers.remote_media_import", "--healthcheck"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -11,7 +11,7 @@ Local, session-protected delivery of **completed active** HLS packages produced 
 - Explicit **active package** selection (`media_packages.is_active`)
 - Narrow `PlaybackEligibilityService` (admin always; subscriber = published catalog only)
 - Admin playback-session list / revoke UI
-- Docker: API mounts packages **read-only**; worker mounts packages **read-write**; originals RW on media-processing-worker for remote URL import finalize (other upload categories remain RO)
+- Docker: API mounts packages **read-only**; media-processing-worker mounts packages **read-write** and source categories **read-only**; dedicated remote-media-import-worker mounts only `temp`+`originals` RW for server-to-server finalize
 
 ## What this phase does **not** provide
 

@@ -102,13 +102,18 @@ PY
   echo "==> Writable media directories + mount policy"
   "${COMPOSE[@]}" exec -T backend-api sh -c 'test -w /data/media/originals && test -w /data/media/temp && test -w /data/artwork' \
     && ok "api originals/temp/artwork writable" || bad "api originals/temp/artwork writable"
-  "${COMPOSE[@]}" exec -T media-processing-worker sh -c 'test -w /data/media/packages && test -w /data/media/temp && test -w /data/media/originals' \
-    && ok "worker packages+temp+originals writable" || bad "worker packages+temp+originals writable"
+  "${COMPOSE[@]}" exec -T media-processing-worker sh -c 'test -w /data/media/packages && test -w /data/media/temp' \
+    && ok "worker packages+temp writable" || bad "worker packages+temp writable"
   "${COMPOSE[@]}" exec -T backend-api sh -c 'test ! -w /data/media/packages' \
     && ok "api packages read-only" || bad "api packages read-only"
-  # trailers/etc remain :ro; originals is RW for remote_media_import finalize.
-  "${COMPOSE[@]}" exec -T media-processing-worker sh -c 'test ! -w /data/media/trailers' \
-    && ok "worker trailers read-only" || bad "worker trailers read-only"
+  "${COMPOSE[@]}" exec -T media-processing-worker sh -c 'test ! -w /data/media/originals' \
+    && ok "media-processing-worker originals read-only" || bad "media-processing-worker originals read-only"
+  if "${COMPOSE[@]}" ps --services 2>/dev/null | grep -qx remote-media-import-worker; then
+    "${COMPOSE[@]}" exec -T remote-media-import-worker sh -c 'test -w /data/media/originals && test -w /data/media/temp' \
+      && ok "remote-import-worker originals+temp writable" || bad "remote-import-worker originals+temp writable"
+    "${COMPOSE[@]}" exec -T remote-media-import-worker sh -c 'test ! -d /data/media/trailers -o ! -w /data/media/trailers' \
+      && ok "remote-import-worker trailers not writable" || bad "remote-import-worker trailers not writable"
+  fi
 
   echo "==> Shared upload category visibility (API write ↔ worker read)"
   # Regression: trailers uploaded via API must be visible to the probe worker.

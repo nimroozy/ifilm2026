@@ -201,8 +201,12 @@ def queue_remote_media_import(
     destination: str,
     admin_id: int | None,
 ) -> tuple[MediaProcessingJob, RemoteMediaImport, MediaAsset]:
-    if not settings.enable_remote_media_import and not settings.enable_uploads:
-        raise HTTPException(status_code=403, detail="Remote media import is disabled")
+    # Authoritative gate: both flags required (import creates managed upload assets).
+    if not settings.enable_uploads or not settings.enable_remote_media_import:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Remote media import is disabled",
+        )
     if destination != DESTINATION_LOCAL:
         raise HTTPException(
             status_code=400,
