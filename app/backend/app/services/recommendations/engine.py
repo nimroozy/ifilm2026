@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from datetime import UTC, datetime
 from typing import Any, Literal
 
@@ -542,6 +543,14 @@ def anonymous_fallback(
     return ranked
 
 
+def _relabel_anonymous(items: list[ScoredCandidate]) -> None:
+    year = datetime.now(UTC).year
+    for item in items:
+        item.reasons = ["Popular in the catalog"] if item.views >= 1 else ["Featured in the catalog"]
+        if item.release_year and item.release_year >= year - 2:
+            item.reasons = ["Recently added"]
+
+
 def recommend_for_user(
     db: Session,
     subscriber: Subscriber | None,
@@ -552,12 +561,19 @@ def recommend_for_user(
     language: str | None = None,
     settings: Settings | None = None,
     use_cache: bool = True,
+    prepared_profile: PreferenceProfile | None = None,
+    prepared_features: list[CatalogFeature] | None = None,
 ) -> tuple[list[ScoredCandidate], PreferenceProfile, str]:
-    """Returns (items, profile, mode) where mode is personalized|popular."""
+    """Returns (items, profile, mode) where mode is personalized|popular.
+
+    ``prepared_profile`` / ``prepared_features`` let a caller that already built
+    them (the homepage payload) reuse that work instead of scanning again.
+    """
     settings = settings or get_settings()
     limit = max(1, min(int(limit), 40))
     cache_key = None
-    if use_cache and subscriber is not None:
+    reuse_prepared = prepared_profile is not None or prepared_features is not None
+    if use_cache and subscriber is not None and not reuse_prepared:
         cache_key = (
             f"u:{subscriber.id}:rec:{catalog_feature_epoch()}:"
             f"{limit}:{content_type}:{genre}:{language}"
@@ -568,30 +584,49 @@ def recommend_for_user(
             # Multi-worker safe: publication filter always at response time.
             return attach_playable(db, filter_still_public(db, list(items))), profile, mode
 
-    profile = build_preference_profile(db, subscriber, settings=settings)
+    profile = (
+        prepared_profile
+        if prepared_profile is not None
+        else build_preference_profile(db, subscriber, settings=settings)
+    )
     if subscriber is None or not profile.has_personal_signals:
-        items = attach_playable(
-            db,
-            filter_still_public(
+        if prepared_features is not None:
+            ranked = _rank(
+                prepared_features,
+                PreferenceProfile(subscriber_id=profile.subscriber_id, has_personal_signals=False),
+                limit=limit,
+                settings=settings,
+                min_score=0.0,
+            )
+            _relabel_anonymous(ranked)
+            popular_items = attach_playable(db, filter_still_public(db, ranked))
+        else:
+            popular_items = attach_playable(
                 db,
-                anonymous_fallback(
-                    db, limit=limit, content_type=content_type, genre=genre, language=language
+                filter_still_public(
+                    db,
+                    anonymous_fallback(
+                        db, limit=limit, content_type=content_type, genre=genre, language=language
+                    ),
                 ),
-            ),
-        )
-        result = (items, profile, "popular")
+            )
+        result = (popular_items, profile, "popular")
         if cache_key:
             cache_set(cache_key, result)
         return result
 
     exclude = _exclude_set(profile)
-    features = _candidate_pool(
-        db,
-        profile,
-        content_type=content_type,
-        genre=genre,
-        language=language,
-        exclude=exclude,
+    features = (
+        prepared_features
+        if prepared_features is not None
+        else _candidate_pool(
+            db,
+            profile,
+            content_type=content_type,
+            genre=genre,
+            language=language,
+            exclude=exclude,
+        )
     )
     items = _rank(
         features,
@@ -604,8 +639,20 @@ def recommend_for_user(
         min_taste=0.25,
     )
     if len(items) < min(3, limit):
-        # Soft-fill from anonymous pool without pretending personalization for fillers.
-        fill = anonymous_fallback(db, limit=limit, content_type=content_type, genre=genre, language=language)
+        # Soft-fill from the same candidate list without a second catalog scan.
+        if prepared_features is not None:
+            fill = _rank(
+                prepared_features,
+                PreferenceProfile(subscriber_id=None, has_personal_signals=False),
+                limit=limit,
+                settings=settings,
+                min_score=0.0,
+            )
+            _relabel_anonymous(fill)
+        else:
+            fill = anonymous_fallback(
+                db, limit=limit, content_type=content_type, genre=genre, language=language
+            )
         seen = {i.key for i in items}
         for row in fill:
             if row.key in seen or (row.kind, row.id) in exclude:
@@ -723,11 +770,42 @@ def because_you_watched_shelves(
     per_shelf: int = 10,
     settings: Settings | None = None,
     used_keys: set[str] | None = None,
+    prepared_profile: PreferenceProfile | None = None,
+    prepared_features: list[CatalogFeature] | None = None,
 ) -> list[dict[str, Any]]:
     settings = settings or get_settings()
-    profile = build_preference_profile(db, subscriber, settings=settings)
+    profile = (
+        prepared_profile
+        if prepared_profile is not None
+        else build_preference_profile(db, subscriber, settings=settings)
+    )
     used = set(used_keys or ())
     shelves: list[dict[str, Any]] = []
+    strong_seeds = [seed for seed in profile.seed_titles if seed[3] >= 0.4]
+    movie_seed_ids = [cid for kind, cid, _title, _strength in strong_seeds if kind == "movie"]
+    series_seed_ids = [cid for kind, cid, _title, _strength in strong_seeds if kind == "series"]
+    seed_movies = {
+        movie.id: movie
+        for movie in (
+            db.query(Movie)
+            .options(selectinload(Movie.genre_links))
+            .filter(Movie.id.in_(movie_seed_ids))
+            .all()
+            if movie_seed_ids
+            else []
+        )
+    }
+    seed_series = {
+        series.id: series
+        for series in (
+            db.query(Series)
+            .options(selectinload(Series.genre_links))
+            .filter(Series.id.in_(series_seed_ids))
+            .all()
+            if series_seed_ids
+            else []
+        )
+    }
     for kind, cid, title, strength in profile.seed_titles:
         if len(shelves) >= max_shelves:
             break
@@ -748,36 +826,29 @@ def because_you_watched_shelves(
             has_personal_signals=True,
         )
         if kind == "movie":
-            movie = (
-                db.query(Movie)
-                .options(selectinload(Movie.genre_links))
-                .filter(Movie.id == cid)
-                .first()
-            )
+            movie = seed_movies.get(cid)
             if movie is None or not movie_is_public(movie):
                 continue
             seed_profile.preferred_genres = {g.name.lower(): 1.5 for g in (movie.genre_links or [])}
             if movie.language:
                 seed_profile.preferred_languages = {movie.language.lower(): 1.0}
         else:
-            series = (
-                db.query(Series)
-                .options(selectinload(Series.genre_links))
-                .filter(Series.id == cid)
-                .first()
-            )
+            series = seed_series.get(cid)
             if series is None or not series_is_public(series):
                 continue
             seed_profile.preferred_genres = {g.name.lower(): 1.5 for g in (series.genre_links or [])}
 
-        features = _candidate_pool(
-            db,
-            seed_profile,
-            content_type="either",
-            genre=None,
-            language=None,
-            exclude=exclude,
-        )
+        if prepared_features is not None:
+            features = prepared_features
+        else:
+            features = _candidate_pool(
+                db,
+                seed_profile,
+                content_type="either",
+                genre=None,
+                language=None,
+                exclude=exclude,
+            )
         ranked = filter_still_public(
             db,
             _rank(
@@ -835,6 +906,64 @@ def _editorial_collection_titles(db: Session, *, limit: int = 4) -> list[dict[st
     return [{"id": c.id, "slug": c.slug, "title": c.title} for c in rows]
 
 
+def _home_cache_key(subscriber: Subscriber | None) -> str:
+    epoch = catalog_feature_epoch()
+    if subscriber is None:
+        return f"anon:home:{epoch}"
+    return f"u:{subscriber.id}:home:{epoch}"
+
+
+def _refresh_cached_home(db: Session, payload: dict[str, Any]) -> dict[str, Any]:
+    """Re-apply publication (and movie playability) without rebuilding the payload."""
+    fresh = copy.deepcopy(payload)
+    movie_ids: list[int] = []
+    series_ids: list[int] = []
+    for shelf in fresh.get("shelves") or []:
+        for item in shelf.get("items") or []:
+            if item.get("content_type") == "movie":
+                movie_ids.append(int(item["id"]))
+            elif item.get("content_type") == "series":
+                series_ids.append(int(item["id"]))
+
+    movies: list[Movie] = []
+    if movie_ids:
+        movies = (
+            apply_public_visibility(db.query(Movie), Movie).filter(Movie.id.in_(movie_ids)).all()
+        )
+    public_movies = {movie.id for movie in movies}
+    public_series: set[int] = set()
+    if series_ids:
+        public_series = {
+            int(row[0])
+            for row in apply_public_visibility(db.query(Series.id), Series)
+            .filter(Series.id.in_(series_ids))
+            .all()
+        }
+    play_map: dict[int, tuple[bool, bool, bool]] = {}
+    if movies:
+        from app.services.catalog_list import batch_movie_playability
+
+        play_map = batch_movie_playability(db, movies)
+
+    kept_shelves: list[dict[str, Any]] = []
+    for shelf in fresh.get("shelves") or []:
+        kept_items = []
+        for item in shelf.get("items") or []:
+            kind = item.get("content_type")
+            item_id = int(item["id"])
+            if kind == "movie" and item_id in public_movies:
+                playable, _, _ = play_map.get(item_id, (False, False, False))
+                item["playable"] = bool(playable)
+                kept_items.append(item)
+            elif kind == "series" and item_id in public_series:
+                kept_items.append(item)
+        shelf["items"] = kept_items
+        if kept_items or shelf.get("collections"):
+            kept_shelves.append(shelf)
+    fresh["shelves"] = kept_shelves
+    return fresh
+
+
 def home_recommendation_payload(
     db: Session,
     subscriber: Subscriber | None,
@@ -842,6 +971,11 @@ def home_recommendation_payload(
     settings: Settings | None = None,
 ) -> dict[str, Any]:
     settings = settings or get_settings()
+    cache_key = _home_cache_key(subscriber)
+    cached = cache_get(cache_key)
+    if cached is not None:
+        return _refresh_cached_home(db, cached)
+
     used: set[str] = set()
     shelves: list[dict[str, Any]] = []
 
@@ -922,9 +1056,28 @@ def home_recommendation_payload(
                     "items": [],
                 }
             )
-        return {"mode": "anonymous", "personalized": False, "shelves": shelves}
+        payload = {"mode": "anonymous", "personalized": False, "shelves": shelves}
+        cache_set(cache_key, copy.deepcopy(payload))
+        return payload
 
-    items, profile, mode = recommend_for_user(db, subscriber, limit=16, settings=settings)
+    profile = build_preference_profile(db, subscriber, settings=settings)
+    features = _candidate_pool(
+        db,
+        profile,
+        content_type=None,
+        genre=None,
+        language=None,
+        exclude=_exclude_set(profile) if profile.has_personal_signals else set(),
+    )
+    items, profile, mode = recommend_for_user(
+        db,
+        subscriber,
+        limit=16,
+        settings=settings,
+        use_cache=False,
+        prepared_profile=profile,
+        prepared_features=features,
+    )
     if mode == "personalized" and items:
         rec_items = []
         for i in items:
@@ -959,14 +1112,21 @@ def home_recommendation_payload(
 
     shelves.extend(
         because_you_watched_shelves(
-            db, subscriber, max_shelves=2, per_shelf=10, settings=settings, used_keys=used
+            db,
+            subscriber,
+            max_shelves=2,
+            per_shelf=10,
+            settings=settings,
+            used_keys=used,
+            prepared_profile=profile,
+            prepared_features=features,
         )
     )
     for shelf in shelves:
         for it in shelf.get("items") or []:
             used.add(f"{it['content_type']}:{it['id']}")
 
-    return {
+    payload = {
         "mode": mode,
         "personalized": mode == "personalized",
         "preference_summary": {
@@ -975,6 +1135,8 @@ def home_recommendation_payload(
         },
         "shelves": shelves,
     }
+    cache_set(cache_key, copy.deepcopy(payload))
+    return payload
 
 
 def what_to_watch(
