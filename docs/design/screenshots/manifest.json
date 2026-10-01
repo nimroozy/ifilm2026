@@ -1,0 +1,93 @@
+{
+  "capturedAt": "2026-08-09T11:05:36.301Z",
+  "results": [
+    {
+      "name": "home-desktop-en",
+      "page": "home.html?locale=en",
+      "width": 1440,
+      "height": 900,
+      "ok": false,
+      "error": "timeout after 30000ms: ypes are \"tcp\" and on UNIX \"unix\")\n[506588:506588:0809/110006.242935:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n791422 bytes written to file /workspace/docs/design/screenshots/home-desktop-en.png\n"
+    },
+    {
+      "name": "home-desktop-fa",
+      "page": "home.html?locale=fa",
+      "width": 1440,
+      "height": 900,
+      "ok": false,
+      "error": "timeout after 30000ms: ypes are \"tcp\" and on UNIX \"unix\")\n[506702:506702:0809/110036.238826:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n796941 bytes written to file /workspace/docs/design/screenshots/home-desktop-fa.png\n"
+    },
+    {
+      "name": "home-mobile-en",
+      "page": "home.html?locale=en",
+      "width": 390,
+      "height": 844,
+      "ok": false,
+      "error": "timeout after 30000ms: types are \"tcp\" and on UNIX \"unix\")\n[506817:506817:0809/110106.252853:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n313173 bytes written to file /workspace/docs/design/screenshots/home-mobile-en.png\n"
+    },
+    {
+      "name": "home-mobile-fa",
+      "page": "home.html?locale=fa",
+      "width": 390,
+      "height": 844,
+      "ok": false,
+      "error": "timeout after 30000ms: types are \"tcp\" and on UNIX \"unix\")\n[506933:506933:0809/110136.275302:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n274491 bytes written to file /workspace/docs/design/screenshots/home-mobile-fa.png\n"
+    },
+    {
+      "name": "home-mobile-ps",
+      "page": "home.html?locale=ps",
+      "width": 390,
+      "height": 844,
+      "ok": false,
+      "error": "timeout after 30000ms: types are \"tcp\" and on UNIX \"unix\")\n[507052:507052:0809/110206.311861:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n302750 bytes written to file /workspace/docs/design/screenshots/home-mobile-ps.png\n"
+    },
+    {
+      "name": "detail-desktop-en",
+      "page": "detail.html?locale=en",
+      "width": 1440,
+      "height": 900,
+      "ok": false,
+      "error": "timeout after 30000ms: s are \"tcp\" and on UNIX \"unix\")\n[507167:507167:0809/110236.321857:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n1203803 bytes written to file /workspace/docs/design/screenshots/detail-desktop-en.png\n"
+    },
+    {
+      "name": "detail-desktop-fa",
+      "page": "detail.html?locale=fa",
+      "width": 1440,
+      "height": 900,
+      "ok": false,
+      "error": "timeout after 30000ms: s are \"tcp\" and on UNIX \"unix\")\n[507281:507281:0809/110306.343255:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n1141221 bytes written to file /workspace/docs/design/screenshots/detail-desktop-fa.png\n"
+    },
+    {
+      "name": "detail-mobile-en",
+      "page": "detail.html?locale=en",
+      "width": 390,
+      "height": 844,
+      "ok": false,
+      "error": "timeout after 30000ms: pes are \"tcp\" and on UNIX \"unix\")\n[507396:507396:0809/110336.376991:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n409900 bytes written to file /workspace/docs/design/screenshots/detail-mobile-en.png\n"
+    },
+    {
+      "name": "detail-mobile-fa",
+      "page": "detail.html?locale=fa",
+      "width": 390,
+      "height": 844,
+      "ok": false,
+      "error": "timeout after 30000ms: pes are \"tcp\" and on UNIX \"unix\")\n[507512:507512:0809/110406.368328:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n402462 bytes written to file /workspace/docs/design/screenshots/detail-mobile-fa.png\n"
+    },
+    {
+      "name": "detail-mobile-ps",
+      "page": "detail.html?locale=ps",
+      "width": 390,
+      "height": 844,
+      "ok": false,
+      "error": "timeout after 30000ms: pes are \"tcp\" and on UNIX \"unix\")\n[507629:507629:0809/110436.385862:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n398350 bytes written to file /workspace/docs/design/screenshots/detail-mobile-ps.png\n"
+    },
+    {
+      "name": "home-desktop-1920-en",
+      "page": "home.html?locale=en",
+      "width": 1920,
+      "height": 1080,
+      "ok": false,
+      "error": "timeout after 30000ms: re \"tcp\" and on UNIX \"unix\")\n[507742:507742:0809/110506.415029:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n1166626 bytes written to file /workspace/docs/design/screenshots/home-desktop-1920-en.png\n"
+    }
+  ]
+}
