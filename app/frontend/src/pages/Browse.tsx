@@ -50,7 +50,9 @@ import {
   sortEpisodesByAirOrder,
 } from '@/lib/seriesDetailPlayback';
 
-function PageLoading({ label = 'Loading catalog' }: { label?: string }) {
+function PageLoading({ label }: { label?: string }) {
+  const { t } = useLang();
+  const name = label ?? t.common.loading;
   return (
     <div
       className="container mx-auto px-4 pt-6 space-y-4"
@@ -58,8 +60,9 @@ function PageLoading({ label = 'Loading catalog' }: { label?: string }) {
       role="status"
       aria-live="polite"
       aria-busy="true"
+      aria-label={name}
     >
-      <span className="sr-only">{label}</span>
+      <span className="sr-only">{name}</span>
       <Skeleton className="h-8 w-48" />
       <div className={mediaGridClass}>
         {Array.from({ length: 12 }).map((_, i) => (
@@ -501,7 +504,7 @@ export function SeriesPage() {
 // ============ MOVIE DETAILS PAGE ============
 export function MovieDetailsPage() {
   const { id } = useParams();
-  const { lang } = useLang();
+  const { lang, t } = useLang();
   const { isLoggedIn } = useAuth();
   const [movie, setMovie] = useState<CatalogMovie | null>(null);
   const [related, setRelated] = useState<CatalogMovie[]>([]);
@@ -584,7 +587,7 @@ export function MovieDetailsPage() {
     load();
   }, [load]);
 
-  if (loading) return <PageLoading />;
+  if (loading) return <PageLoading label={`${t.common.loading} ${t.common.movie}`} />;
   if (error || !movie) return <PageError message={error || 'Movie not found'} onRetry={load} />;
 
   return (
@@ -600,7 +603,7 @@ export function MovieDetailsPage() {
 // ============ SERIES DETAILS PAGE ============
 export function SeriesDetailsPage() {
   const { id } = useParams();
-  const { lang } = useLang();
+  const { lang, t } = useLang();
   const { isLoggedIn } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -777,7 +780,15 @@ export function SeriesDetailsPage() {
 
   if (loading || !seasonInitialized) {
     return (
-      <div className="min-h-screen" data-testid="series-detail-loading">
+      <div
+        className="min-h-screen"
+        data-testid="series-detail-loading"
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+        aria-label={`${t.common.loading} ${t.common.series}`}
+      >
+        <span className="sr-only">{`${t.common.loading} ${t.common.series}`}</span>
         <Skeleton className="h-[58vh] w-full rounded-none" />
         <div className="container mx-auto max-w-6xl space-y-4 px-4 py-8">
           <Skeleton className="h-8 w-48" />
@@ -974,7 +985,7 @@ export function SearchPage() {
             </div>
           </div>
         ) : loading ? (
-          <PageLoading />
+          <PageLoading label={`${t.common.loading} ${t.nav.search}`} />
         ) : error ? (
           <div className="mx-auto max-w-lg space-y-3 text-center" data-testid="search-api-error">
             <p className="text-muted-foreground" role="alert">

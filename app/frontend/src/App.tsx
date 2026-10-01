@@ -8,7 +8,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createBrowserRouter, RouterProvider, Outlet, Navigate } from 'react-router-dom';
 import CustomerLayout, { LangProvider, AuthProvider } from '@/components/CustomerLayout';
 import DocumentLangSync from '@/components/DocumentLangSync';
-import CustomerDocumentTitle from '@/components/customer/CustomerDocumentTitle';
+import CustomerDocumentTitle, {
+  PlayerDocumentTitleProvider,
+} from '@/components/customer/CustomerDocumentTitle';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import Index from '@/pages/Index';
 
@@ -144,11 +146,11 @@ function AdminGate({ children }: { children: ReactNode }) {
 
 function RootLayout() {
   return (
-    <>
+    <PlayerDocumentTitleProvider>
       <DocumentLangSync />
       <CustomerDocumentTitle />
       <Outlet />
-    </>
+    </PlayerDocumentTitleProvider>
   );
 }
 

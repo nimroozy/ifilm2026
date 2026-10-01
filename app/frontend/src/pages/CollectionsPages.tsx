@@ -14,8 +14,18 @@ import { CollectionItemsGrid } from '@/components/collections/CollectionItemsGri
 import NotFoundPage from '@/pages/NotFoundPage';
 
 function PageLoading() {
+  const { t } = useLang();
+  const name = `${t.common.loading} ${t.pages.collectionsTitle}`;
   return (
-    <div className="container mx-auto space-y-4 px-4 pb-8 pt-6 sm:px-6 lg:px-8" data-testid="collections-loading">
+    <div
+      className="container mx-auto space-y-4 px-4 pb-8 pt-6 sm:px-6 lg:px-8"
+      data-testid="collections-loading"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      aria-label={name}
+    >
+      <span className="sr-only">{name}</span>
       <Skeleton className="h-8 w-48" />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }).map((_, i) => (
@@ -27,10 +37,15 @@ function PageLoading() {
 }
 
 function PageError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const { t } = useLang();
   return (
-    <div className="flex min-h-[40vh] flex-col items-center justify-center gap-3" data-testid="collections-error">
+    <div
+      className="flex min-h-[40vh] flex-col items-center justify-center gap-3"
+      data-testid="collections-error"
+      role="alert"
+    >
       <p className="text-muted-foreground">{message}</p>
-      <Button onClick={onRetry}>Retry</Button>
+      <Button onClick={onRetry}>{t.common.retry}</Button>
     </div>
   );
 }

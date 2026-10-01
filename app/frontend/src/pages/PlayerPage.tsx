@@ -2,6 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { VideoPlayer } from '@/player';
 import type { PlayerTarget } from '@/player';
+import { useLang } from '@/components/CustomerLayout';
+import {
+  resolveCustomerTitle,
+  useSetPlayerMediaTitle,
+} from '@/components/customer/CustomerDocumentTitle';
 import { api, tokenStore, type EpisodeDto } from '@/lib/api';
 
 /**
@@ -16,6 +21,8 @@ export default function PlayerPage() {
   const ep = params.get('ep');
   const seriesRef = params.get('series');
   const seasonRef = params.get('season');
+  const { t } = useLang();
+  const setPlayerMediaTitle = useSetPlayerMediaTitle();
   const [title, setTitle] = useState('Playback');
   const [neighbors, setNeighbors] = useState<{ prevId: number | null; nextId: number | null }>({
     prevId: null,
@@ -59,13 +66,19 @@ export default function PlayerPage() {
       try {
         if (target.kind === 'movie') {
           const movie = await api.getMovie(target.contentId);
-          if (!cancelled) setTitle(movie.title || `Movie ${target.contentId}`);
+          if (!cancelled) setTitle(movie.title?.trim() || `${t.common.movie} ${target.contentId}`);
           return;
         }
-        if (!cancelled) setTitle(`Episode ${target.contentId}`);
+        // Episode names are resolved from the series list when that id is known.
+        // Without it, the id is the only metadata available.
+        if (!seriesRef && !cancelled) setTitle(`${t.common.episode} ${target.contentId}`);
       } catch {
         if (!cancelled) {
-          setTitle(target.kind === 'movie' ? `Movie ${target.contentId}` : `Episode ${target.contentId}`);
+          setTitle(
+            target.kind === 'movie'
+              ? `${t.common.movie} ${target.contentId}`
+              : `${t.common.episode} ${target.contentId}`,
+          );
         }
       }
     }
@@ -73,7 +86,7 @@ export default function PlayerPage() {
     return () => {
       cancelled = true;
     };
-  }, [target]);
+  }, [seriesRef, t, target]);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,31 +111,41 @@ export default function PlayerPage() {
         const index = ordered.findIndex((item: EpisodeDto) => item.id === target.contentId);
         if (index < 0) {
           setNeighbors({ prevId: null, nextId: null });
+          setTitle(`${t.common.episode} ${target.contentId}`);
           return;
         }
         const current = ordered[index];
-        if (current?.title) setTitle(current.title);
+        setTitle(current?.title?.trim() || `${t.common.episode} ${target.contentId}`);
         setNeighbors({
           prevId: index > 0 ? ordered[index - 1].id : null,
           nextId: index < ordered.length - 1 ? ordered[index + 1].id : null,
         });
       } catch {
-        if (!cancelled) setNeighbors({ prevId: null, nextId: null });
+        if (!cancelled) {
+          setNeighbors({ prevId: null, nextId: null });
+          setTitle(`${t.common.episode} ${target.contentId}`);
+        }
       }
     }
     void loadNeighbors();
     return () => {
       cancelled = true;
     };
-  }, [target, seriesRef, seasonRef]);
+  }, [target, seriesRef, seasonRef, t]);
 
   const autoplayOnReady = Boolean(
     (location.state as { autoplay?: boolean } | null)?.autoplay
   );
 
   useEffect(() => {
-    document.title = `${title} · iFilm`;
-  }, [title]);
+    const published = title.trim() && title.trim() !== 'Playback' ? title.trim() : null;
+    setPlayerMediaTitle(published);
+    document.title = resolveCustomerTitle(location.pathname, t, published);
+  }, [location.pathname, setPlayerMediaTitle, t, title]);
+
+  useEffect(() => {
+    return () => setPlayerMediaTitle(null);
+  }, [setPlayerMediaTitle]);
 
   function goToEpisode(episodeId: number) {
     const qs = new URLSearchParams();
