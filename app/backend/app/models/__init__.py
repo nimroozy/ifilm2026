@@ -16,6 +16,7 @@ from app.models.media_playback import MediaPlaybackSession
 from app.models.media_processing import MediaProcessingJob, MediaProcessingJobEvent
 from app.models.media_tracks import MediaTrack
 from app.models.publication import MediaPublicationEvent
+from app.models.remote_media_import import RemoteMediaImport
 from app.models.subscriber_auth import (
     SubscriberDeviceSession,
     SubscriberEntitlementSnapshot,

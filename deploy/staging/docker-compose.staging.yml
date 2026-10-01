@@ -84,6 +84,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:?missing}
       PLAYBACK_TOKEN_SECRET: ${PLAYBACK_TOKEN_SECRET:?missing}
       ENABLE_UPLOADS: ${ENABLE_UPLOADS:-true}
+      ENABLE_REMOTE_MEDIA_IMPORT: ${ENABLE_REMOTE_MEDIA_IMPORT:-false}
       ENABLE_MEDIA_PROCESSING: ${ENABLE_MEDIA_PROCESSING:-true}
       ENABLE_HLS_ENCODING: ${ENABLE_HLS_ENCODING:-true}
       ENABLE_LOCAL_STREAMING: ${ENABLE_LOCAL_STREAMING:-true}
@@ -155,7 +156,8 @@ services:
       MEDIA_PROCESSING_WORKER_ID: ${MEDIA_PROCESSING_WORKER_ID:-staging-media-1}
     volumes:
       # Share all API upload categories (not just originals) so probe can read files.
-      - staging_media_originals:/data/media/originals:ro
+      # Originals RW for remote_media_import finalize into protected MEDIA_ROOT.
+      - staging_media_originals:/data/media/originals
       - staging_media_trailers:/data/media/trailers:ro
       - staging_media_subtitles:/data/media/subtitles:ro
       - staging_media_audio:/data/media/audio:ro

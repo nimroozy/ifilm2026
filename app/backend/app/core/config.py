@@ -127,6 +127,17 @@ class Settings(BaseSettings):
     # media asset is rejected (409). Failed/cancelled assets are ignored.
     upload_reject_duplicate_checksum: bool = True
 
+    # Server-to-server remote media import (MP4 → protected local MEDIA_ROOT).
+    enable_remote_media_import: bool = False
+    remote_import_max_bytes: int = 50 * 1024 * 1024 * 1024
+    remote_import_connect_timeout: float = 10.0
+    remote_import_read_timeout: float = 60.0
+    remote_import_stall_timeout: float = 120.0
+    remote_import_max_attempts: int = 3
+    remote_import_chunk_bytes: int = 1024 * 1024
+    remote_import_progress_interval_seconds: float = 2.0
+    remote_import_disk_reserve_bytes: int = 5 * 1024 * 1024 * 1024
+
     redis_url: str = "redis://localhost:6379/0"
     worker_queue_name: str = "ifilm"
     redis_required: bool = False

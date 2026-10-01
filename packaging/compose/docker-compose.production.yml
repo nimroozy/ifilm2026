@@ -75,6 +75,8 @@ services:
       IFILM_VERSION_FILE: ${IFILM_VERSION_FILE:-/opt/ifilm/current/release-manifest.json}
       MAINTENANCE_MODE: ${MAINTENANCE_MODE:-false}
       ENABLE_UPLOADS: ${ENABLE_UPLOADS:-false}
+      # Server-to-server MP4 import into protected MEDIA_ROOT (Import from URL).
+      ENABLE_REMOTE_MEDIA_IMPORT: ${ENABLE_REMOTE_MEDIA_IMPORT:-false}
       # Canonical pipeline: media-processing-worker only (docs/media/PIPELINE.md).
       # Legacy ARQ EncodingJob path is hard-blocked when APP_ENV=production.
       ENABLE_ENCODING: "false"
@@ -160,7 +162,8 @@ services:
       # Must share every category the API can finalize uploads into.
       # Missing mounts create empty container-local dirs (ensure_media_layout)
       # and probe fails with "Uploaded media file is missing" (prod trailers bug).
-      - /var/lib/ifilm/media/originals:/data/media/originals:ro
+      # Originals are RW for remote_media_import finalize (temp → originals).
+      - /var/lib/ifilm/media/originals:/data/media/originals
       - /var/lib/ifilm/media/trailers:/data/media/trailers:ro
       - /var/lib/ifilm/media/subtitles:/data/media/subtitles:ro
       - /var/lib/ifilm/media/audio:/data/media/audio:ro

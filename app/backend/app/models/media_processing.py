@@ -26,6 +26,7 @@ TERMINAL_JOB_STATUSES = frozenset({"completed", "failed", "cancelled"})
 JOB_TYPE_PROBE = "probe"
 JOB_TYPE_ENCODE_HLS = "encode_hls"
 JOB_TYPE_ORIGIN_SYNC = "origin_sync"
+JOB_TYPE_REMOTE_MEDIA_IMPORT = "remote_media_import"
 
 
 class MediaProcessingJob(Base):

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.db.session import SessionLocal, get_engine
-from app.models.media_processing import JOB_TYPE_ENCODE_HLS, JOB_TYPE_ORIGIN_SYNC, JOB_TYPE_PROBE
+from app.models.media_processing import JOB_TYPE_ENCODE_HLS, JOB_TYPE_ORIGIN_SYNC, JOB_TYPE_PROBE, JOB_TYPE_REMOTE_MEDIA_IMPORT
 from app.services.media_processing.ffmpeg import binary_available, resolve_binary
 from app.services.media_processing.jobs import (
     claim_next_job,
@@ -157,6 +157,10 @@ def run_once(db: Session, *, settings: Settings, worker_id: str) -> bool:
                 transient=True,
             )
             db.commit()
+    elif job.job_type == JOB_TYPE_REMOTE_MEDIA_IMPORT:
+        from app.services.media_remote_import import execute_remote_media_import
+
+        execute_remote_media_import(db, settings=settings, job=job)
     else:
         logger.error("Unsupported job type %s for job %s", job.job_type, job.id)
         fail_or_retry(
