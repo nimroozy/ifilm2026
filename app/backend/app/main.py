@@ -68,17 +68,25 @@ async def lifespan(_: FastAPI):
     # Demo/admin seed data is created only by the explicit seed command.
     # Merge newly introduced Super Admin capabilities on upgrade (idempotent).
     try:
-        from app.bootstrap import ensure_super_admin_permissions
-        from app.db.session import SessionLocal
+        from sqlalchemy.exc import UnboundExecutionError
 
+        from app.bootstrap import ensure_super_admin_permissions
+        from app.db.session import SessionLocal, get_engine
+
+        # SessionLocal is created unbound. Bind it before opening a session so
+        # the permission merge is not skipped with UnboundExecutionError.
+        get_engine()
         db = SessionLocal()
         try:
             if ensure_super_admin_permissions(db):
                 db.commit()
         finally:
             db.close()
+    except UnboundExecutionError:
+        # An unbound session is a startup defect, not an unavailable database.
+        raise
     except Exception:
-        # Never block API boot on optional permission merge.
+        # Never block API boot when the database is actually unavailable.
         logging.getLogger(__name__).exception("Super Admin permission merge skipped")
     yield
 
