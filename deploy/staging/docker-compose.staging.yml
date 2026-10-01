@@ -232,7 +232,7 @@ services:
     networks: [staging_net]
 
   nginx:
-    image: nginx:1.27-alpine
+    image: nginx:1.28.3-alpine3.23
     restart: unless-stopped
     depends_on:
       backend-api:
