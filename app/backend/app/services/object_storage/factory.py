@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -57,7 +58,7 @@ def get_central_origin_storage(settings: Settings | None = None) -> ObjectStorag
 def get_hot_tier_storage(
     settings: Settings | None = None, db: Session | None = None
 ) -> ObjectStorage | None:
-    """Optional R2/hot CDN tier. Returns None when disabled (default)."""
+    """Optional R2/hot CDN tier for capped titles. Returns None when disabled (default)."""
     cfg = settings or get_settings()
     runtime = None
     if db is not None:
@@ -76,5 +77,79 @@ def get_hot_tier_storage(
             force_path_style=False,
             provider_kind=StorageProviderKind.R2,
             role=StorageRole.HOT_CDN,
+        )
+    )
+
+
+def get_artwork_cdn_storage(
+    settings: Settings | None = None, db: Session | None = None
+) -> ObjectStorage | None:
+    """R2 bucket for public website artwork/trailers. Independent of MinIO/AWS origin.
+
+    When an Admin IntegrationConfig row exists, ``artwork_cdn_enabled`` must be true
+    and credentials come from that row only (env R2_* must not override a disabled
+    admin toggle). When no Admin row exists, legacy env ``R2_*`` may be used.
+
+    Does **not** require ``ENABLE_OBJECT_STORAGE``, ``ENABLE_R2_HOT_TIER``, or
+    ``row.enabled`` (private/hot-tier switch).
+    """
+    cfg = settings or get_settings()
+    if not cfg.enable_artwork_cdn_sync:
+        return None
+
+    runtime: dict[str, Any] | None = None
+    admin_row_present = False
+    if db is not None:
+        from app.services.cdn_management import resolve_r2_credentials_for_artwork, storage_row
+
+        admin_row_present = storage_row(db) is not None
+        if admin_row_present:
+            runtime = resolve_r2_credentials_for_artwork(db, cfg)
+            if runtime is None:
+                # Admin row exists but artwork toggle off / incomplete — do not fall back to env.
+                return None
+
+    if runtime is not None:
+        endpoint = runtime.get("endpoint_url")
+        bucket = runtime.get("bucket")
+        region = runtime.get("region") or "auto"
+        access_key = runtime.get("access_key_id")
+        secret_key = runtime.get("secret_access_key")
+        provider = str(runtime.get("provider") or "cloudflare_r2").strip().lower()
+    else:
+        if admin_row_present:
+            return None
+        # Legacy env-only path (no Admin storage row).
+        endpoint = cfg.r2_endpoint_url
+        bucket = cfg.r2_bucket
+        region = cfg.r2_region or "auto"
+        access_key = cfg.r2_access_key_id
+        secret_key = cfg.r2_secret_access_key
+        provider = "cloudflare_r2"
+
+    if not all(
+        (
+            str(endpoint or "").strip(),
+            str(bucket or "").strip(),
+            str(access_key or "").strip(),
+            str(secret_key or "").strip(),
+        )
+    ):
+        return None
+
+    return S3CompatibleStorage(
+        S3CompatibleConfig(
+            endpoint_url=str(endpoint).strip(),
+            bucket=str(bucket).strip(),
+            region=str(region).strip() or "auto",
+            access_key_id=str(access_key).strip(),
+            secret_access_key=str(secret_key).strip(),
+            force_path_style=provider == "s3_compatible",
+            provider_kind=(
+                StorageProviderKind.R2
+                if provider == "cloudflare_r2"
+                else StorageProviderKind.S3_COMPATIBLE
+            ),
+            role=StorageRole.ARTWORK_CDN,
         )
     )

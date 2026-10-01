@@ -14,6 +14,8 @@ class StorageRole(StrEnum):
     CENTRAL_ORIGIN = "central_origin"
     # Optional policy-driven hot tier (e.g. Cloudflare R2) — never the full library.
     HOT_CDN = "hot_cdn"
+    # Public website artwork / trailer binaries on R2 + Cloudflare CDN (not HLS movies).
+    ARTWORK_CDN = "artwork_cdn"
     # Future pull-through caches on branch servers (Phase 2+).
     BRANCH_CACHE = "branch_cache"
 

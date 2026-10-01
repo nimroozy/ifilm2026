@@ -6,14 +6,23 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class R2SettingsIn(BaseModel):
+    """Storage / R2 settings payload. Secrets are write-only; responses never echo them."""
+
     enabled: bool = False
-    endpoint_url: str = Field(max_length=512)
+    provider: Literal["cloudflare_r2", "s3_compatible"] | None = None
+    # Optional for Cloudflare R2 (derived from account_id). Required for s3_compatible.
+    endpoint_url: str = Field(default="", max_length=512)
     account_id: str | None = Field(default=None, max_length=128)
     bucket: str = Field(min_length=1, max_length=255)
     region: str = Field(default="auto", max_length=64)
+    object_key_prefix: str | None = Field(default=None, max_length=64)
+    # Public Cloudflare custom domain (or r2.dev) for posters/backdrops/trailers.
+    public_base_url: str | None = Field(default=None, max_length=512)
+    artwork_cdn_enabled: bool = False
     access_key_id: str | None = Field(default=None, max_length=512)
     secret_access_key: str | None = Field(default=None, max_length=2048)
     remove_credentials: bool = False
+    confirm: bool = False
 
 
 class ManagedNodeIn(BaseModel):

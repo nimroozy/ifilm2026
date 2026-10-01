@@ -76,8 +76,16 @@ class S3CompatibleStorage:
         key: str,
         source: Path,
         content_type: str | None = None,
+        cache_control: str | None = None,
     ) -> StoredObject:
-        extra_args = {"ContentType": content_type} if content_type else None
+        extra_args: dict[str, str] = {}
+        if content_type:
+            extra_args["ContentType"] = content_type
+        if cache_control:
+            extra_args["CacheControl"] = cache_control
+        # Public artwork CDN objects are versioned by content-addressed filenames.
+        if self._config.role == StorageRole.ARTWORK_CDN and "CacheControl" not in extra_args:
+            extra_args["CacheControl"] = "public, max-age=31536000, immutable"
         if extra_args:
             self._client.upload_file(str(source), self._bucket, key, ExtraArgs=extra_args)
         else:
@@ -115,3 +123,62 @@ class S3CompatibleStorage:
             "endpoint_host": host,
             "bucket_configured": True,
         }
+
+
+def probe_s3_connection(config: S3CompatibleConfig) -> dict[str, Any]:
+    """Secret-free connectivity probe: endpoint reachability + bucket access.
+
+    Distinguishes network/endpoint failures from bucket permission errors.
+    Never includes credentials or raw provider payloads in the result.
+    """
+    host = urlparse(config.endpoint_url).hostname or "configured"
+    try:
+        storage = S3CompatibleStorage(config)
+    except (ValueError, RuntimeError) as exc:
+        return {
+            "ok": False,
+            "reachable": False,
+            "bucket_accessible": False,
+            "endpoint_host": host,
+            "message": str(exc),
+        }
+    client = storage._client  # noqa: SLF001 — probe is part of this module
+    try:
+        client.head_bucket(Bucket=config.bucket.strip())
+    except Exception as exc:  # noqa: BLE001 — classify without leaking provider payloads
+        response = getattr(exc, "response", None)
+        status_code = None
+        if isinstance(response, dict):
+            meta = response.get("ResponseMetadata") or {}
+            status_code = meta.get("HTTPStatusCode")
+            if status_code is None:
+                error = response.get("Error") or {}
+                code = str(error.get("Code") or "")
+                status_code = int(code) if code.isdigit() else None
+        if status_code is not None:
+            reason = {
+                403: "Bucket exists but the credentials are not allowed to access it",
+                404: "Bucket was not found on this endpoint",
+                301: "Bucket belongs to a different region or endpoint",
+            }.get(int(status_code), f"Bucket check failed (HTTP {status_code})")
+            return {
+                "ok": False,
+                "reachable": True,
+                "bucket_accessible": False,
+                "endpoint_host": host,
+                "message": reason,
+            }
+        return {
+            "ok": False,
+            "reachable": False,
+            "bucket_accessible": False,
+            "endpoint_host": host,
+            "message": f"Endpoint unreachable ({type(exc).__name__})",
+        }
+    return {
+        "ok": True,
+        "reachable": True,
+        "bucket_accessible": True,
+        "endpoint_host": host,
+        "message": "Endpoint reachable and bucket accessible",
+    }
