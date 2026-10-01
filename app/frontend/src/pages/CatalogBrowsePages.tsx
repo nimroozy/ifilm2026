@@ -15,9 +15,19 @@ import { catalogAvailabilityBadges, itemIsDubbed, itemIsSubtitled } from '@/lib/
 import { canPlayFullMovie, hasDemoClip } from '@/lib/catalogPresentation';
 import { MediaCard, mediaGridClass } from '@/design-system';
 
-function PageLoading() {
+function PageLoading({ label }: { label?: string }) {
+  const { t } = useLang();
+  const name = label ?? t.common.loading;
   return (
-    <div className="container mx-auto space-y-4 px-4 pt-6" data-testid="browse-loading">
+    <div
+      className="container mx-auto space-y-4 px-4 pt-6"
+      data-testid="browse-loading"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      aria-label={name}
+    >
+      <span className="sr-only">{name}</span>
       <Skeleton className="h-8 w-48" />
       <div className={mediaGridClass}>
         {Array.from({ length: 12 }).map((_, i) => (
@@ -29,10 +39,15 @@ function PageLoading() {
 }
 
 function PageError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const { t } = useLang();
   return (
-    <div className="flex min-h-[40vh] flex-col items-center justify-center gap-3" data-testid="browse-error">
+    <div
+      className="flex min-h-[40vh] flex-col items-center justify-center gap-3"
+      data-testid="browse-error"
+      role="alert"
+    >
       <p className="text-muted-foreground">{message}</p>
-      <Button onClick={onRetry}>Retry</Button>
+      <Button onClick={onRetry}>{t.common.retry}</Button>
     </div>
   );
 }
