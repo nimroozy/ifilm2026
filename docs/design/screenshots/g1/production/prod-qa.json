@@ -1,0 +1,386 @@
+{
+  "version": "1.15.0",
+  "base": "https://ifilm.af",
+  "started_at": "2026-08-09T11:50:00.194Z",
+  "checks": {
+    "desktop_en_overflow": {
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "overflowX": false
+    },
+    "header_nav": {
+      "home": true,
+      "movies": true,
+      "series": true,
+      "children": true,
+      "genres": true,
+      "more": true,
+      "notifications": false
+    },
+    "more_menu": {
+      "collections": true,
+      "what_to_watch": true,
+      "dubbed": true,
+      "subtitled": true,
+      "new_releases": true,
+      "request": true
+    },
+    "hero_ctas": {
+      "play": true,
+      "more_info": true,
+      "autoplay_attr": "false",
+      "note": "Accessible name is \"Play {title}\"; verified via data-testid=hero-play / hero-more-info"
+    },
+    "hero_manual_idle_32s": {
+      "before": {
+        "title": "Soulm8te",
+        "img": "https://ifilm.af/artwork/backdrops/tmdb-backdrop-1307118-85635dc54447.jpg",
+        "activeDotLabel": "Show Soulm8te",
+        "dots": 6,
+        "autoplay": "false"
+      },
+      "after": {
+        "title": "Soulm8te",
+        "img": "https://ifilm.af/artwork/backdrops/tmdb-backdrop-1307118-85635dc54447.jpg",
+        "activeDotLabel": "Show Soulm8te",
+        "dots": 6,
+        "autoplay": "false"
+      },
+      "unchanged": true
+    },
+    "hero_arrows": {
+      "next": true,
+      "prev": true
+    },
+    "hero_next_changes": {
+      "before": "Soulm8te",
+      "after": "The Shawshank Redemption",
+      "changed": true
+    },
+    "header_scroll": {
+      "before": "none|rgba(0, 0, 0, 0)",
+      "after": "blur(12px)|rgba(15, 18, 26, 0.75)",
+      "changed": true
+    },
+    "card_ratio": {
+      "width": 220,
+      "height": 397.25,
+      "ratio": 1.8056818181818182
+    },
+    "card_hover": {
+      "play": true,
+      "myList": true,
+      "details": true
+    },
+    "shelf_headers": 11,
+    "footer": {
+      "haroon": true,
+      "mobin_by": false,
+      "credits_link": true,
+      "tmdb_prominent": false
+    },
+    "credits_page": {
+      "tmdb": true,
+      "haroon": true
+    },
+    "about": {
+      "haroon": true,
+      "mobin_by": false
+    },
+    "desktop_fa": {
+      "dir": "rtl",
+      "overflow": {
+        "scrollWidth": 1440,
+        "clientWidth": 1440,
+        "overflowX": false
+      },
+      "nextLabel": "Previous featured title"
+    },
+    "mobile_en_390": {
+      "overflow": {
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "overflowX": false
+      },
+      "dir": "ltr",
+      "ctaBoxes": [
+        {
+          "text": "Play",
+          "y": 406,
+          "h": 44,
+          "w": 133
+        },
+        {
+          "text": "More Info",
+          "y": 406,
+          "h": 44,
+          "w": 127
+        },
+        {
+          "text": "My List",
+          "y": 406,
+          "h": 44,
+          "w": 44
+        }
+      ],
+      "cta_row_bands": 1
+    },
+    "mobile_en_390_bottom_labels": true,
+    "mobile_swipe_or_dot": {
+      "before": "Soulm8te",
+      "after": "The Shawshank Redemption",
+      "changed": true
+    },
+    "mobile_footer_height": 325,
+    "mobile_fa_390": {
+      "overflow": {
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "overflowX": false
+      },
+      "dir": "rtl",
+      "ctaBoxes": [
+        {
+          "text": "\u067e\u062e\u0634",
+          "y": 406,
+          "h": 44,
+          "w": 133
+        },
+        {
+          "text": "\u0627\u0637\u0644\u0627\u0639\u0627\u062a \u0628\u06cc\u0634\u062a\u0631",
+          "y": 406,
+          "h": 44,
+          "w": 127
+        },
+        {
+          "text": "\u0644\u06cc\u0633\u062a \u0645\u0646",
+          "y": 406,
+          "h": 44,
+          "w": 44
+        }
+      ],
+      "cta_row_bands": 1
+    },
+    "mobile_ps_390": {
+      "overflow": {
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "overflowX": false
+      },
+      "dir": "rtl",
+      "ctaBoxes": [
+        {
+          "text": "\u067e\u062e\u0634",
+          "y": 406,
+          "h": 44,
+          "w": 133
+        },
+        {
+          "text": "\u0646\u0648\u0631 \u0645\u0639\u0644\u0648\u0645\u0627\u062a",
+          "y": 406,
+          "h": 44,
+          "w": 127
+        },
+        {
+          "text": "\u0632\u0645\u0627 \u0644\u06cc\u0633\u062a",
+          "y": 406,
+          "h": 44,
+          "w": 44
+        }
+      ],
+      "cta_row_bands": 1
+    },
+    "mobile_en_430": {
+      "overflow": {
+        "scrollWidth": 430,
+        "clientWidth": 430,
+        "overflowX": false
+      },
+      "dir": "ltr",
+      "ctaBoxes": [
+        {
+          "text": "Play",
+          "y": 459,
+          "h": 44,
+          "w": 133
+        },
+        {
+          "text": "More Info",
+          "y": 459,
+          "h": 44,
+          "w": 127
+        },
+        {
+          "text": "My List",
+          "y": 459,
+          "h": 44,
+          "w": 44
+        }
+      ],
+      "cta_row_bands": 1
+    },
+    "mobile_en_430_bottom_labels": true,
+    "continue_watching_ui": {
+      "section": true,
+      "season_ep": true
+    },
+    "card_poster_ratio": {
+      "ratio": 1.5,
+      "note": "poster img 220x330 exact 2:3; outer card includes title row"
+    }
+  },
+  "findings": [
+    {
+      "severity": "INFO",
+      "message": "Homepage DB query count not measured: pg_stat_statements requires shared_preload_libraries (would need postgres restart). Home API ~189ms / 164KB; 2 browser API calls (config+home)."
+    },
+    {
+      "severity": "INFO",
+      "message": "Main JS +6.1KB raw / +1.8KB gzip vs v1.14.3 (~2%) \u2014 acceptable for UI V2; no new libraries."
+    }
+  ],
+  "screenshots": {
+    "home-desktop-en-1440.png": "/opt/cursor/artifacts/v1150-prod/screenshots/home-desktop-en-1440.png",
+    "home-desktop-fa-1440.png": "/opt/cursor/artifacts/v1150-prod/screenshots/home-desktop-fa-1440.png",
+    "home-mobile-en-390.png": "/opt/cursor/artifacts/v1150-prod/screenshots/home-mobile-en-390.png",
+    "home-mobile-fa-390.png": "/opt/cursor/artifacts/v1150-prod/screenshots/home-mobile-fa-390.png",
+    "home-mobile-ps-390.png": "/opt/cursor/artifacts/v1150-prod/screenshots/home-mobile-ps-390.png",
+    "home-mobile-en-430.png": "/opt/cursor/artifacts/v1150-prod/screenshots/home-mobile-en-430.png"
+  },
+  "performance": {
+    "main_js": {
+      "path": "/assets/index-DgFfjm4m.js",
+      "raw": 317156,
+      "gzip": 100192,
+      "baseline_v1143_raw": 311046,
+      "delta_raw": 6110,
+      "delta_pct": 1.96
+    },
+    "desktop_en_1440": {
+      "wall_ms": 3789,
+      "domContentLoaded": 942.6000000014901,
+      "loadEventEnd": 943.1000000014901,
+      "lcp": null,
+      "fcp": 1120,
+      "api_calls": [
+        "/api/config",
+        "/api/catalog/home?locale=en"
+      ],
+      "api_count": 2,
+      "artwork_count": 19,
+      "artwork_sample": [
+        "/artwork/backdrops/tmdb-backdrop-1307118-85635dc54447.jpg",
+        "/artwork/logos/tmdb-logo-1307118-6e4f987d7b8c.png",
+        "/artwork/posters/tmdb-poster-1307118-e1212fd12c7d.jpg",
+        "/artwork/posters/tmdb-poster-862-8d57cc265f39.jpg",
+        "/artwork/posters/tmdb-poster-550-af0fa89e58ba.jpg",
+        "/artwork/posters/tmdb-poster-12-43f97d570d04.jpg",
+        "/artwork/posters/tmdb-poster-515042-7d66ba9b524f.jpg",
+        "/artwork/posters/tmdb-poster-157336-b52e6de92ced.jpg",
+        "/artwork/backdrops/tmdb-backdrop-278-e96e113127bf.jpg",
+        "/artwork/posters/tmdb-poster-27205-6f61d595bea2.jpg",
+        "/artwork/posters/tmdb-poster-680-14eba2596b66.jpg",
+        "/artwork/posters/tmdb-poster-278-40af99dc071f.jpg"
+      ]
+    },
+    "mobile_fast3g": {
+      "wall_ms": 6758,
+      "lcp_ms": 3384
+    },
+    "bundle_comparison": {
+      "v1143": {
+        "raw": 311046,
+        "gzip": 97714,
+        "path": "index-BLH-V6n2.js"
+      },
+      "v1150": {
+        "raw": 317156,
+        "gzip": 99538,
+        "path": "index-DgFfjm4m.js"
+      },
+      "delta_raw": 6110,
+      "delta_gzip": 1824,
+      "delta_pct_raw": 1.96
+    }
+  },
+  "functional": {
+    "continue_watching_api": {
+      "status": 200,
+      "count": 2,
+      "sample": [
+        {
+          "title": "QA Ep1 1786265548",
+          "progress": 75.56,
+          "season": 1,
+          "episode": 1
+        },
+        {
+          "title": "The Killer Man",
+          "progress": 45,
+          "season": null,
+          "episode": null
+        }
+      ]
+    },
+    "watchlist_api": {
+      "status": 200
+    },
+    "anon_mylist_route": {
+      "url": "https://ifilm.af/login",
+      "ok": true
+    },
+    "movies": {
+      "status": 200,
+      "notFound": false,
+      "url": "https://ifilm.af/movies"
+    },
+    "series": {
+      "status": 200,
+      "notFound": false,
+      "url": "https://ifilm.af/series"
+    },
+    "search": {
+      "status": 200,
+      "notFound": false,
+      "url": "https://ifilm.af/search"
+    },
+    "request": {
+      "status": 200,
+      "notFound": false,
+      "url": "https://ifilm.af/request"
+    },
+    "playback_session": {
+      "status": 201,
+      "has_token": true,
+      "stream": 200,
+      "ok": true
+    },
+    "recommendations": {
+      "status": 200
+    },
+    "search_api": {
+      "status": 200
+    },
+    "admin_login": {
+      "status": 200
+    }
+  },
+  "finished_at": "2026-08-09T11:51:24.953Z",
+  "summary": {
+    "blocker_count": 0,
+    "high_count": 0,
+    "ready": true,
+    "verified_at": "2026-08-09T11:52:00Z"
+  },
+  "deploy": {
+    "version": "1.15.0",
+    "migration_head": "023_media_tracks_packaging_v1",
+    "rollback_target": "1.14.3",
+    "merge_sha": "5daa0e8b9069c19db75135dec8123555030cbd84",
+    "backend_digest": "sha256:71b0f97a1a722523d402bcd1c175a778639460080e74f7270b4b3ffd035e171e",
+    "frontend_digest": "sha256:5202d2ecec5c5f4d33d92663efdc5fef2766fef8f3339a867713c32aed59752f",
+    "release": "https://github.com/nimroozy/ifilm2026/releases/tag/v1.15.0",
+    "workflow": "https://github.com/nimroozy/ifilm2026/actions/runs/31311127454",
+    "install_job": "2c07332b2bef3168"
+  }
+}
