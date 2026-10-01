@@ -12,13 +12,21 @@ ENV VITE_API_BASE_URL=/ \
     VITE_APP_VERSION=$VITE_APP_VERSION
 RUN pnpm run build
 
-# nginx 1.27-alpine is Alpine 3.21 (openssl 3.3.7-r1). Trivy flags actionable
-# HIGH CVE-2026-75804/84782 with FixedVersion 3.3.7-r2, which is not published
-# on 3.21; Alpine 3.23 ships openssl 3.5.9-r0 and clears the gate.
-FROM nginx:1.28.3-alpine3.23 AS runtime
-# Apply available Alpine security updates (defense in depth).
-RUN apk update && apk upgrade --no-cache
+# Use Alpine's nginx package (not the official nginx image). The official
+# nginx:*-alpine images pin nginx.org APK builds that lag Alpine security
+# revisions, so `apk upgrade` cannot clear actionable Trivy HIGH findings
+# (CVE-2026-42055/42533/49975/60005/9256 need nginx>=1.28.3-r6; Alpine 3.23
+# ships 1.28.3-r7). Also clears prior openssl CVEs on Alpine 3.21 bases.
+FROM alpine:3.23 AS runtime
+RUN apk update \
+    && apk add --no-cache nginx wget \
+    && apk upgrade --no-cache \
+    && nginx -v \
+    && apk info -v nginx libssl3 libcrypto3 \
+    && mkdir -p /run/nginx /usr/share/nginx/html
 COPY --from=build /src/dist /usr/share/nginx/html
-COPY docker/nginx-spa.conf /etc/nginx/conf.d/default.conf
+COPY docker/nginx-spa.conf /etc/nginx/http.d/default.conf
+RUN nginx -t
 EXPOSE 80
 HEALTHCHECK --interval=20s --timeout=5s --retries=5 CMD wget -qO- http://127.0.0.1/ || exit 1
+CMD ["nginx", "-g", "daemon off;"]
