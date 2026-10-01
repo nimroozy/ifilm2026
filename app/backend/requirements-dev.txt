@@ -2,5 +2,6 @@
 pytest>=8.3.0
 pytest-asyncio>=0.24.0
 ruff>=0.9.0
-mypy>=1.14.0
+# Exact pin so CI does not float across mypy 1.x/2.x. Verified clean on 2.3.1.
+mypy==2.3.1
 types-redis>=4.6.0
