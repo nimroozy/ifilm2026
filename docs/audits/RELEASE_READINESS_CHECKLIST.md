@@ -129,11 +129,10 @@ Status keys: **main** | **draft PR** | **tests** | **browser/staging** | **produ
 ## GUI integration branch
 
 - Branch: `cursor/gui-stabilization-4873`
-- PR: **#94 DRAFT**
-- Base: `origin/main` @ `5adb6d47…`
-- Reused commits (cherry-pick order): `f08be9aa` (#80), then `17c56899` (#79)
-- Follow-up: localized availability labels; RTL hero isolate; entrance-settled captures; shared case finalizer; watchlist + LOCAL playback
-- Alembic head on this branch: **029** (do not import #93 migration 030)
+- PR: **#94 MERGED** into `main` @ `9d7f81be50a601e539608c23e7b45e9b8a9c5d0b` (approved tip `906de02d…`)
+- PRs #79 / #80: closed as superseded by #94 (branches retained)
+- Production verification of GUI tip: **still pending** (no release/deploy from this merge)
+- Alembic head on main: **029** (do not import #93 migration 030 here)
 
 ---
 
