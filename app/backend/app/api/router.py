@@ -9,6 +9,7 @@ from app.api.routes import (
     auth,
     auth_isp,
     cdn,
+    cdn_node,
     collections,
     config,
     content_requests,
@@ -59,6 +60,7 @@ api_router.include_router(media_processing.router)
 api_router.include_router(media_tracks.router)
 api_router.include_router(encoding.router)
 api_router.include_router(cdn.router)
+api_router.include_router(cdn_node.router)
 api_router.include_router(stream.router)
 api_router.include_router(system_updates.router)
 api_router.include_router(tmdb_admin.router)

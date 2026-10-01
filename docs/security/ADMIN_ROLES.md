@@ -33,6 +33,7 @@ Demo seed roles live in `app/services/demo/constants.py` (`ADMIN_FIXTURES`). Pro
 | `streaming.read` (preview) | ✓ | — | ✓ | ✓ | ✓ |
 | `streaming.manage` (admin sessions / revoke-all) | ✓ | — | ✓ | — | — |
 | `system_updates.*` | ✓ | — | — | — | — |
+| `cdn.read` / `cdn.manage` / `cdn.provision` / `cdn.routing` / `cdn.secrets` (Admin → CDN, Storage / R2) | ✓ | — | — | — | — |
 
 Legacy aliases (`movies`, `upload`, `streaming`, …) still satisfy dotted permissions via `PERMISSION_ALIASES`.
 

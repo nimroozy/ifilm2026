@@ -20,6 +20,9 @@ Legacy coarse keys from the foundation seed remain supported with a narrow map:
 | `streaming.manage` | `streaming.manage`, `streaming` |
 | `cdn.read` | `cdn.read`, `cdn.manage`, `cdn` |
 | `cdn.manage` | `cdn.manage`, `cdn` |
+| `cdn.provision` | `cdn.provision`, `cdn.manage`, `cdn` |
+| `cdn.routing` | `cdn.routing`, `cdn.manage`, `cdn` |
+| `cdn.secrets` | `cdn.secrets`, `cdn.manage`, `cdn`, `settings` |
 | `catalog.read` | `catalog.read` (exact; movies.read / series.read do not grant workflow reads) |
 | `catalog.edit` | `catalog.edit` |
 | `catalog.review` | `catalog.review` |
@@ -67,6 +70,10 @@ PERMISSION_ALIASES: dict[str, frozenset[str]] = {
     "streaming.manage": frozenset({"streaming.manage", "streaming"}),
     "cdn.read": frozenset({"cdn.read", "cdn.manage", "cdn"}),
     "cdn.manage": frozenset({"cdn.manage", "cdn"}),
+    "cdn.provision": frozenset({"cdn.provision", "cdn.manage", "cdn"}),
+    "cdn.routing": frozenset({"cdn.routing", "cdn.manage", "cdn"}),
+    # Storage/R2 secrets: legacy `settings` admins keep access (additive).
+    "cdn.secrets": frozenset({"cdn.secrets", "cdn.manage", "cdn", "settings"}),
 }
 
 

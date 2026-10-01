@@ -17,6 +17,11 @@ import {
   Sparkles,
   Inbox,
   Globe,
+  Server,
+  Route,
+  Activity,
+  Radar,
+  Cloud,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -68,10 +73,19 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
+    label: 'CDN',
+    items: [
+      { to: '/admin/cdn', label: 'Overview', icon: Radar, end: true },
+      { to: '/admin/cdn/servers', label: 'Servers', icon: Server },
+      { to: '/admin/cdn/routing', label: 'Routing', icon: Route },
+      { to: '/admin/cdn/health', label: 'Health / Metrics', icon: Activity },
+    ],
+  },
+  {
     label: 'System',
     items: [
       { to: '/admin/settings/portal', label: 'Portal', icon: Globe },
-      { to: '/admin/settings/r2', label: 'Cloudflare R2', icon: Globe },
+      { to: '/admin/settings/storage', label: 'Storage / R2', icon: Cloud },
       { to: '/admin/system/updates', label: 'Updates', icon: ArrowUpCircle },
     ],
   },

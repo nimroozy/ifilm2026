@@ -115,3 +115,63 @@ class S3CompatibleStorage:
             "endpoint_host": host,
             "bucket_configured": True,
         }
+
+
+def probe_s3_connection(config: S3CompatibleConfig) -> dict[str, Any]:
+    """Secret-free connectivity probe: endpoint reachability + bucket access.
+
+    Distinguishes network/endpoint failures from bucket permission errors so the
+    admin UI can show ``reachable`` and ``bucket_accessible`` separately. Never
+    includes credentials, request ids, or raw provider messages in the result.
+    """
+    host = urlparse(config.endpoint_url).hostname or "configured"
+    try:
+        storage = S3CompatibleStorage(config)
+    except (ValueError, RuntimeError) as exc:
+        return {
+            "ok": False,
+            "reachable": False,
+            "bucket_accessible": False,
+            "endpoint_host": host,
+            "message": str(exc),
+        }
+    client = storage._client  # noqa: SLF001 — probe is part of this module
+    try:
+        client.head_bucket(Bucket=config.bucket.strip())
+    except Exception as exc:  # noqa: BLE001 — classify without leaking provider payloads
+        response = getattr(exc, "response", None)
+        status_code = None
+        if isinstance(response, dict):
+            meta = response.get("ResponseMetadata") or {}
+            status_code = meta.get("HTTPStatusCode")
+            if status_code is None:
+                error = response.get("Error") or {}
+                code = str(error.get("Code") or "")
+                status_code = int(code) if code.isdigit() else None
+        if status_code is not None:
+            reason = {
+                403: "Bucket exists but the credentials are not allowed to access it",
+                404: "Bucket was not found on this endpoint",
+                301: "Bucket belongs to a different region or endpoint",
+            }.get(int(status_code), f"Bucket check failed (HTTP {status_code})")
+            return {
+                "ok": False,
+                "reachable": True,
+                "bucket_accessible": False,
+                "endpoint_host": host,
+                "message": reason,
+            }
+        return {
+            "ok": False,
+            "reachable": False,
+            "bucket_accessible": False,
+            "endpoint_host": host,
+            "message": f"Endpoint unreachable ({type(exc).__name__})",
+        }
+    return {
+        "ok": True,
+        "reachable": True,
+        "bucket_accessible": True,
+        "endpoint_host": host,
+        "message": "Endpoint reachable and bucket accessible",
+    }

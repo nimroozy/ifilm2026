@@ -51,15 +51,18 @@ def build_router(
             )
         rid = new_request_id()
         snap = state.snapshot()
-        ok = not snap["shutting_down"] and bool(cfg.public_key_pem) and cfg.cache_root is not None
+        ok = not snap["shutting_down"] and cfg.cache_root is not None
+        if cfg.runtime_mode != "node":
+            ok = ok and bool(cfg.public_key_pem)
         headers = {"X-Request-Id": rid, "Cache-Control": "no-store"}
         if request.method.upper() == "HEAD":
             return Response(status_code=200 if ok else 503, headers=headers)
         payload = {
             "ready": ok,
             "draining": snap["draining"],
-            "live_origin": False,
+            "live_origin": cfg.runtime_mode == "node",
             "client_redirect": False,
+            "edge_grant_key": bool((cfg.public_key_pem or "").strip()),
             "request_id": rid,
         }
         return JSONResponse(
@@ -127,6 +130,11 @@ def build_router(
             session_id = (x_ifilm_session_id or "").strip()
             if not session_id or len(session_id) > 64:
                 return safe_error_envelope(status_code=400, code="missing_session", request_id=rid)
+            if not (cfg.public_key_pem or "").strip():
+                # CDN-P1 node without edge-grant material: fail closed, never serve.
+                return safe_error_envelope(
+                    status_code=503, code="edge_grants_not_configured", request_id=rid
+                )
 
             path_prefix = f"/v1/obj/{asset_id}/{package_id}/"
             if state.draining:

@@ -45,6 +45,8 @@ class BranchServiceConfig:
     debug: bool = False
     # Extra forbidden markers for tests
     extra_forbidden: dict[str, Any] = field(default_factory=dict)
+    # "lab" (Phase 6/7 offline candidate) or "node" (CDN-P1 production node runtime).
+    runtime_mode: str = "lab"
 
 
 def validate_branch_service_config(cfg: BranchServiceConfig) -> None:
@@ -69,7 +71,11 @@ def validate_branch_service_config(cfg: BranchServiceConfig) -> None:
         pass
 
     pub = (cfg.public_key_pem or "").strip()
-    if "BEGIN PUBLIC KEY" not in pub and "BEGIN CERTIFICATE" not in pub:
+    if cfg.runtime_mode == "node" and not pub:
+        # CDN-P1: node may start without edge-grant material; object routes stay
+        # closed (503) until CDN-P2 installs the public key. Health/metrics work.
+        pass
+    elif "BEGIN PUBLIC KEY" not in pub and "BEGIN CERTIFICATE" not in pub:
         raise BranchServiceConfigError(
             "public verification key required", code="missing_public_key"
         )
@@ -97,6 +103,10 @@ def validate_branch_service_config(cfg: BranchServiceConfig) -> None:
     if cfg.max_header_bytes < 1024 or cfg.max_header_bytes > 65_536:
         raise BranchServiceConfigError("max_header_bytes out of bounds", code="limits")
 
+    if cfg.runtime_mode == "node":
+        if cfg.settings.enable_cdn_sync:
+            raise BranchServiceConfigError("legacy ENABLE_CDN_SYNC must remain false", code="cdn_sync")
+        return
     if _is_prod_like(cfg.settings.app_env):
         raise BranchServiceConfigError(
             "branch HTTP service candidate cannot start in staging/production",
