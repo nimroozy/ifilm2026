@@ -514,14 +514,14 @@ def select_node(db: Session, client_ip: str) -> dict[str, Any]:
             "matched_cidr": route.cidr,
             "node": _node_public(node),
         }
-    node = (
+    fallback: ManagedCDNNode | None = (
         db.query(ManagedCDNNode)
         .filter_by(role="main", is_default=True, enabled=True, draining=False)
         .order_by(ManagedCDNNode.name)
         .first()
     )
-    if node is None:
-        node = (
+    if fallback is None:
+        fallback = (
             db.query(ManagedCDNNode)
             .filter_by(role="main", enabled=True, draining=False)
             .order_by(ManagedCDNNode.name)
@@ -531,7 +531,7 @@ def select_node(db: Session, client_ip: str) -> dict[str, Any]:
         "mode": "main",
         "reason": "main_fallback",
         "matched_cidr": None,
-        "node": _node_public(node) if node else None,
+        "node": _node_public(fallback) if fallback else None,
     }
 
 
