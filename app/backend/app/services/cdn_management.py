@@ -42,22 +42,8 @@ def _encrypt_json(value: dict[str, str], settings: Settings) -> bytes:
         raise CDNManagementError("Unable to encrypt credentials") from exc
 
 
-def get_r2(db: Session) -> dict[str, Any]:
-    row = db.query(IntegrationConfig).filter_by(provider=R2_PROVIDER).one_or_none()
-    data = dict(row.config_json or {}) if row else {}
-    return {
-        "enabled": bool(row.enabled) if row else False,
-        "endpoint_url": data.get("endpoint_url", ""),
-        "account_id": data.get("account_id"),
-        "bucket": data.get("bucket", ""),
-        "region": data.get("region", "auto"),
-        "credentials_configured": bool(row and row.secret_ciphertext),
-        "updated_at": row.updated_at.isoformat() if row and row.updated_at else None,
-    }
-
-
 def resolve_r2_runtime(db: Session, settings: Settings | None = None) -> dict[str, Any] | None:
-    """Resolve the private runtime configuration; never use this in an API response."""
+    """Resolve the private hot-tier runtime configuration; never use this in an API response."""
     cfg = settings or get_settings()
     row = db.query(IntegrationConfig).filter_by(provider=R2_PROVIDER).one_or_none()
     if row is None or not row.enabled or not row.secret_ciphertext:
@@ -75,6 +61,49 @@ def resolve_r2_runtime(db: Session, settings: Settings | None = None) -> dict[st
     return {**data, **credentials, "enabled": True}
 
 
+def resolve_r2_credentials_for_artwork(
+    db: Session, settings: Settings | None = None
+) -> dict[str, Any] | None:
+    """Resolve R2 credentials for public artwork CDN (independent of hot-tier enabled flag).
+
+    Never return this dict from an API response.
+    """
+    cfg = settings or get_settings()
+    row = db.query(IntegrationConfig).filter_by(provider=R2_PROVIDER).one_or_none()
+    if row is None or not row.secret_ciphertext:
+        return None
+    data = dict(row.config_json or {})
+    # Admin may store credentials for artwork CDN without enabling the movie hot tier.
+    if not row.enabled and not bool(data.get("artwork_cdn_enabled")):
+        return None
+    try:
+        credentials = json.loads(
+            decrypt_secret(
+                ciphertext=row.secret_ciphertext,
+                master_key=cfg.integration_secrets_key,
+            )
+        )
+    except (IntegrationSecretsError, json.JSONDecodeError) as exc:
+        raise CDNManagementError("Unable to decrypt R2 credentials") from exc
+    return {**data, **credentials}
+
+
+def get_r2(db: Session) -> dict[str, Any]:
+    row = db.query(IntegrationConfig).filter_by(provider=R2_PROVIDER).one_or_none()
+    data = dict(row.config_json or {}) if row else {}
+    return {
+        "enabled": bool(row.enabled) if row else False,
+        "endpoint_url": data.get("endpoint_url", ""),
+        "account_id": data.get("account_id"),
+        "bucket": data.get("bucket", ""),
+        "region": data.get("region", "auto"),
+        "public_base_url": data.get("public_base_url", ""),
+        "artwork_cdn_enabled": bool(data.get("artwork_cdn_enabled")),
+        "credentials_configured": bool(row and row.secret_ciphertext),
+        "updated_at": row.updated_at.isoformat() if row and row.updated_at else None,
+    }
+
+
 def update_r2(
     db: Session, admin: AdminUser, payload: dict[str, Any], settings: Settings | None = None
 ) -> dict[str, Any]:
@@ -82,6 +111,16 @@ def update_r2(
     parsed = urlparse(str(payload.get("endpoint_url") or ""))
     if parsed.scheme != "https" or not parsed.hostname:
         raise CDNManagementError("R2 endpoint must be a valid HTTPS URL")
+    public_base = str(payload.get("public_base_url") or "").strip().rstrip("/")
+    artwork_cdn = bool(payload.get("artwork_cdn_enabled"))
+    if artwork_cdn:
+        if not public_base:
+            raise CDNManagementError(
+                "public_base_url is required when artwork CDN publishing is enabled"
+            )
+        pub = urlparse(public_base)
+        if pub.scheme != "https" or not pub.hostname:
+            raise CDNManagementError("public_base_url must be a valid HTTPS URL")
     row = db.query(IntegrationConfig).filter_by(provider=R2_PROVIDER).one_or_none()
     if row is None:
         row = IntegrationConfig(provider=R2_PROVIDER, enabled=False, config_json={})
@@ -90,6 +129,8 @@ def update_r2(
         "account_id": (payload.get("account_id") or "").strip() or None,
         "bucket": str(payload["bucket"]).strip(),
         "region": str(payload.get("region") or "auto").strip(),
+        "public_base_url": public_base,
+        "artwork_cdn_enabled": artwork_cdn,
     }
     access = (payload.get("access_key_id") or "").strip()
     secret = (payload.get("secret_access_key") or "").strip()
@@ -104,6 +145,8 @@ def update_r2(
     row.enabled = bool(payload.get("enabled"))
     if row.enabled and not row.secret_ciphertext:
         raise CDNManagementError("R2 cannot be enabled without stored credentials")
+    if artwork_cdn and not row.secret_ciphertext:
+        raise CDNManagementError("Artwork CDN cannot be enabled without stored credentials")
     row.config_json = data
     row.updated_by_admin_id = admin.id
     row.updated_at = datetime.now(UTC)

@@ -57,7 +57,7 @@ def get_central_origin_storage(settings: Settings | None = None) -> ObjectStorag
 def get_hot_tier_storage(
     settings: Settings | None = None, db: Session | None = None
 ) -> ObjectStorage | None:
-    """Optional R2/hot CDN tier. Returns None when disabled (default)."""
+    """Optional R2/hot CDN tier for capped titles. Returns None when disabled (default)."""
     cfg = settings or get_settings()
     runtime = None
     if db is not None:
@@ -76,5 +76,48 @@ def get_hot_tier_storage(
             force_path_style=False,
             provider_kind=StorageProviderKind.R2,
             role=StorageRole.HOT_CDN,
+        )
+    )
+
+
+def get_artwork_cdn_storage(
+    settings: Settings | None = None, db: Session | None = None
+) -> ObjectStorage | None:
+    """R2 bucket for public website artwork/trailers. Independent of MinIO/AWS origin.
+
+    Uses admin-encrypted R2 credentials when present; otherwise env ``R2_*``.
+    Does **not** require ``ENABLE_OBJECT_STORAGE`` or ``ENABLE_R2_HOT_TIER``.
+    """
+    cfg = settings or get_settings()
+    if not cfg.enable_artwork_cdn_sync:
+        return None
+
+    runtime = None
+    if db is not None:
+        from app.services.cdn_management import resolve_r2_credentials_for_artwork
+
+        runtime = resolve_r2_credentials_for_artwork(db, cfg)
+
+    endpoint = (runtime or {}).get("endpoint_url") or cfg.r2_endpoint_url
+    bucket = (runtime or {}).get("bucket") or cfg.r2_bucket
+    region = (runtime or {}).get("region") or cfg.r2_region or "auto"
+    access_key = (runtime or {}).get("access_key_id") or cfg.r2_access_key_id
+    secret_key = (runtime or {}).get("secret_access_key") or cfg.r2_secret_access_key
+
+    if not all(
+        (str(endpoint or "").strip(), str(bucket or "").strip(), str(access_key or "").strip(), str(secret_key or "").strip())
+    ):
+        return None
+
+    return S3CompatibleStorage(
+        S3CompatibleConfig(
+            endpoint_url=str(endpoint).strip(),
+            bucket=str(bucket).strip(),
+            region=str(region).strip() or "auto",
+            access_key_id=str(access_key).strip(),
+            secret_access_key=str(secret_key).strip(),
+            force_path_style=False,
+            provider_kind=StorageProviderKind.R2,
+            role=StorageRole.ARTWORK_CDN,
         )
     )

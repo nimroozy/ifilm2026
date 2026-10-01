@@ -152,8 +152,22 @@ def store_artwork_bytes(
         if old.resolve() != path and old.is_file():
             old.unlink(missing_ok=True)
     path.write_bytes(data)
+    local_url = _public_artwork_url(relative_path)
+    public_url = local_url
+    try:
+        from app.services.object_storage.artwork_cdn import try_publish_artwork_file
+
+        cdn_url = try_publish_artwork_file(
+            relative_path=relative_path,
+            source=path,
+            settings=settings,
+        )
+        if cdn_url:
+            public_url = cdn_url
+    except Exception:  # noqa: BLE001 — never fail local store on CDN issues
+        public_url = local_url
     return StoredArtwork(
-        url=_public_artwork_url(relative_path),
+        url=public_url,
         relative_path=relative_path,
         checksum_sha256=checksum,
         size_bytes=len(data),
