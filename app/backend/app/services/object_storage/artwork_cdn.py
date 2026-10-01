@@ -4,10 +4,15 @@ Movies / HLS packages stay on local MEDIA_ROOT. This module only handles the
 public website media tree under ARTWORK_ROOT (posters, backdrops, logos, stills)
 and optional trailer binaries under MEDIA_ROOT/trailers.
 
-Activation requires:
-  ENABLE_ARTWORK_CDN_SYNC=true
-  ARTWORK_CDN_PUBLIC_BASE_URL=https://cdn.example.com  (or admin R2 public_base_url)
-  R2 credentials (env R2_* or admin-encrypted IntegrationConfig)
+## Enablement precedence
+
+1. **Host kill switch** ``ENABLE_ARTWORK_CDN_SYNC`` must be true.
+2. When an Admin IntegrationConfig storage row exists:
+   ``config_json.artwork_cdn_enabled`` is authoritative beneath the host switch.
+   ``row.enabled`` (private/hot-tier) does **not** enable artwork publishing.
+3. When **no** IntegrationConfig row exists (legacy env-only):
+   host switch + env ``R2_*`` + env ``ARTWORK_CDN_PUBLIC_BASE_URL`` may enable
+   the publish path.
 
 Failures never delete local files; callers fall back to /artwork/... URLs.
 """
@@ -18,6 +23,7 @@ import logging
 import mimetypes
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from sqlalchemy.orm import Session
 
@@ -27,6 +33,8 @@ from app.services.object_storage.keys import ObjectKeyBuilder
 from app.services.object_storage.protocol import ObjectStorage
 
 logger = logging.getLogger(__name__)
+
+ArtworkPublishingStatus = Literal["active", "disabled", "blocked_by_server_capability"]
 
 _CONTENT_TYPES = {
     ".jpg": "image/jpeg",
@@ -47,13 +55,39 @@ class ArtworkCdnPublishResult:
     skipped_existing: bool
 
 
+@dataclass(frozen=True)
+class ArtworkCdnEffectiveState:
+    """Secret-free runtime decision for artwork CDN publishing."""
+
+    host_capability: bool
+    admin_requested: bool
+    has_admin_row: bool
+    credentials_configured: bool
+    public_base_configured: bool
+    storage_config_valid: bool
+    effective: bool
+    publishing_status: ArtworkPublishingStatus
+
+
 class ArtworkCdnError(RuntimeError):
     """Raised for configuration / publish failures (never includes secrets)."""
 
 
 def artwork_cdn_sync_enabled(settings: Settings | None = None) -> bool:
+    """Host kill switch only (ENABLE_ARTWORK_CDN_SYNC)."""
     cfg = settings or get_settings()
     return bool(cfg.enable_artwork_cdn_sync)
+
+
+def _env_r2_complete(cfg: Settings) -> bool:
+    return all(
+        (
+            str(cfg.r2_endpoint_url or "").strip(),
+            str(cfg.r2_bucket or "").strip(),
+            str(cfg.r2_access_key_id or "").strip(),
+            str(cfg.r2_secret_access_key or "").strip(),
+        )
+    )
 
 
 def resolve_artwork_cdn_public_base_url(
@@ -61,17 +95,78 @@ def resolve_artwork_cdn_public_base_url(
     *,
     db: Session | None = None,
 ) -> str:
-    """Return the public CDN base URL (no trailing slash), or empty when unset."""
+    """Return the public CDN base URL (no trailing slash), or empty when unset.
+
+    Env ``ARTWORK_CDN_PUBLIC_BASE_URL`` wins when set; otherwise admin
+    ``public_base_url`` is used when a storage row exists.
+    """
     cfg = settings or get_settings()
     base = (cfg.artwork_cdn_public_base_url or "").strip().rstrip("/")
     if base:
         return base
     if db is not None:
-        from app.services.cdn_management import get_r2
+        from app.services.cdn_management import storage_row
 
-        data = get_r2(db)
-        return str(data.get("public_base_url") or "").strip().rstrip("/")
+        row = storage_row(db)
+        if row is not None:
+            return str((row.config_json or {}).get("public_base_url") or "").strip().rstrip("/")
     return ""
+
+
+def evaluate_artwork_cdn_effective(
+    settings: Settings | None = None,
+    *,
+    db: Session | None = None,
+) -> ArtworkCdnEffectiveState:
+    """Shared runtime decision: host ∩ admin ∩ credentials ∩ public base ∩ config."""
+    cfg = settings or get_settings()
+    host = bool(cfg.enable_artwork_cdn_sync)
+
+    row = None
+    if db is not None:
+        from app.services.cdn_management import storage_row
+
+        row = storage_row(db)
+
+    if row is not None:
+        data = dict(row.config_json or {})
+        admin_requested = bool(data.get("artwork_cdn_enabled"))
+        credentials_ok = bool(row.secret_ciphertext)
+        endpoint = str(data.get("endpoint_url") or "").strip()
+        bucket = str(data.get("bucket") or "").strip()
+        storage_ok = bool(endpoint and bucket and credentials_ok)
+        public_base = resolve_artwork_cdn_public_base_url(cfg, db=db)
+        public_ok = bool(public_base)
+        # row.enabled (hot-tier) must NOT substitute for artwork_cdn_enabled.
+        effective = bool(host and admin_requested and credentials_ok and public_ok and storage_ok)
+        has_admin_row = True
+    else:
+        # Legacy env-only path when no Admin IntegrationConfig row exists.
+        admin_requested = False
+        credentials_ok = _env_r2_complete(cfg)
+        public_base = (cfg.artwork_cdn_public_base_url or "").strip().rstrip("/")
+        public_ok = bool(public_base)
+        storage_ok = credentials_ok
+        effective = bool(host and credentials_ok and public_ok and storage_ok)
+        has_admin_row = False
+
+    if admin_requested and not host:
+        status: ArtworkPublishingStatus = "blocked_by_server_capability"
+    elif effective:
+        status = "active"
+    else:
+        status = "disabled"
+
+    return ArtworkCdnEffectiveState(
+        host_capability=host,
+        admin_requested=admin_requested,
+        has_admin_row=has_admin_row,
+        credentials_configured=credentials_ok,
+        public_base_configured=public_ok,
+        storage_config_valid=storage_ok,
+        effective=effective,
+        publishing_status=status,
+    )
 
 
 def artwork_cdn_ready(
@@ -79,13 +174,8 @@ def artwork_cdn_ready(
     *,
     db: Session | None = None,
 ) -> bool:
-    """True when sync is enabled and a public base URL + R2 storage are available."""
-    cfg = settings or get_settings()
-    if not artwork_cdn_sync_enabled(cfg):
-        return False
-    if not resolve_artwork_cdn_public_base_url(cfg, db=db):
-        return False
-    return get_artwork_cdn_storage(cfg, db=db) is not None
+    """True when effective artwork publishing is fully enabled."""
+    return evaluate_artwork_cdn_effective(settings, db=db).effective
 
 
 def public_cdn_url(*, base_url: str, object_key: str) -> str:
@@ -104,6 +194,19 @@ def _guess_content_type(path: Path) -> str | None:
     return guessed
 
 
+def _object_key_prefix(cfg: Settings, db: Session | None) -> str:
+    prefix = (cfg.media_object_key_prefix or "ifilm").strip() or "ifilm"
+    if db is not None:
+        from app.services.cdn_management import storage_row
+
+        row = storage_row(db)
+        if row is not None:
+            admin_prefix = str((row.config_json or {}).get("object_key_prefix") or "").strip()
+            if admin_prefix:
+                prefix = admin_prefix
+    return prefix
+
+
 def publish_artwork_file(
     *,
     relative_path: str,
@@ -118,7 +221,8 @@ def publish_artwork_file(
     Returns None when artwork CDN is disabled / not configured (caller keeps local URL).
     """
     cfg = settings or get_settings()
-    if not artwork_cdn_sync_enabled(cfg):
+    state = evaluate_artwork_cdn_effective(cfg, db=db)
+    if not state.effective:
         return None
 
     base = resolve_artwork_cdn_public_base_url(cfg, db=db)
@@ -132,14 +236,7 @@ def publish_artwork_file(
     if not source.is_file():
         raise ArtworkCdnError("Artwork source file is missing")
 
-    prefix = (cfg.media_object_key_prefix or "ifilm").strip() or "ifilm"
-    if db is not None:
-        from app.services.cdn_management import get_r2
-
-        admin_prefix = str(get_r2(db).get("object_key_prefix") or "").strip()
-        if admin_prefix:
-            prefix = admin_prefix
-    keys = ObjectKeyBuilder(prefix=prefix)
+    keys = ObjectKeyBuilder(prefix=_object_key_prefix(cfg, db))
     # Filenames under ARTWORK_ROOT are content-addressed (hash segment) so
     # replacements mint a new object key and avoid stale CDN caches.
     object_key = keys.artwork_relative_key(relative_path=relative_path)
@@ -197,7 +294,8 @@ def publish_trailer_binary(
     HLS movie packages must never use this path.
     """
     cfg = settings or get_settings()
-    if not artwork_cdn_sync_enabled(cfg):
+    state = evaluate_artwork_cdn_effective(cfg, db=db)
+    if not state.effective:
         return None
     base = resolve_artwork_cdn_public_base_url(cfg, db=db)
     if not base:
@@ -210,7 +308,7 @@ def publish_trailer_binary(
 
     from app.services.object_storage.keys import StorageObjectKind
 
-    keys = ObjectKeyBuilder(prefix=(cfg.media_object_key_prefix or "ifilm").strip() or "ifilm")
+    keys = ObjectKeyBuilder(prefix=_object_key_prefix(cfg, db))
     object_key = keys.artwork_key(
         kind=StorageObjectKind.TRAILER,
         asset_id=asset_id,

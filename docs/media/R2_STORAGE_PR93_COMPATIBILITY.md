@@ -10,7 +10,8 @@
 |------|----------|-------|
 | GET/PUT `/api/admin/cdn-management/r2` | existing | Secret-free DTO; same IntegrationConfig row (`provider=cloudflare_r2`) |
 | POST `/api/admin/cdn-management/r2/test` | this branch | Test Connection; returns reachable / bucket_accessible / settings |
-| DTO fields | `get_r2()` | `provider`, `object_key_prefix`, `public_base_url`, `artwork_cdn_enabled`, `last_test_*`, `credentials_configured` |
+| DTO fields | `get_r2()` | `provider`, `object_key_prefix`, `public_base_url`, `artwork_cdn_enabled` / `artwork_cdn_requested`, `artwork_cdn_host_capability`, `artwork_cdn_effective`, `artwork_publishing_status`, `last_test_*`, `credentials_configured` |
+| Publish decision | `evaluate_artwork_cdn_effective()` | Host ∩ admin artwork toggle ∩ credentials ∩ public base; `row.enabled` must not substitute |
 | Secrets | `IntegrationConfig.secret_ciphertext` | Fernet via `INTEGRATION_SECRETS_KEY`; blank PUT preserves |
 | Artwork publish | `object_storage/artwork_cdn.py` | Local fallback; CDN URL only after verified upload |
 | Frontend aliases | `adminApi.getStorage/updateStorage/testStorage` | Mirror #93 `cdnApi` naming |

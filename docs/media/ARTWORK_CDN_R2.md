@@ -31,11 +31,23 @@ R2_ACCESS_KEY_ID=...
 R2_SECRET_ACCESS_KEY=...
 ```
 
-Or leave env R2 empty and configure the same values under **Admin → Cloudflare R2**, including:
+Or leave env R2 empty and configure the same values under **Admin → Settings → Storage / CDN**, including:
+- Cloudflare Account ID (endpoint is derived automatically)
 - Public CDN base URL
-- “Publish artwork to R2 CDN” toggle  
+- “Publish public artwork through CDN” toggle  
 
-The env master switch `ENABLE_ARTWORK_CDN_SYNC` must still be `true` (production compose defaults it to `false`).
+### Enablement precedence
+
+| Layer | Control | Role |
+|-------|---------|------|
+| Host kill switch | `ENABLE_ARTWORK_CDN_SYNC` | Must be `true` or publishing is impossible |
+| Admin toggle | `IntegrationConfig.config_json.artwork_cdn_enabled` | Authoritative beneath the host switch when an Admin storage row exists |
+| Hot-tier switch | `IntegrationConfig.enabled` | Private/hot-tier only — **does not** enable artwork publishing |
+| Legacy env-only | env `R2_*` + `ARTWORK_CDN_PUBLIC_BASE_URL` | Used only when **no** Admin storage row exists |
+
+Effective publishing requires: host capability **and** admin artwork toggle (or legacy env-only) **and** credentials **and** public CDN base URL **and** valid storage config.
+
+The Admin Status panel reports `artwork_publishing_status`: `active` | `disabled` | `blocked_by_server_capability`.
 
 5. Restart API/workers so settings reload.
 6. Re-import/replace TMDB artwork (or reseed demo) so new files publish to R2. Existing DB URLs that still point at `/artwork/...` continue to work from the VPS until rewritten.

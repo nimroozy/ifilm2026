@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -85,25 +86,46 @@ def get_artwork_cdn_storage(
 ) -> ObjectStorage | None:
     """R2 bucket for public website artwork/trailers. Independent of MinIO/AWS origin.
 
-    Uses admin-encrypted R2 credentials when present; otherwise env ``R2_*``.
-    Does **not** require ``ENABLE_OBJECT_STORAGE`` or ``ENABLE_R2_HOT_TIER``.
+    When an Admin IntegrationConfig row exists, ``artwork_cdn_enabled`` must be true
+    and credentials come from that row only (env R2_* must not override a disabled
+    admin toggle). When no Admin row exists, legacy env ``R2_*`` may be used.
+
+    Does **not** require ``ENABLE_OBJECT_STORAGE``, ``ENABLE_R2_HOT_TIER``, or
+    ``row.enabled`` (private/hot-tier switch).
     """
     cfg = settings or get_settings()
     if not cfg.enable_artwork_cdn_sync:
         return None
 
-    runtime = None
+    runtime: dict[str, Any] | None = None
+    admin_row_present = False
     if db is not None:
-        from app.services.cdn_management import resolve_r2_credentials_for_artwork
+        from app.services.cdn_management import resolve_r2_credentials_for_artwork, storage_row
 
-        runtime = resolve_r2_credentials_for_artwork(db, cfg)
+        admin_row_present = storage_row(db) is not None
+        if admin_row_present:
+            runtime = resolve_r2_credentials_for_artwork(db, cfg)
+            if runtime is None:
+                # Admin row exists but artwork toggle off / incomplete — do not fall back to env.
+                return None
 
-    endpoint = (runtime or {}).get("endpoint_url") or cfg.r2_endpoint_url
-    bucket = (runtime or {}).get("bucket") or cfg.r2_bucket
-    region = (runtime or {}).get("region") or cfg.r2_region or "auto"
-    access_key = (runtime or {}).get("access_key_id") or cfg.r2_access_key_id
-    secret_key = (runtime or {}).get("secret_access_key") or cfg.r2_secret_access_key
-    provider = str((runtime or {}).get("provider") or "cloudflare_r2").strip().lower()
+    if runtime is not None:
+        endpoint = runtime.get("endpoint_url")
+        bucket = runtime.get("bucket")
+        region = runtime.get("region") or "auto"
+        access_key = runtime.get("access_key_id")
+        secret_key = runtime.get("secret_access_key")
+        provider = str(runtime.get("provider") or "cloudflare_r2").strip().lower()
+    else:
+        if admin_row_present:
+            return None
+        # Legacy env-only path (no Admin storage row).
+        endpoint = cfg.r2_endpoint_url
+        bucket = cfg.r2_bucket
+        region = cfg.r2_region or "auto"
+        access_key = cfg.r2_access_key_id
+        secret_key = cfg.r2_secret_access_key
+        provider = "cloudflare_r2"
 
     if not all(
         (

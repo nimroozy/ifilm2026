@@ -863,6 +863,7 @@ export const adminApi = {
 };
 
 export type StorageProvider = 'cloudflare_r2' | 's3_compatible';
+export type ArtworkPublishingStatus = 'active' | 'disabled' | 'blocked_by_server_capability';
 export type R2SettingsDto = {
   enabled: boolean;
   provider?: StorageProvider;
@@ -873,6 +874,10 @@ export type R2SettingsDto = {
   object_key_prefix?: string;
   public_base_url?: string;
   artwork_cdn_enabled?: boolean;
+  artwork_cdn_requested?: boolean;
+  artwork_cdn_host_capability?: boolean;
+  artwork_cdn_effective?: boolean;
+  artwork_publishing_status?: ArtworkPublishingStatus;
   credentials_configured: boolean;
   updated_at?: string | null;
   last_test_at?: string | null;
@@ -884,7 +889,7 @@ export type R2SettingsDto = {
 export type R2SettingsPayload = {
   enabled: boolean;
   provider?: StorageProvider;
-  endpoint_url: string;
+  endpoint_url?: string;
   account_id?: string;
   bucket: string;
   region: string;

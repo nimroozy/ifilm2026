@@ -61,6 +61,7 @@ def test_r2_blank_secret_preserves_and_replace_works(client, admin_headers, db_s
             "/api/admin/cdn-management/r2",
             headers=admin_headers,
             json={
+                "account_id": "acct",
                 "enabled": True,
                 "endpoint_url": "https://acct.r2.cloudflarestorage.com",
                 "bucket": "ifilm-hot",
@@ -75,6 +76,7 @@ def test_r2_blank_secret_preserves_and_replace_works(client, admin_headers, db_s
         "/api/admin/cdn-management/r2",
         headers=admin_headers,
         json={
+            "account_id": "acct",
             "enabled": True,
             "endpoint_url": "https://acct.r2.cloudflarestorage.com",
             "bucket": "ifilm-hot",
@@ -92,6 +94,7 @@ def test_r2_blank_secret_preserves_and_replace_works(client, admin_headers, db_s
         "/api/admin/cdn-management/r2",
         headers=admin_headers,
         json={
+            "account_id": "acct",
             "enabled": True,
             "endpoint_url": "https://acct.r2.cloudflarestorage.com",
             "bucket": "ifilm-hot",
@@ -112,6 +115,7 @@ def test_r2_remove_requires_confirmation(client, admin_headers, encryption_key):
             "/api/admin/cdn-management/r2",
             headers=admin_headers,
             json={
+                "account_id": "acct",
                 "enabled": True,
                 "endpoint_url": "https://acct.r2.cloudflarestorage.com",
                 "bucket": "ifilm-hot",
@@ -126,6 +130,7 @@ def test_r2_remove_requires_confirmation(client, admin_headers, encryption_key):
         "/api/admin/cdn-management/r2",
         headers=admin_headers,
         json={
+            "account_id": "acct",
             "enabled": False,
             "endpoint_url": "https://acct.r2.cloudflarestorage.com",
             "bucket": "ifilm-hot",
@@ -138,6 +143,7 @@ def test_r2_remove_requires_confirmation(client, admin_headers, encryption_key):
         "/api/admin/cdn-management/r2",
         headers=admin_headers,
         json={
+            "account_id": "acct",
             "enabled": False,
             "endpoint_url": "https://acct.r2.cloudflarestorage.com",
             "bucket": "ifilm-hot",
@@ -165,6 +171,7 @@ def test_r2_invalid_endpoint_rejected(client, admin_headers, encryption_key, end
         headers=admin_headers,
         json={
             "enabled": False,
+            "provider": "s3_compatible",
             "endpoint_url": endpoint,
             "bucket": "ifilm-hot",
             "region": "auto",
@@ -183,6 +190,7 @@ def test_r2_test_connection_mocked_and_status_persisted(
             "/api/admin/cdn-management/r2",
             headers=admin_headers,
             json={
+                "account_id": "acct",
                 "enabled": True,
                 "endpoint_url": "https://acct.r2.cloudflarestorage.com",
                 "bucket": "ifilm-hot",
@@ -230,6 +238,27 @@ def test_r2_test_connection_requires_credentials(client, admin_headers, encrypti
     response = client.post("/api/admin/cdn-management/r2/test", headers=admin_headers)
     assert response.status_code == 400
 
+
+
+
+def test_r2_derives_endpoint_from_account_id(client, admin_headers, encryption_key):
+    response = client.put(
+        "/api/admin/cdn-management/r2",
+        headers=admin_headers,
+        json={
+            "enabled": False,
+            "provider": "cloudflare_r2",
+            "account_id": "myaccount",
+            "bucket": "ifilm-art",
+            "region": "auto",
+            "access_key_id": "k",
+            "secret_access_key": "s",
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["endpoint_url"] == "https://myaccount.r2.cloudflarestorage.com"
+    assert body["region"] == "auto"
 
 def test_nodes_prefix_routing_and_main_fallback(client, admin_headers, db_session, encryption_key):
     def add(name, role, host, default=False):

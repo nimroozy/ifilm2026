@@ -74,8 +74,18 @@ def _decrypt_json(ciphertext: bytes | None, settings: Settings) -> dict[str, str
     return {str(k): str(v) for k, v in dict(parsed).items()}
 
 
-def _storage_row(db: Session) -> IntegrationConfig | None:
+def storage_row(db: Session) -> IntegrationConfig | None:
+    """Return the Admin storage IntegrationConfig row (provider column stays cloudflare_r2)."""
     return db.query(IntegrationConfig).filter_by(provider=R2_PROVIDER).one_or_none()
+
+
+def _storage_row(db: Session) -> IntegrationConfig | None:
+    return storage_row(db)
+
+
+def derived_r2_endpoint(account_id: str) -> str:
+    account = (account_id or "").strip()
+    return f"https://{account}.r2.cloudflarestorage.com"
 
 
 def _reject_private_hostname(hostname: str, *, field: str) -> None:
@@ -128,7 +138,10 @@ def resolve_r2_runtime(db: Session, settings: Settings | None = None) -> dict[st
 def resolve_r2_credentials_for_artwork(
     db: Session, settings: Settings | None = None
 ) -> dict[str, Any] | None:
-    """Resolve R2 credentials for public artwork CDN (independent of hot-tier enabled flag).
+    """Resolve R2 credentials for public artwork CDN.
+
+    Requires ``artwork_cdn_enabled`` on the Admin row. ``row.enabled`` (hot-tier)
+    must never substitute for the artwork toggle.
 
     Never return this dict from an API response.
     """
@@ -137,19 +150,25 @@ def resolve_r2_credentials_for_artwork(
     if row is None or not row.secret_ciphertext:
         return None
     data = dict(row.config_json or {})
-    # Admin may store credentials for artwork CDN without enabling the movie hot tier.
-    if not row.enabled and not bool(data.get("artwork_cdn_enabled")):
+    if not bool(data.get("artwork_cdn_enabled")):
         return None
     credentials = _decrypt_json(row.secret_ciphertext, cfg)
     return {**data, **credentials}
 
 
-def get_r2(db: Session) -> dict[str, Any]:
+def get_r2(
+    db: Session,
+    settings: Settings | None = None,
+    *,
+    include_effective: bool = True,
+) -> dict[str, Any]:
     """Secret-free Storage / R2 settings DTO (compatible with future Storage settings UI)."""
+    cfg = settings or get_settings()
     row = _storage_row(db)
     data = dict(row.config_json or {}) if row else {}
     provider = str(data.get("provider") or "cloudflare_r2")
-    return {
+    admin_requested = bool(data.get("artwork_cdn_enabled"))
+    dto: dict[str, Any] = {
         "enabled": bool(row.enabled) if row else False,
         "provider": provider,
         "endpoint_url": data.get("endpoint_url", ""),
@@ -158,7 +177,8 @@ def get_r2(db: Session) -> dict[str, Any]:
         "region": data.get("region", "auto"),
         "object_key_prefix": data.get("object_key_prefix", "ifilm"),
         "public_base_url": data.get("public_base_url", ""),
-        "artwork_cdn_enabled": bool(data.get("artwork_cdn_enabled")),
+        "artwork_cdn_enabled": admin_requested,
+        "artwork_cdn_requested": admin_requested,
         "credentials_configured": bool(row and row.secret_ciphertext),
         "updated_at": _iso(row.updated_at) if row else None,
         "last_test_at": data.get("last_test_at"),
@@ -167,6 +187,18 @@ def get_r2(db: Session) -> dict[str, Any]:
         "last_test_bucket_accessible": data.get("last_test_bucket_accessible"),
         "last_test_message": data.get("last_test_message"),
     }
+    if include_effective:
+        from app.services.object_storage.artwork_cdn import evaluate_artwork_cdn_effective
+
+        state = evaluate_artwork_cdn_effective(cfg, db=db)
+        dto.update(
+            {
+                "artwork_cdn_host_capability": state.host_capability,
+                "artwork_cdn_effective": state.effective,
+                "artwork_publishing_status": state.publishing_status,
+            }
+        )
+    return dto
 
 
 def update_r2(
@@ -197,15 +229,30 @@ def update_r2(
             )
         public_base = _validate_https_url(public_base, field="public_base_url")
 
+    account_id = (payload.get("account_id") or data.get("account_id") or "").strip() or None
+    region = str(payload.get("region") or data.get("region") or "auto").strip() or "auto"
+    endpoint_raw = str(payload.get("endpoint_url") or "").strip()
+
+    if provider == "cloudflare_r2":
+        if not account_id:
+            raise CDNManagementError("Cloudflare Account ID is required for R2")
+        derived = derived_r2_endpoint(account_id)
+        # Prefer Account ID → standard endpoint; keep a non-derived override if provided.
+        if endpoint_raw and endpoint_raw.rstrip("/") != derived:
+            endpoint_url = _validate_https_url(endpoint_raw, field="endpoint_url")
+        else:
+            endpoint_url = derived
+        region = "auto"
+    else:
+        endpoint_url = _validate_https_url(endpoint_raw, field="endpoint_url")
+
     data.update(
         {
             "provider": provider,
-            "endpoint_url": _validate_https_url(
-                str(payload.get("endpoint_url") or ""), field="endpoint_url"
-            ),
-            "account_id": (payload.get("account_id") or "").strip() or None,
+            "endpoint_url": endpoint_url,
+            "account_id": account_id,
             "bucket": str(payload.get("bucket") or "").strip(),
-            "region": str(payload.get("region") or "auto").strip() or "auto",
+            "region": region,
             "object_key_prefix": prefix,
             "public_base_url": public_base,
             "artwork_cdn_enabled": artwork_cdn,
