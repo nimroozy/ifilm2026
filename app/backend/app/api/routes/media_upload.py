@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, Uplo
 
 from app.core.config import get_settings
 from app.core.deps import PERMISSION_ALIASES, DbSession, admin_permissions, require_permissions
-from app.core.features import require_feature
+from app.core.features import require_feature, require_remote_media_import
 from app.models.admin import AdminUser
 from app.models.media_assets import MediaAsset
 from app.schemas.common import Envelope, paginated
@@ -20,12 +20,17 @@ from app.schemas.media_upload import (
     MediaAssetLinkRequest,
     MediaAssetOut,
     MediaAssetUsagesOut,
+    RemoteMediaImportOut,
+    RemoteMediaImportStartRequest,
+    RemoteMediaValidateOut,
+    RemoteMediaValidateRequest,
     StaleTempCleanupOut,
     UploadSessionCreate,
     UploadSessionCreateOut,
     UploadSessionOut,
 )
 from app.services import media_delete, media_linking, media_storage_health
+from app.services import media_remote_import as remote_import_service
 from app.services import media_upload as upload_service
 from app.services.media_external_attach import attach_external_media, media_asset_to_out
 
@@ -220,6 +225,79 @@ def attach_external_media_asset(
         acknowledge_unprotected_external=payload.acknowledge_unprotected_external,
     )
     return MediaAssetOut.model_validate(media_asset_to_out(asset))
+
+
+@router.post("/admin/media/remote-import/validate", response_model=RemoteMediaValidateOut)
+def validate_remote_media_import(
+    payload: RemoteMediaValidateRequest,
+    _: Annotated[AdminUser, Depends(require_permissions("upload.manage"))],
+):
+    """Probe a remote HTTPS MP4 URL for Import from URL (secret-free summary)."""
+    settings = get_settings()
+    require_remote_media_import(settings)
+    result = remote_import_service.validate_remote_import_url(payload.url, settings=settings)
+    return RemoteMediaValidateOut.model_validate(result.__dict__)
+
+
+@router.post(
+    "/admin/media/remote-import",
+    response_model=RemoteMediaImportOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def start_remote_media_import(
+    payload: RemoteMediaImportStartRequest,
+    db: DbSession,
+    admin: Annotated[AdminUser, Depends(require_permissions("upload.manage"))],
+):
+    """Queue server-to-server MP4 import into protected local MEDIA_ROOT."""
+    settings = get_settings()
+    require_remote_media_import(settings)
+    job, record, _asset = remote_import_service.queue_remote_media_import(
+        db,
+        settings=settings,
+        url=payload.url,
+        owner_type=payload.owner_type,
+        owner_id=payload.owner_id,
+        destination=payload.destination,
+        admin_id=admin.id,
+    )
+    return RemoteMediaImportOut.model_validate(remote_import_service.remote_import_public(record, job))
+
+
+@router.get("/admin/media/remote-import/{import_id}", response_model=RemoteMediaImportOut)
+def get_remote_media_import(
+    import_id: str,
+    db: DbSession,
+    _: Annotated[AdminUser, Depends(require_permissions("upload.manage"))],
+):
+    # Status remains readable for jobs created before a flag flip.
+    record, job = remote_import_service.get_remote_import(db, import_id)
+    return RemoteMediaImportOut.model_validate(remote_import_service.remote_import_public(record, job))
+
+
+@router.post("/admin/media/remote-import/{import_id}/cancel", response_model=RemoteMediaImportOut)
+def cancel_remote_media_import(
+    import_id: str,
+    db: DbSession,
+    _: Annotated[AdminUser, Depends(require_permissions("upload.manage"))],
+):
+    # Cancel remains available for in-flight jobs even if the feature is later disabled.
+    return RemoteMediaImportOut.model_validate(
+        remote_import_service.request_cancel_remote_import(db, import_id)
+    )
+
+
+@router.post("/admin/media/remote-import/{import_id}/retry", response_model=RemoteMediaImportOut)
+def retry_remote_media_import(
+    import_id: str,
+    db: DbSession,
+    _: Annotated[AdminUser, Depends(require_permissions("upload.manage"))],
+):
+    settings = get_settings()
+    require_remote_media_import(settings)
+    return RemoteMediaImportOut.model_validate(
+        remote_import_service.retry_remote_import(db, settings=settings, import_id=import_id)
+    )
 
 
 @router.post(

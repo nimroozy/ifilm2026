@@ -142,6 +142,58 @@ class ExternalMediaAttachRequest(BaseModel):
         return normalized
 
 
+class RemoteMediaValidateRequest(BaseModel):
+    url: str = Field(min_length=8, max_length=4096)
+
+
+class RemoteMediaValidateOut(BaseModel):
+    url_display: str
+    host: str
+    kind: str
+    content_type: str | None = None
+    content_length: int | None = None
+    accept_ranges: bool = False
+    https_ok: bool = True
+    within_size_limit: bool = True
+    estimated_disk_ok: bool = True
+
+
+class RemoteMediaImportStartRequest(BaseModel):
+    url: str = Field(min_length=8, max_length=4096)
+    owner_type: str = Field(pattern="^(movie|episode)$")
+    owner_id: int = Field(gt=0)
+    destination: str = Field(default="local_origin", pattern="^(local_origin)$")
+
+
+class RemoteMediaImportOut(BaseModel):
+    id: str
+    job_id: str
+    media_asset_id: str
+    owner_type: str
+    owner_id: int
+    destination: str
+    phase: str
+    status: str
+    source_url_display: str
+    source_host: str
+    content_type: str | None = None
+    content_length: int | None = None
+    accept_ranges: bool = False
+    bytes_downloaded: int = 0
+    total_bytes: int | None = None
+    progress_percent: int = 0
+    transfer_rate_bps: int | None = None
+    eta_seconds: int | None = None
+    checksum_sha256: str | None = None
+    retry_count: int = 0
+    error_code: str | None = None
+    error_message: str | None = None
+    transfer_started_at: str | None = None
+    transfer_finished_at: str | None = None
+    cancel_requested: bool = False
+    created_at: str | None = None
+
+
 class MediaAssetDeleteRequest(BaseModel):
     """Explicit confirmation required before destructive delete."""
 

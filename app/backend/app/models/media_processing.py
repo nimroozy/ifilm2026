@@ -26,6 +26,14 @@ TERMINAL_JOB_STATUSES = frozenset({"completed", "failed", "cancelled"})
 JOB_TYPE_PROBE = "probe"
 JOB_TYPE_ENCODE_HLS = "encode_hls"
 JOB_TYPE_ORIGIN_SYNC = "origin_sync"
+JOB_TYPE_REMOTE_MEDIA_IMPORT = "remote_media_import"
+
+# Canonical media-processing-worker claim set (never remote_media_import).
+MEDIA_PROCESSING_WORKER_JOB_TYPES = frozenset(
+    {JOB_TYPE_PROBE, JOB_TYPE_ENCODE_HLS, JOB_TYPE_ORIGIN_SYNC}
+)
+# Dedicated remote-media-import-worker claim set.
+REMOTE_MEDIA_IMPORT_WORKER_JOB_TYPES = frozenset({JOB_TYPE_REMOTE_MEDIA_IMPORT})
 
 
 class MediaProcessingJob(Base):

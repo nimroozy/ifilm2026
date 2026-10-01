@@ -1,4 +1,4 @@
-"""Background media processing worker loop."""
+"""Background media processing worker loop (probe / encode / origin sync)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,12 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.db.session import SessionLocal, get_engine
-from app.models.media_processing import JOB_TYPE_ENCODE_HLS, JOB_TYPE_ORIGIN_SYNC, JOB_TYPE_PROBE
+from app.models.media_processing import (
+    JOB_TYPE_ENCODE_HLS,
+    JOB_TYPE_ORIGIN_SYNC,
+    JOB_TYPE_PROBE,
+    MEDIA_PROCESSING_WORKER_JOB_TYPES,
+)
 from app.services.media_processing.ffmpeg import binary_available, resolve_binary
 from app.services.media_processing.jobs import (
     claim_next_job,
@@ -74,9 +79,16 @@ def validate_media_mounts(settings: Settings) -> None:
 
 
 def run_once(db: Session, *, settings: Settings, worker_id: str) -> bool:
-    """Claim and run at most one job. Returns True if a job was processed."""
-    recover_stale_jobs(db, settings=settings)
-    job = claim_next_job(db, settings=settings, worker_id=worker_id)
+    """Claim and run at most one processing job. Returns True if a job was processed."""
+    recover_stale_jobs(
+        db, settings=settings, allowed_job_types=MEDIA_PROCESSING_WORKER_JOB_TYPES
+    )
+    job = claim_next_job(
+        db,
+        settings=settings,
+        worker_id=worker_id,
+        allowed_job_types=MEDIA_PROCESSING_WORKER_JOB_TYPES,
+    )
     if job is None:
         return False
     heartbeat_job(db, job)
@@ -194,9 +206,10 @@ def run_forever(*, settings: Settings | None = None) -> None:
 
     worker_id = default_worker_id(settings)
     logger.info(
-        "Media processing worker starting id=%s hls_encoding=%s",
+        "Media processing worker starting id=%s hls_encoding=%s job_types=%s",
         worker_id,
         bool(settings.enable_hls_encoding),
+        sorted(MEDIA_PROCESSING_WORKER_JOB_TYPES),
     )
     signal.signal(signal.SIGTERM, _handle_signal)
     signal.signal(signal.SIGINT, _handle_signal)

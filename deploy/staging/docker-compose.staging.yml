@@ -84,6 +84,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:?missing}
       PLAYBACK_TOKEN_SECRET: ${PLAYBACK_TOKEN_SECRET:?missing}
       ENABLE_UPLOADS: ${ENABLE_UPLOADS:-true}
+      ENABLE_REMOTE_MEDIA_IMPORT: ${ENABLE_REMOTE_MEDIA_IMPORT:-false}
       ENABLE_MEDIA_PROCESSING: ${ENABLE_MEDIA_PROCESSING:-true}
       ENABLE_HLS_ENCODING: ${ENABLE_HLS_ENCODING:-true}
       ENABLE_LOCAL_STREAMING: ${ENABLE_LOCAL_STREAMING:-true}
@@ -174,6 +175,42 @@ services:
         [
           "CMD-SHELL",
           "set -a; . /run/ifilm/runtime.env; set +a; python -m app.workers.media_processing --healthcheck",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks: [staging_net]
+
+  remote-media-import-worker:
+    build:
+      context: ../../app/backend
+      dockerfile: Dockerfile.staging
+    restart: unless-stopped
+    labels:
+      - "ifilm.pipeline.role=remote-import"
+      - "ifilm.compose.profile=always-on"
+    command: ["python", "-m", "app.workers.remote_media_import"]
+    env_file:
+      - path: .env.staging
+        required: false
+    environment:
+      <<: *api_env
+      ENABLE_REMOTE_MEDIA_IMPORT: ${ENABLE_REMOTE_MEDIA_IMPORT:-false}
+      MEDIA_PROCESSING_WORKER_ID: ${REMOTE_MEDIA_IMPORT_WORKER_ID:-staging-remote-import-1}
+    volumes:
+      - staging_media_originals:/data/media/originals
+      - staging_media_temp:/data/media/temp
+    depends_on:
+      postgres:
+        condition: service_healthy
+      backend-api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "set -a; . /run/ifilm/runtime.env; set +a; python -m app.workers.remote_media_import --healthcheck",
         ]
       interval: 30s
       timeout: 10s

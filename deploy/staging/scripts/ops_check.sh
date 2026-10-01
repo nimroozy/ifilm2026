@@ -107,7 +107,13 @@ PY
   "${COMPOSE[@]}" exec -T backend-api sh -c 'test ! -w /data/media/packages' \
     && ok "api packages read-only" || bad "api packages read-only"
   "${COMPOSE[@]}" exec -T media-processing-worker sh -c 'test ! -w /data/media/originals' \
-    && ok "worker originals read-only" || bad "worker originals read-only"
+    && ok "media-processing-worker originals read-only" || bad "media-processing-worker originals read-only"
+  if "${COMPOSE[@]}" ps --services 2>/dev/null | grep -qx remote-media-import-worker; then
+    "${COMPOSE[@]}" exec -T remote-media-import-worker sh -c 'test -w /data/media/originals && test -w /data/media/temp' \
+      && ok "remote-import-worker originals+temp writable" || bad "remote-import-worker originals+temp writable"
+    "${COMPOSE[@]}" exec -T remote-media-import-worker sh -c 'test ! -d /data/media/trailers -o ! -w /data/media/trailers' \
+      && ok "remote-import-worker trailers not writable" || bad "remote-import-worker trailers not writable"
+  fi
 
   echo "==> Shared upload category visibility (API write ↔ worker read)"
   # Regression: trailers uploaded via API must be visible to the probe worker.

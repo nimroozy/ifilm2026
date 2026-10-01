@@ -485,6 +485,43 @@ export const adminApi = {
     return data;
   },
 
+  async validateRemoteMediaImport(payload: { url: string }) {
+    const { data } = await adminHttp.post<RemoteMediaValidateDto>(
+      '/admin/media/remote-import/validate',
+      payload,
+    );
+    return data;
+  },
+
+  async startRemoteMediaImport(payload: {
+    url: string;
+    owner_type: 'movie' | 'episode';
+    owner_id: number;
+    destination?: 'local_origin';
+  }) {
+    const { data } = await adminHttp.post<RemoteMediaImportDto>('/admin/media/remote-import', payload);
+    return data;
+  },
+
+  async getRemoteMediaImport(importId: string) {
+    const { data } = await adminHttp.get<RemoteMediaImportDto>(`/admin/media/remote-import/${importId}`);
+    return data;
+  },
+
+  async cancelRemoteMediaImport(importId: string) {
+    const { data } = await adminHttp.post<RemoteMediaImportDto>(
+      `/admin/media/remote-import/${importId}/cancel`,
+    );
+    return data;
+  },
+
+  async retryRemoteMediaImport(importId: string) {
+    const { data } = await adminHttp.post<RemoteMediaImportDto>(
+      `/admin/media/remote-import/${importId}/retry`,
+    );
+    return data;
+  },
+
   async detachMediaAsset(assetId: string, payload?: { force_unpublish?: boolean }) {
     const { data } = await adminHttp.post<MediaAssetDto>(
       `/admin/media/assets/${assetId}/detach`,
@@ -909,6 +946,45 @@ export type R2TestDto = {
   message: string;
   tested_at: string;
   settings: R2SettingsDto;
+};
+export type RemoteMediaValidateDto = {
+  url_display: string;
+  host: string;
+  kind: string;
+  content_type?: string | null;
+  content_length?: number | null;
+  accept_ranges: boolean;
+  https_ok: boolean;
+  within_size_limit: boolean;
+  estimated_disk_ok: boolean;
+};
+export type RemoteMediaImportDto = {
+  id: string;
+  job_id: string;
+  media_asset_id: string;
+  owner_type: string;
+  owner_id: number;
+  destination: string;
+  phase: string;
+  status: string;
+  source_url_display: string;
+  source_host: string;
+  content_type?: string | null;
+  content_length?: number | null;
+  accept_ranges: boolean;
+  bytes_downloaded: number;
+  total_bytes?: number | null;
+  progress_percent: number;
+  transfer_rate_bps?: number | null;
+  eta_seconds?: number | null;
+  checksum_sha256?: string | null;
+  retry_count: number;
+  error_code?: string | null;
+  error_message?: string | null;
+  transfer_started_at?: string | null;
+  transfer_finished_at?: string | null;
+  cancel_requested: boolean;
+  created_at?: string | null;
 };
 export type ManagedCDNNodeDto = { id: string; name: string; role: 'main'|'cache'; host: string; ssh_port: number; ssh_username: string; credential_type: string; credential_configured: boolean; branch?: string; location?: string; notes?: string; enabled: boolean; draining: boolean; is_default: boolean; cache_limit_bytes?: number; disk_total_bytes?: number; disk_free_bytes?: number; cached_objects: number; cached_titles: number; hit_rate?: number; bandwidth_bytes: number; rtt_ms?: number; software_version?: string; health_status: string; provision_status: string; last_sync_at?: string; last_heartbeat_at?: string };
 export type ManagedCDNNodeCreatedDto = { node: ManagedCDNNodeDto; heartbeat_token: string | null };

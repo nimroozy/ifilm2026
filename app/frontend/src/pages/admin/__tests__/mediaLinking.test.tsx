@@ -96,10 +96,13 @@ describe('MediaLinkingCard', () => {
       </MemoryRouter>
     );
     expect(await screen.findByTestId('media-linking-card')).toBeTruthy();
-    expect(screen.getByTestId('media-upload-and-link').getAttribute('href')).toBe(
-      '/admin/tools/upload?owner_type=movie&owner_id=7'
-    );
+    expect(screen.getByTestId('media-add-media')).toBeTruthy();
     expect(screen.getByTestId('media-link-existing')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('media-add-media'));
+    expect(await screen.findByTestId('add-media-upload-file')).toHaveAttribute(
+      'href',
+      '/admin/tools/upload?owner_type=movie&owner_id=7',
+    );
     await waitFor(() => {
       expect(screen.getByText('feature.mp4')).toBeTruthy();
     });

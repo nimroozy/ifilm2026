@@ -145,7 +145,9 @@ export default function MediaLinkingCard({
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [linkOpen, setLinkOpen] = useState(false);
+  const [addMediaOpen, setAddMediaOpen] = useState(false);
   const [externalOpen, setExternalOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [detachTarget, setDetachTarget] = useState<MediaAssetDto | null>(null);
   const [forceUnpublish, setForceUnpublish] = useState(false);
 
@@ -233,11 +235,15 @@ export default function MediaLinkingCard({
             <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={load} aria-label="Refresh media">
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </Button>
-            <Button type="button" variant="secondary" size="sm" asChild>
-              <Link to={uploadHref} data-testid="media-upload-and-link">
-                <Upload className="me-1.5 h-3.5 w-3.5" />
-                Upload and Link
-              </Link>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setAddMediaOpen(true)}
+              data-testid="media-add-media"
+            >
+              <Upload className="me-1.5 h-3.5 w-3.5" />
+              Add Media
             </Button>
             <Button
               type="button"
@@ -247,23 +253,14 @@ export default function MediaLinkingCard({
               data-testid="media-link-existing"
             >
               <Link2 className="me-1.5 h-3.5 w-3.5" />
-              Link Existing Media
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setExternalOpen(true)}
-              data-testid="media-external-url"
-            >
-              <Globe className="me-1.5 h-3.5 w-3.5" />
-              External URL
+              Link Existing
             </Button>
           </div>
         </div>
         <p className="text-xs text-muted-foreground">
-          Link one video asset to this {ownerType}. Detach removes the association only — media files and packages are
-          preserved. Publishing still requires an active playable HLS package or validated external media.
+          Add media via Upload File, Import from URL (server-to-server), or External Source. Detach removes the
+          association only — protected packages are preserved. Publishing still requires playable packaged HLS (or
+          restricted external mode).
         </p>
       </CardHeader>
       <CardContent className="space-y-4" aria-live="polite">
@@ -271,7 +268,7 @@ export default function MediaLinkingCard({
         {error ? <ErrorState message={error} onRetry={load} /> : null}
         {!loading && !error && assets.length === 0 ? (
           <EmptyState
-            message={`No media is linked to this ${ownerType}. Use Upload and Link, Link Existing Media, or External URL.`}
+            message={`No media is linked to this ${ownerType}. Use Add Media to upload, import from URL, or attach an external source.`}
           />
         ) : null}
 
@@ -446,6 +443,31 @@ export default function MediaLinkingCard({
         </ul>
       </CardContent>
 
+      <AddMediaDialog
+        open={addMediaOpen}
+        onOpenChange={setAddMediaOpen}
+        uploadHref={uploadHref}
+        onChooseImport={() => {
+          setAddMediaOpen(false);
+          setImportOpen(true);
+        }}
+        onChooseExternal={() => {
+          setAddMediaOpen(false);
+          setExternalOpen(true);
+        }}
+      />
+
+      <ImportFromUrlDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        ownerType={ownerType}
+        ownerId={ownerId}
+        onImported={async () => {
+          await load();
+          onChanged?.();
+        }}
+      />
+
       <LinkExistingMediaDialog
         open={linkOpen}
         onOpenChange={setLinkOpen}
@@ -522,6 +544,293 @@ export default function MediaLinkingCard({
   );
 }
 
+function AddMediaDialog({
+  open,
+  onOpenChange,
+  uploadHref,
+  onChooseImport,
+  onChooseExternal,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  uploadHref: string;
+  onChooseImport: () => void;
+  onChooseExternal: () => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg" data-testid="add-media-dialog">
+        <DialogHeader>
+          <DialogTitle>Add Media</DialogTitle>
+          <DialogDescription>Choose how media is added for this title.</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-3">
+          <Button type="button" variant="secondary" className="justify-start h-auto py-3" asChild>
+            <Link to={uploadHref} data-testid="add-media-upload-file" onClick={() => onOpenChange(false)}>
+              <div className="text-start">
+                <div className="font-medium flex items-center gap-2">
+                  <Upload className="h-4 w-4" /> Upload File
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Browser upload into protected local storage (unchanged workflow).
+                </p>
+              </div>
+            </Link>
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="justify-start h-auto py-3"
+            onClick={onChooseImport}
+            data-testid="add-media-import-url"
+          >
+            <div className="text-start">
+              <div className="font-medium flex items-center gap-2">
+                <Globe className="h-4 w-4" /> Import from URL
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Server-to-server HTTPS MP4 import. Your browser does not download the movie.
+              </p>
+            </div>
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="justify-start h-auto py-3"
+            onClick={onChooseExternal}
+            data-testid="add-media-external-source"
+          >
+            <div className="text-start">
+              <div className="font-medium flex items-center gap-2">
+                <ExternalLink className="h-4 w-4" /> External Source
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Remains hosted remotely. Unprotected direct media — not the protected pipeline.
+              </p>
+            </div>
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function formatRate(bps?: number | null): string {
+  if (!bps || bps <= 0) return '—';
+  const mbps = bps / (1024 * 1024);
+  if (mbps >= 1) return `${mbps.toFixed(1)} MB/s`;
+  return `${(bps / 1024).toFixed(0)} KB/s`;
+}
+
+function formatEta(seconds?: number | null): string {
+  if (seconds == null || seconds < 0) return '—';
+  const total = Math.floor(seconds);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function ImportFromUrlDialog({
+  open,
+  onOpenChange,
+  ownerType,
+  ownerId,
+  onImported,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  ownerType: OwnerType;
+  ownerId: number;
+  onImported: () => Promise<void>;
+}) {
+  const [url, setUrl] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [validation, setValidation] = useState<Awaited<
+    ReturnType<typeof adminApi.validateRemoteMediaImport>
+  > | null>(null);
+  const [job, setJob] = useState<Awaited<ReturnType<typeof adminApi.startRemoteMediaImport>> | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (!open) {
+      setUrl('');
+      setBusy(false);
+      setValidation(null);
+      setJob(null);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!job || ['completed', 'failed', 'cancelled'].includes(job.phase)) return;
+    const timer = window.setInterval(() => {
+      void adminApi
+        .getRemoteMediaImport(job.id)
+        .then((next) => {
+          setJob(next);
+          if (next.phase === 'completed') {
+            toast.success('Import complete — probe and package HLS next');
+            void onImported();
+          }
+        })
+        .catch(() => undefined);
+    }, 2000);
+    return () => window.clearInterval(timer);
+  }, [job, onImported]);
+
+  async function validate() {
+    setBusy(true);
+    setValidation(null);
+    try {
+      const result = await adminApi.validateRemoteMediaImport({ url: url.trim() });
+      setValidation(result);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Validation failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function startImport() {
+    setBusy(true);
+    try {
+      const created = await adminApi.startRemoteMediaImport({
+        url: url.trim(),
+        owner_type: ownerType,
+        owner_id: ownerId,
+        destination: 'local_origin',
+      });
+      setJob(created);
+      toast.success('Import queued — transfer runs on the server');
+      await onImported();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to start import');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg" data-testid="import-from-url-dialog">
+        <DialogHeader>
+          <DialogTitle>Import from URL</DialogTitle>
+          <DialogDescription>
+            The admin browser submits only the URL. The media worker streams the MP4 server-to-server into protected
+            local storage. HLS import is deferred.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <Label htmlFor="remote-import-url">Source URL</Label>
+            <Input
+              id="remote-import-url"
+              type="url"
+              placeholder="https://cdn.example.com/movie.mp4"
+              value={url}
+              onChange={(e) => {
+                setUrl(e.target.value);
+                setValidation(null);
+              }}
+              disabled={Boolean(job)}
+              data-testid="remote-import-url-input"
+            />
+          </div>
+          <div className="rounded-md border px-3 py-2 text-sm">
+            Destination: <strong>Protected Origin</strong> (local MEDIA_ROOT)
+          </div>
+          {validation ? (
+            <div className="rounded-md border p-3 text-sm space-y-1" data-testid="remote-import-validation">
+              <div>HTTPS ✓</div>
+              <div>Type {validation.kind.toUpperCase()}</div>
+              <div>
+                Size{' '}
+                {validation.content_length != null ? formatBytes(validation.content_length) : 'unknown'}
+              </div>
+              <div>Range supported {validation.accept_ranges ? 'Yes' : 'No'}</div>
+              <div>Source host {validation.host}</div>
+              <div className="text-muted-foreground text-xs break-all">{validation.url_display}</div>
+            </div>
+          ) : null}
+          {job ? (
+            <div className="rounded-md border p-3 text-sm space-y-2" data-testid="remote-import-progress">
+              <div className="font-medium capitalize">{job.phase}</div>
+              <div>
+                {formatBytes(job.bytes_downloaded)}
+                {job.total_bytes != null ? ` / ${formatBytes(job.total_bytes)}` : ''}
+                {' · '}
+                {job.progress_percent}%
+              </div>
+              <div>
+                {formatRate(job.transfer_rate_bps)} · ETA {formatEta(job.eta_seconds)}
+              </div>
+              {job.error_message ? (
+                <p className="text-destructive text-xs">{job.error_message}</p>
+              ) : null}
+              <div className="flex flex-wrap gap-2">
+                {!['completed', 'failed', 'cancelled'].includes(job.phase) ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    data-testid="remote-import-cancel"
+                    onClick={() => {
+                      void adminApi.cancelRemoteMediaImport(job.id).then(setJob);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                ) : null}
+                {['failed', 'cancelled'].includes(job.phase) ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    data-testid="remote-import-retry"
+                    onClick={() => {
+                      void adminApi.retryRemoteMediaImport(job.id).then(setJob);
+                    }}
+                  >
+                    Retry
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+        </div>
+        <DialogFooter className="gap-2">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Close
+          </Button>
+          {!job ? (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy || !url.trim()}
+                onClick={() => void validate()}
+                data-testid="remote-import-validate"
+              >
+                Validate
+              </Button>
+              <Button
+                type="button"
+                disabled={busy || !validation}
+                onClick={() => void startImport()}
+                data-testid="remote-import-start"
+              >
+                Start Import
+              </Button>
+            </>
+          ) : null}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function ExternalUrlDialog({
   open,
   onOpenChange,
@@ -579,12 +888,11 @@ function ExternalUrlDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg" data-testid="external-url-dialog">
         <DialogHeader>
-          <DialogTitle>Attach external URL</DialogTitle>
+          <DialogTitle>External Source</DialogTitle>
           <DialogDescription>
-            Option A — admin / demo only. The player receives the CDN URL directly after session authorization.
-            This is not packaged-HLS protection: revoke does not stop CDN playback, and the URL may appear in
-            browser network tools. Attaching activates this source as the sole primary external and deactivates
-            any previous primary.
+            External Source remains hosted by the remote provider and does not use iFilm&apos;s protected media storage
+            pipeline. Option A — admin / demo only. The player may receive the CDN URL directly after session
+            authorization. This is not packaged-HLS protection.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">

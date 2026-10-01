@@ -116,6 +116,52 @@ class ComposeMediaMountTests(unittest.TestCase):
                         f"(got {modes.get(target)!r})",
                     )
 
+    def test_remote_media_import_worker_least_privilege_mounts(self) -> None:
+        for compose in COMPOSE_FILES:
+            with self.subTest(compose=str(compose.relative_to(ROOT))):
+                text = compose.read_text()
+                self.assertIn(
+                    "remote-media-import-worker:",
+                    text,
+                    f"{compose.relative_to(ROOT)}: missing remote-media-import-worker",
+                )
+                body = _service_block(text, "remote-media-import-worker")
+                modes = _volume_modes(body)
+                targets = _volume_targets(body)
+                self.assertIn("/data/media/originals", targets)
+                self.assertIn("/data/media/temp", targets)
+                self.assertNotEqual(
+                    modes.get("/data/media/originals"),
+                    "ro",
+                    f"{compose.relative_to(ROOT)}: remote-import originals must be RW",
+                )
+                self.assertNotEqual(
+                    modes.get("/data/media/temp"),
+                    "ro",
+                    f"{compose.relative_to(ROOT)}: remote-import temp must be RW",
+                )
+                for category in ("trailers", "subtitles", "audio", "posters", "backdrops"):
+                    self.assertNotIn(
+                        f"/data/media/{category}",
+                        targets,
+                        f"{compose.relative_to(ROOT)}: remote-import must not mount "
+                        f"{category} (least privilege)",
+                    )
+                self.assertIn("app.workers.remote_media_import", body)
+                self.assertIn("healthcheck:", body)
+                self.assertIn("--healthcheck", body)
+                self.assertNotIn(
+                    "curl",
+                    body.lower(),
+                    f"{compose.relative_to(ROOT)}: remote-import healthcheck must not curl API",
+                )
+                self.assertNotIn("127.0.0.1:8000", body)
+                # Feature defaults OFF in compose env interpolation.
+                self.assertRegex(
+                    body,
+                    r"ENABLE_REMOTE_MEDIA_IMPORT:\s*\$\{ENABLE_REMOTE_MEDIA_IMPORT:-false\}",
+                )
+
     def test_api_and_worker_share_same_upload_targets(self) -> None:
         for compose in COMPOSE_FILES:
             with self.subTest(compose=str(compose.relative_to(ROOT))):

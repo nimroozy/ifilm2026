@@ -41,6 +41,7 @@ services:
       # Legacy placeholder HLS URL removed; protected streaming uses /api/stream/{token}/…
       HLS_PUBLIC_BASE_URL: http://localhost:8000/api/stream
       ENABLE_UPLOADS: ${ENABLE_UPLOADS:-false}
+      ENABLE_REMOTE_MEDIA_IMPORT: ${ENABLE_REMOTE_MEDIA_IMPORT:-false}
       ENABLE_ENCODING: ${ENABLE_ENCODING:-false}
       ENABLE_CDN_SYNC: ${ENABLE_CDN_SYNC:-false}
       ENABLE_RADIUS_LOGIN: ${ENABLE_RADIUS_LOGIN:-false}
@@ -137,6 +138,7 @@ services:
       MEDIA_ROOT: /data/media
       ENABLE_MEDIA_PROCESSING: ${ENABLE_MEDIA_PROCESSING:-false}
       ENABLE_HLS_ENCODING: ${ENABLE_HLS_ENCODING:-false}
+      ENABLE_REMOTE_MEDIA_IMPORT: ${ENABLE_REMOTE_MEDIA_IMPORT:-false}
       FFMPEG_BINARY: ${FFMPEG_BINARY:-ffmpeg}
       FFPROBE_BINARY: ${FFPROBE_BINARY:-ffprobe}
       MEDIA_PROCESSING_WORKER_ID: ${MEDIA_PROCESSING_WORKER_ID:-compose-media-1}
@@ -167,6 +169,41 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-m", "app.workers.media_processing", "--healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  remote-media-import-worker:
+    # Dedicated — server-to-server MP4 import only (least privilege mounts).
+    labels:
+      - "ifilm.pipeline.role=remote-import"
+      - "ifilm.compose.profile=always-on"
+    build:
+      context: ./app/backend
+    command: python -m app.workers.remote_media_import
+    environment:
+      APP_ENV: development
+      DEBUG: "false"
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-ifilm}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ifilm}
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in your environment}
+      MEDIA_ROOT: /data/media
+      ENABLE_UPLOADS: ${ENABLE_UPLOADS:-false}
+      ENABLE_REMOTE_MEDIA_IMPORT: ${ENABLE_REMOTE_MEDIA_IMPORT:-false}
+      MEDIA_PROCESSING_WORKER_ID: ${REMOTE_MEDIA_IMPORT_WORKER_ID:-compose-remote-import-1}
+      MEDIA_PROCESSING_POLL_SECONDS: ${MEDIA_PROCESSING_POLL_SECONDS:-2}
+      MEDIA_PROCESSING_STALE_AFTER_SECONDS: ${MEDIA_PROCESSING_STALE_AFTER_SECONDS:-120}
+      INTEGRATION_SECRETS_KEY: ${INTEGRATION_SECRETS_KEY:-}
+    volumes:
+      - ifilm_media_originals:/data/media/originals
+      - ifilm_media_temp:/data/media/temp
+      - ./app/backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.workers.remote_media_import", "--healthcheck"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -20,7 +20,7 @@ EXTERNAL_POLICY = "admin_demo_only"
 
 
 def mask_external_url(url: str | None) -> str | None:
-    """Return a display URL with query/credentials stripped and path truncated."""
+    """Return a display URL with query/credentials stripped (signed tokens never shown)."""
     if not url:
         return None
     parsed = urlparse(url.strip())
@@ -31,7 +31,10 @@ def mask_external_url(url: str | None) -> str | None:
     if len(path) > 48:
         path = f"{path[:24]}…{path[-12:]}"
     scheme = parsed.scheme or "https"
-    return f"{scheme}://{host}{path}"
+    display = f"{scheme}://{host}{path}"
+    if parsed.query:
+        display += "?…"
+    return display
 
 
 def media_asset_to_out(asset: MediaAsset) -> dict:
