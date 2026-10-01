@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { MetaChip, heroSizing, typography } from '@/design-system';
 import { useAuth, useLang } from '@/components/CustomerLayout';
 import type { CatalogMovie } from '@/lib/catalogData';
-import { canPlayFullMovie, fullMovieUnavailableLabel, hasDemoClip } from '@/lib/catalogPresentation';
+import { canPlayFullMovie, hasDemoClip, movieUnavailableLabel } from '@/lib/catalogPresentation';
 import { heroBackdropSrcSet } from '@/lib/imageUrls';
 import { WatchlistButton } from '@/components/WatchlistButton';
 import { cn } from '@/lib/utils';
@@ -198,11 +198,11 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
               <>
                 <img
                   src={logoUrl}
-                  alt={movie.title}
+                  alt=""
                   className="max-h-14 w-auto max-w-[min(100%,360px)] object-contain drop-shadow-lg md:max-h-24"
                   data-testid="hero-title-logo"
                 />
-                <p className="sr-only">{movie.title}</p>
+                <h1 className="sr-only">{movie.title}</h1>
               </>
             ) : (
               <h1
@@ -231,13 +231,19 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
               ))}
             </div>
 
-            <p className="max-w-xl text-sm leading-relaxed text-foreground/85 line-clamp-2 md:max-w-2xl md:text-base md:leading-relaxed md:text-foreground/90 md:line-clamp-3">
-              {movie.description}
+            <p
+              className="max-w-xl text-start text-sm leading-relaxed text-foreground/85 line-clamp-2 md:max-w-2xl md:text-base md:leading-relaxed md:text-foreground/90 md:line-clamp-3"
+              data-testid="hero-synopsis"
+            >
+              {/* Keep block alignment with UI dir; isolate embedded LTR/RTL fallback text. */}
+              <span dir="auto" className="[unicode-bidi:isolate]">
+                {movie.description}
+              </span>
             </p>
 
-            {/* Mobile: [ Play ] [ More Info ] [ + ] — Desktop: full-label actions */}
+            {/* Mobile: wrap actions so RTL labels are not truncated; Desktop: full-label actions */}
             <div
-              className="flex flex-nowrap items-center gap-2 pt-0.5 md:flex-wrap md:gap-3 md:pt-1"
+              className="flex flex-wrap items-center gap-2 pt-0.5 md:gap-3 md:pt-1"
               data-testid="hero-actions"
             >
               {playable || demo ? (
@@ -247,29 +253,34 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
                   onClick={() =>
                     navigate(`/player/movie/${movie.id}`, { state: { autoplay: true } })
                   }
-                  className="h-11 min-w-0 flex-1 gap-2 px-4 sm:flex-none sm:px-5 md:h-12 md:px-6"
+                  className="h-11 min-w-0 gap-2 px-4 sm:px-5 md:h-12 md:px-6"
                   aria-label={
-                    demo && !playable ? `Play demo clip for ${movie.title}` : `Play ${movie.title}`
+                    demo && !playable
+                      ? `${t.hero.playDemoClip} — ${movie.title}`
+                      : `${t.hero.play} ${movie.title}`
                   }
                   data-testid="hero-play"
                 >
                   <Play className="h-5 w-5 shrink-0 fill-current" />
-                  <span className="truncate">{demo && !playable ? 'Play Demo Clip' : t.hero.play}</span>
+                  <span>{demo && !playable ? t.hero.playDemoClip : t.hero.play}</span>
                 </Button>
               ) : (
-                <Badge variant="secondary" className="px-3 py-2 text-sm">
-                  {fullMovieUnavailableLabel()}
+                <Badge variant="secondary" className="px-3 py-2 text-sm" data-testid="hero-unavailable">
+                  {movieUnavailableLabel(undefined, {
+                    coming_soon: t.hero.comingSoon,
+                    unavailable: t.hero.unavailable,
+                  })}
                 </Badge>
               )}
               <Button
                 size="lg"
                 variant="glass"
                 onClick={() => navigate(`/movie/${movie.id}`)}
-                className="h-11 min-w-0 flex-1 gap-2 px-3 sm:flex-none md:h-12 md:px-4"
+                className="h-11 min-w-0 gap-2 px-3 md:h-12 md:px-4"
                 data-testid="hero-more-info"
               >
                 <Info className="h-5 w-5 shrink-0" />
-                <span className="truncate">{t.hero.moreInfo}</span>
+                <span>{t.hero.moreInfo}</span>
               </Button>
               {isLoggedIn ? (
                 <>
@@ -331,7 +342,7 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
       ) : null}
 
       <div
-        className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 gap-1.5 md:bottom-7"
+        className="absolute bottom-1 left-1/2 z-20 flex max-w-full -translate-x-1/2 md:bottom-3"
         role="tablist"
         aria-label="Featured titles"
         data-testid="hero-dots"
@@ -348,11 +359,16 @@ export function HeroCarousel({ featured }: { featured: CatalogMovie[] }) {
               setCurrent(index);
               setFadeKey((k) => k + 1);
             }}
-            className={cn(
-              'h-1.5 rounded-full transition-all duration-normal focus-visible:ring-2 focus-visible:ring-ring',
-              index === current ? 'w-6 bg-primary/90' : 'w-1.5 bg-white/35 hover:bg-white/55'
-            )}
-          />
+            className="group flex h-11 w-11 shrink-0 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <span
+              aria-hidden
+              className={cn(
+                'h-1.5 rounded-full transition-all duration-normal',
+                index === current ? 'w-6 bg-primary/90' : 'w-1.5 bg-white/35 group-hover:bg-white/55'
+              )}
+            />
+          </button>
         ))}
       </div>
     </section>

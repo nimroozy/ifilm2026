@@ -120,6 +120,10 @@ export default function PlayerPage() {
     (location.state as { autoplay?: boolean } | null)?.autoplay
   );
 
+  useEffect(() => {
+    document.title = `${title} · iFilm`;
+  }, [title]);
+
   function goToEpisode(episodeId: number) {
     const qs = new URLSearchParams();
     if (seriesRef) qs.set('series', seriesRef);

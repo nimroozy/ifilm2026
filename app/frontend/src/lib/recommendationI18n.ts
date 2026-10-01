@@ -14,7 +14,8 @@ export function localizeRecommendationShelfTitle(
     case 'popular':
       return sections.popularNow || shelf.title;
     case 'new_releases':
-      return sections.recentlyAdded || shelf.title;
+      // Distinct from catalog "Recently Added" so home does not show two identical titles.
+      return sections.newReleases || sections.recentlyAdded || shelf.title;
     case 'top_rated':
       return sections.topRated || shelf.title;
     case 'because_you_watched': {

@@ -50,9 +50,16 @@ import {
   sortEpisodesByAirOrder,
 } from '@/lib/seriesDetailPlayback';
 
-function PageLoading() {
+function PageLoading({ label = 'Loading catalog' }: { label?: string }) {
   return (
-    <div className="container mx-auto px-4 pt-6 space-y-4" data-testid="browse-loading">
+    <div
+      className="container mx-auto px-4 pt-6 space-y-4"
+      data-testid="browse-loading"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <span className="sr-only">{label}</span>
       <Skeleton className="h-8 w-48" />
       <div className={mediaGridClass}>
         {Array.from({ length: 12 }).map((_, i) => (
@@ -64,10 +71,11 @@ function PageLoading() {
 }
 
 function PageError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const { t } = useLang();
   return (
-    <div className="min-h-[40vh] flex flex-col items-center justify-center gap-3" data-testid="browse-error">
+    <div className="min-h-[40vh] flex flex-col items-center justify-center gap-3" data-testid="browse-error" role="alert">
       <p className="text-muted-foreground">{message}</p>
-      <Button onClick={onRetry}>Retry</Button>
+      <Button onClick={onRetry}>{t.common.retry}</Button>
     </div>
   );
 }
@@ -145,6 +153,14 @@ export function MoviesPage({ audience = 'all' }: { audience?: 'all' | 'children'
     setSearchParams(params, { replace: true });
   }
 
+  const hasActiveFilters = Boolean(search.trim()) || genre !== 'all' || sort !== 'newest';
+
+  function clearFilters() {
+    setSearch('');
+    setSort('newest');
+    onGenreChange('all');
+  }
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -219,7 +235,11 @@ export function MoviesPage({ audience = 'all' }: { audience?: 'all' | 'children'
             />
           </div>
           <Select value={genre} onValueChange={onGenreChange}>
-            <SelectTrigger className="w-[140px] bg-card border-border" data-testid="movies-genre-filter">
+            <SelectTrigger
+              className="w-[140px] bg-card border-border"
+              data-testid="movies-genre-filter"
+              aria-label={t.browse.genreFilter}
+            >
               <SelectValue placeholder={t.common.filter} />
             </SelectTrigger>
             <SelectContent>
@@ -232,33 +252,61 @@ export function MoviesPage({ audience = 'all' }: { audience?: 'all' | 'children'
             </SelectContent>
           </Select>
           <Select value={sort} onValueChange={setSort}>
-            <SelectTrigger className="w-[140px] bg-card border-border">
+            <SelectTrigger
+              className="w-[140px] bg-card border-border"
+              data-testid="movies-sort-filter"
+              aria-label={t.browse.sortFilter}
+            >
               <SelectValue placeholder={t.common.sort} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="newest">Newest</SelectItem>
-              <SelectItem value="rating">Rating</SelectItem>
-              <SelectItem value="popular">Popular</SelectItem>
-              <SelectItem value="title">Title</SelectItem>
+              <SelectItem value="newest">{t.browse.sortNewest}</SelectItem>
+              <SelectItem value="rating">{t.browse.sortRating}</SelectItem>
+              <SelectItem value="popular">{t.browse.sortPopular}</SelectItem>
+              <SelectItem value="title">{t.browse.sortTitle}</SelectItem>
             </SelectContent>
           </Select>
           <div className="flex gap-1">
-            <Button variant={view === 'grid' ? 'default' : 'outline'} size="icon" onClick={() => setView('grid')}>
+            <Button
+              variant={view === 'grid' ? 'default' : 'outline'}
+              size="icon"
+              className="min-h-11 min-w-11"
+              onClick={() => setView('grid')}
+              aria-label={t.browse.gridView}
+              data-testid="movies-view-grid"
+            >
               <Grid className="h-4 w-4" />
             </Button>
-            <Button variant={view === 'list' ? 'default' : 'outline'} size="icon" onClick={() => setView('list')}>
+            <Button
+              variant={view === 'list' ? 'default' : 'outline'}
+              size="icon"
+              className="min-h-11 min-w-11"
+              onClick={() => setView('list')}
+              aria-label={t.browse.listView}
+              data-testid="movies-view-list"
+            >
               <List className="h-4 w-4" />
             </Button>
           </div>
         </div>
 
         {loading ? (
-          <PageLoading />
+          <PageLoading label={`${t.common.loading} ${isChildren ? t.nav.children : t.nav.movies}`} />
         ) : error ? (
           <PageError message={error} onRetry={load} />
         ) : items.length === 0 ? (
-          <div className="text-center py-20 text-muted-foreground">
+          <div className="text-center py-20 text-muted-foreground" data-testid="movies-no-results">
             <p className="text-lg">{t.search.noResults}</p>
+            {hasActiveFilters ? (
+              <Button
+                variant="secondary"
+                className="mt-4"
+                onClick={clearFilters}
+                data-testid="movies-clear-filters"
+              >
+                {t.browse.clearFilters}
+              </Button>
+            ) : null}
           </div>
         ) : view === 'grid' ? (
           <div className={mediaGridClass}>
@@ -367,7 +415,7 @@ export function SeriesPage() {
   }, [load]);
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen" data-testid="series-page">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
         <h1 className="text-2xl md:text-3xl font-serif font-bold text-foreground mb-6">{t.nav.series}</h1>
         <div className="flex flex-wrap items-center gap-3 mb-6">
@@ -381,7 +429,11 @@ export function SeriesPage() {
             />
           </div>
           <Select value={genre} onValueChange={setGenre}>
-            <SelectTrigger className="w-[140px] bg-card border-border">
+            <SelectTrigger
+              className="w-[140px] bg-card border-border"
+              data-testid="series-genre-filter"
+              aria-label={t.browse.genreFilter}
+            >
               <SelectValue placeholder={t.common.filter} />
             </SelectTrigger>
             <SelectContent>
@@ -396,12 +448,25 @@ export function SeriesPage() {
         </div>
 
         {loading ? (
-          <PageLoading />
+          <PageLoading label={`${t.common.loading} ${t.nav.series}`} />
         ) : error ? (
           <PageError message={error} onRetry={load} />
         ) : items.length === 0 ? (
-          <div className="text-center py-20 text-muted-foreground">
+          <div className="text-center py-20 text-muted-foreground" data-testid="series-no-results">
             <p className="text-lg">{t.search.noResults}</p>
+            {Boolean(search.trim()) || genre !== 'all' ? (
+              <Button
+                variant="secondary"
+                className="mt-4"
+                onClick={() => {
+                  setSearch('');
+                  setGenre('all');
+                }}
+                data-testid="series-clear-filters"
+              >
+                {t.browse.clearFilters}
+              </Button>
+            ) : null}
           </div>
         ) : (
           <div className={mediaGridClass}>
@@ -883,7 +948,8 @@ export function SearchPage() {
               size="icon"
               onClick={() => setQuery('')}
               className="absolute right-2 top-1/2 -translate-y-1/2"
-              aria-label="Clear search"
+              aria-label={t.search.clear}
+              data-testid="search-clear"
             >
               <X className="h-5 w-5" />
             </Button>
@@ -915,11 +981,12 @@ export function SearchPage() {
               {error}
             </p>
             <p className="text-xs text-muted-foreground">This is a search service error, not an empty result.</p>
-            <Button onClick={() => setReloadToken((value) => value + 1)}>Retry</Button>
+            <Button onClick={() => setReloadToken((value) => value + 1)}>{t.common.retry}</Button>
           </div>
         ) : results.length === 0 ? (
           <div className="py-20 text-center text-muted-foreground" data-testid="search-no-results">
             <p className="text-lg">{t.search.noResults}</p>
+            <p className="mt-2 text-sm">{t.search.emptyHint}</p>
           </div>
         ) : (
           <div

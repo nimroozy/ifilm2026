@@ -43,11 +43,13 @@ function renderHero(featured: CatalogMovie[]) {
 describe('HeroCarousel G1 manual navigation', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    window.localStorage.setItem('ifilm.locale', 'en');
   });
 
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
+    window.localStorage.setItem('ifilm.locale', 'en');
   });
 
   it('does not auto-advance slides (no timer)', () => {
@@ -82,6 +84,8 @@ describe('HeroCarousel G1 manual navigation', () => {
       movie({ id: 1, title: 'Logo Film', logoUrl: '/logo.png' }),
     ]);
     expect(screen.getByTestId('hero-title-logo')).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 1, name: 'Logo Film' })).toBeTruthy();
+    expect(screen.getByTestId('hero-title-logo')).toHaveAttribute('alt', '');
     expect(screen.queryByTestId('hero-title-text')).toBeNull();
 
     rerender(
@@ -97,15 +101,82 @@ describe('HeroCarousel G1 manual navigation', () => {
     expect(screen.queryByTestId('hero-title-logo')).toBeNull();
   });
 
+  it('gives every slide selector a mobile-sized touch target', () => {
+    renderHero([
+      movie({ id: 1, title: 'Alpha' }),
+      movie({ id: 2, title: 'Beta' }),
+    ]);
+    for (const tab of screen.getAllByRole('tab')) {
+      expect(tab).toHaveClass('h-11', 'w-11');
+    }
+  });
+
   it('shows My List control (watchlist when authenticated in mock mode)', () => {
     renderHero([movie({ id: 1, title: 'Alpha' })]);
     expect(screen.getAllByTestId('watchlist-toggle').length).toBeGreaterThan(0);
   });
 
-  it('keeps hero actions on one compact row for My List icon affordance', () => {
+  it('keeps hero actions wrappable so mobile RTL labels are not truncated', () => {
     renderHero([movie({ id: 1, title: 'Alpha' }), movie({ id: 2, title: 'Beta' })]);
-    expect(screen.getByTestId('hero-actions')).toBeTruthy();
-    expect(screen.getByTestId('hero-play')).toBeTruthy();
-    expect(screen.getByTestId('hero-more-info')).toBeTruthy();
+    const actions = screen.getByTestId('hero-actions');
+    expect(actions.className).toMatch(/flex-wrap/);
+    expect(screen.getByTestId('hero-play').querySelector('span')?.className || '').not.toMatch(
+      /\btruncate\b/
+    );
+    expect(screen.getByTestId('hero-more-info').querySelector('span')?.className || '').not.toMatch(
+      /\btruncate\b/
+    );
+  });
+
+  it('keeps synopsis block aligned to UI direction while isolating mixed-script text', () => {
+    window.localStorage.setItem('ifilm.locale', 'fa');
+    renderHero([movie({ id: 1, title: 'Alpha', description: 'English synopsis with فارسی' })]);
+    const synopsis = screen.getByTestId('hero-synopsis');
+    expect(synopsis).not.toHaveAttribute('dir', 'auto');
+    expect(synopsis.className).toMatch(/text-start/);
+    const isolated = synopsis.querySelector('[dir="auto"]');
+    expect(isolated).toBeTruthy();
+    expect(isolated).toHaveTextContent('English synopsis with فارسی');
+  });
+
+  it('localizes demo-clip CTA label', () => {
+    window.localStorage.setItem('ifilm.locale', 'fa');
+    renderHero([
+      movie({
+        id: 1,
+        title: 'Demo Film',
+        playable: false,
+        hasPlayablePackage: false,
+        hasDemoClip: true,
+      }),
+    ]);
+    expect(screen.getByTestId('hero-play')).toHaveTextContent('پخش کلیپ دمو');
+  });
+
+  it('localizes Coming Soon availability for FA and PS', () => {
+    window.localStorage.setItem('ifilm.locale', 'fa');
+    const { unmount } = renderHero([
+      movie({
+        id: 1,
+        title: 'Soon Film',
+        playable: false,
+        hasPlayablePackage: false,
+        hasDemoClip: false,
+      }),
+    ]);
+    expect(screen.getByTestId('hero-unavailable')).toHaveTextContent('به‌زودی');
+    unmount();
+
+    window.localStorage.setItem('ifilm.locale', 'ps');
+    renderHero([
+      movie({
+        id: 2,
+        title: 'Soon Film PS',
+        playable: false,
+        hasPlayablePackage: false,
+        hasDemoClip: false,
+      }),
+    ]);
+    expect(screen.getByTestId('hero-unavailable')).toHaveTextContent('ژر راځي');
   });
 });

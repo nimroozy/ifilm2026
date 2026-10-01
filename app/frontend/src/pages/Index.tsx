@@ -37,8 +37,10 @@ import { cn } from '@/lib/utils';
 type HomeCatalog = Awaited<ReturnType<typeof fetchHomeCatalog>>;
 
 function HomeLoading() {
+  const { t } = useLang();
   return (
-    <div className="space-y-8" data-testid="home-loading" aria-busy="true">
+    <div className="space-y-8" data-testid="home-loading" role="status" aria-live="polite" aria-busy="true">
+      <span className="sr-only">{t.common?.loading ?? 'Loading'} iFilm</span>
       <Skeleton
         className="ifilm-skeleton h-[min(62vh,640px)] w-full rounded-none md:h-[min(78vh,820px)]"
         data-testid="home-hero-skeleton"
@@ -69,16 +71,17 @@ function HomeLoading() {
 }
 
 function HomeError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const { t } = useLang();
   const safe =
     message.includes('status code') || message.toLowerCase().includes('network')
-      ? 'Unable to load the catalog right now. Check your connection and try again.'
+      ? t.common.loadFailed
       : message;
   return (
     <div className="min-h-[50vh] flex flex-col items-center justify-center gap-4 px-4" data-testid="home-error">
       <p className="text-muted-foreground text-center" role="alert">
         {safe}
       </p>
-      <Button onClick={onRetry}>Retry</Button>
+      <Button onClick={onRetry}>{t.common.retry}</Button>
     </div>
   );
 }
@@ -273,7 +276,7 @@ function ContinueWatchingRow({
         <div className="flex items-center gap-3 text-sm text-muted-foreground">
           <span role="alert">{error}</span>
           <Button variant="outline" size="sm" onClick={() => setReload((value) => value + 1)}>
-            Retry
+            {t.common.retry}
           </Button>
         </div>
       </section>
@@ -624,6 +627,11 @@ export default function HomePage() {
 
   const usedIds = new Set<string>();
   const hasRecShelves = Boolean(recommendations?.shelves?.some((s) => s.shelf_type !== 'editorial_collections' && (s.items?.length ?? 0) > 0));
+  const recHasNewReleases = Boolean(
+    recommendations?.shelves?.some(
+      (s) => s.shelf_type === 'new_releases' && (s.items?.length ?? 0) > 0
+    )
+  );
 
   return (
     <div className="pb-8">
@@ -654,7 +662,7 @@ export default function HomePage() {
             {collectionShelves.map(({ collection, items }) => (
               <ContentRow key={`collection-${collection.id}`} title={collection.title} items={items} />
             ))}
-            {hasRecShelves ? (
+            {hasRecShelves && !recHasNewReleases ? (
               <ContentRow title={t.sections.recentlyAdded} items={newReleases} />
             ) : null}
             <ContentRow title={t.sections.popularMovies} items={data.popular} />
@@ -662,9 +670,9 @@ export default function HomePage() {
             <ContentRow title={t.sections.trending} items={data.trending} />
             <ContentRow title={t.sections.topRated || 'Top Rated'} items={topRated} />
             <ContentRow title={t.sections.action} items={data.actionMovies} />
-            <ContentRow title="Drama" items={dramaMovies} />
+            <ContentRow title={t.sections.drama} items={dramaMovies} />
             <ContentRow title={t.sections.comedy} items={data.comedyMovies} />
-            <ContentRow title="Animation & Family" items={animationFamily} />
+            <ContentRow title={t.sections.animationFamily} items={animationFamily} />
             <ContentRow title={t.sections.afghanMovies} items={data.afghanMovies} />
             <ContentRow
               title={t.sections.persianDubbed}

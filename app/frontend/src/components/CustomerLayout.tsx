@@ -26,7 +26,7 @@ import {
   navItemById,
   type CustomerNavId,
 } from '@/components/customer/navConfig';
-import { surfaces } from '@/design-system';
+import { surfaces } from '@/design-system/tokens';
 import { cn } from '@/lib/utils';
 
 // ============ LANGUAGE CONTEXT ============

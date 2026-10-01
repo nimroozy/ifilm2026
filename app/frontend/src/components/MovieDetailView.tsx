@@ -223,7 +223,10 @@ export function MovieDetailView({
     });
   };
 
-  const unavailableLabel = movieUnavailableLabel({ hasTrailer, published });
+  const unavailableLabel = movieUnavailableLabel(
+    { hasTrailer, published },
+    { coming_soon: t.movie.comingSoon, unavailable: t.movie.unavailable },
+  );
   const progressPercent =
     watchState?.kind === 'continue' ? Math.round(watchState.progress.progress_percent || 0) : null;
 
@@ -359,11 +362,11 @@ export function MovieDetailView({
                         variant="play"
                         className="gap-2"
                         onClick={() => goPlay(false)}
-                        aria-label={`Play demo clip for ${movie.title}`}
+                        aria-label={`${t.hero.playDemoClip} — ${movie.title}`}
                         data-testid="movie-demo-button"
                       >
                         <Play className="h-5 w-5 fill-current" />
-                        Play Demo Clip
+                        {t.hero.playDemoClip}
                       </Button>
                     ) : null}
                     <WatchlistButton movieId={movie.id} />
@@ -391,8 +394,8 @@ export function MovieDetailView({
                       className="h-11 w-11 shrink-0"
                       onClick={() => void onShare()}
                       data-testid="movie-share-button"
-                      aria-label={shared ? 'Copied' : t.movie.share}
-                      title={shared ? 'Copied' : t.movie.share}
+                      aria-label={shared ? t.movie.copied : t.movie.share}
+                      title={shared ? t.movie.copied : t.movie.share}
                     >
                       {shared ? <Check className="h-5 w-5 text-success" /> : <Share2 className="h-5 w-5" />}
                     </Button>
@@ -441,8 +444,16 @@ export function MovieDetailView({
                 {/* Overview in hero on desktop; mobile shows again below for order */}
                 {movie.description ? (
                   <div className="hidden md:block" data-testid="movie-hero-overview">
-                    <p className={cn(typography.bodySm, 'max-w-xl', !overviewExpanded && 'line-clamp-3')}>
-                      {movie.description}
+                    <p
+                      className={cn(
+                        typography.bodySm,
+                        'max-w-xl text-start',
+                        !overviewExpanded && 'line-clamp-3',
+                      )}
+                    >
+                      <span dir="auto" className="[unicode-bidi:isolate]">
+                        {movie.description}
+                      </span>
                     </p>
                     {movie.description.length > 160 ? (
                       <button
@@ -450,7 +461,7 @@ export function MovieDetailView({
                         className="mt-1 text-sm font-medium text-primary"
                         onClick={() => setOverviewExpanded((v) => !v)}
                       >
-                        {overviewExpanded ? 'Show less' : 'More'}
+                        {overviewExpanded ? t.movie.showLess : t.movie.more}
                       </button>
                     ) : null}
                   </div>
@@ -460,7 +471,7 @@ export function MovieDetailView({
                   <div
                     className="flex flex-wrap items-center gap-2"
                     data-testid="movie-trailer-controls"
-                    aria-label="Trailer controls"
+                    aria-label={t.movie.trailer}
                   >
                     <Button
                       size="sm"
@@ -470,7 +481,7 @@ export function MovieDetailView({
                       data-testid="trailer-mute-toggle"
                     >
                       {trailerMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-                      {trailerMuted ? 'Unmute' : 'Mute'}
+                      {trailerMuted ? t.movie.unmute : t.movie.mute}
                     </Button>
                     <Button
                       size="sm"
@@ -480,7 +491,7 @@ export function MovieDetailView({
                       data-testid="trailer-pause-toggle"
                     >
                       <Pause className="h-4 w-4" />
-                      {trailerPaused ? 'Resume' : 'Pause'}
+                      {trailerPaused ? t.movie.resumeTrailer : t.movie.pause}
                     </Button>
                     <Button
                       size="sm"
@@ -490,7 +501,7 @@ export function MovieDetailView({
                       data-testid="trailer-return-backdrop"
                     >
                       <ImageIcon className="h-4 w-4" />
-                      Show backdrop
+                      {t.movie.showBackdrop}
                     </Button>
                   </div>
                 ) : null}
@@ -518,11 +529,13 @@ export function MovieDetailView({
             <p
               className={cn(
                 typography.body,
-                'max-w-3xl text-foreground/90',
+                'max-w-3xl text-start text-foreground/90',
                 !overviewExpanded && 'line-clamp-5'
               )}
             >
-              {movie.description}
+              <span dir="auto" className="[unicode-bidi:isolate]">
+                {movie.description}
+              </span>
             </p>
             {movie.description.length > 160 ? (
               <button
@@ -531,7 +544,7 @@ export function MovieDetailView({
                 onClick={() => setOverviewExpanded((v) => !v)}
                 data-testid="movie-overview-more-mobile"
               >
-                {overviewExpanded ? 'Show less' : 'More'}
+                {overviewExpanded ? t.movie.showLess : t.movie.more}
               </button>
             ) : null}
           </section>
@@ -544,7 +557,11 @@ export function MovieDetailView({
             data-testid="movie-about-desktop"
           >
             <SectionHeader title={t.movie.overview} className="mb-3 px-0" />
-            <p className={cn(typography.body, 'max-w-3xl text-foreground/90')}>{movie.description}</p>
+            <p className={cn(typography.body, 'max-w-3xl text-start text-foreground/90')}>
+              <span dir="auto" className="[unicode-bidi:isolate]">
+                {movie.description}
+              </span>
+            </p>
           </section>
         ) : null}
 
