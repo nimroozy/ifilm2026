@@ -105,12 +105,27 @@ function isBenignConsole(text) {
   return false;
 }
 
+function isBenignFirstPartyUrl(url) {
+  try {
+    const path = new URL(url).pathname;
+    return (
+      /\/favicon\.ico$/i.test(path) ||
+      /\/robots\.txt$/i.test(path) ||
+      /apple-touch-icon/i.test(path) ||
+      /\/manifest\.webmanifest$/i.test(path)
+    );
+  } catch {
+    return false;
+  }
+}
+
 function emptyBag() {
   return {
     pageErrors: [],
     consoleErrors: [],
     failedRequests: [],
     http5xx: [],
+    http404: [],
     notes: [],
   };
 }
@@ -141,6 +156,7 @@ function attachCollectors(page, bag) {
   });
   page.on('requestfailed', (req) => {
     if (!isFirstParty(req.url())) return;
+    if (isBenignFirstPartyUrl(req.url())) return;
     const failure = req.failure();
     bag.failedRequests.push({
       url: req.url(),
@@ -149,8 +165,11 @@ function attachCollectors(page, bag) {
   });
   page.on('response', (res) => {
     if (!isFirstParty(res.url())) return;
+    if (isBenignFirstPartyUrl(res.url())) return;
     if (res.status() >= 500) {
       bag.http5xx.push({ url: res.url(), status: res.status() });
+    } else if (res.status() === 404) {
+      bag.http404.push({ url: res.url(), status: 404 });
     }
   });
 }
@@ -161,11 +180,16 @@ function attachCollectors(page, bag) {
  * NEVER unconditionally sets ok=true.
  */
 function finalizeCase(result, bag, { strict = STRICT_API, ignoreFailedPred = null } = {}) {
+  // Prefer URL-bearing 404 records over opaque Chromium "status of 404" console lines.
+  const hasUrl404 = (bag.http404 || []).length > 0;
   let unexpected = [
     ...bag.pageErrors.map((e) => `pageerror:${e}`),
-    ...bag.consoleErrors.map((e) => `console:${e}`),
+    ...bag.consoleErrors
+      .filter((e) => !(hasUrl404 && /status of 404/i.test(e)))
+      .map((e) => `console:${e}`),
     ...bag.failedRequests.map((e) => `requestfailed:${e.url}:${e.error}`),
     ...bag.http5xx.map((e) => `http5xx:${e.status}:${e.url}`),
+    ...(bag.http404 || []).map((e) => `http404:${e.url}`),
   ];
   if (typeof ignoreFailedPred === 'function') {
     unexpected = unexpected.filter((item) => !ignoreFailedPred(item));
@@ -256,7 +280,8 @@ async function assertNoOverflow(page) {
 
 /**
  * Wait until no running fade-in / lift-in / slide-up animations on the subtree
- * and computed opacity of the root (and ancestors) is >= 0.99.
+ * and computed opacity of the root (and ancestors) is >= 0.999.
+ * Then wait two animation frames so the final paint is committed before capture.
  */
 async function waitForEntranceSettled(page, selector) {
   await page.waitForFunction(
@@ -277,7 +302,7 @@ async function waitForEntranceSettled(page, selector) {
       let el = root;
       while (el && el.nodeType === 1) {
         const op = parseFloat(getComputedStyle(el).opacity);
-        if (!Number.isFinite(op) || op < 0.99) return false;
+        if (!Number.isFinite(op) || op < 0.999) return false;
         if (el === document.documentElement) break;
         el = el.parentElement;
       }
@@ -286,9 +311,15 @@ async function waitForEntranceSettled(page, selector) {
     { sel: selector, names: ENTRANCE_ANIM_NAMES },
     { timeout: PAGE_TIMEOUT_MS }
   );
+  await page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(resolve));
+      })
+  );
 }
 
-/** Assert computed opacity of element and ancestors is >= 0.99. */
+/** Assert computed opacity of element and ancestors is >= 0.999. */
 async function assertReadableForeground(page, selector) {
   const info = await page.evaluate((sel) => {
     const root = document.querySelector(sel);
@@ -298,7 +329,7 @@ async function assertReadableForeground(page, selector) {
     while (el && el.nodeType === 1) {
       const op = parseFloat(getComputedStyle(el).opacity);
       chain.push({ tag: el.tagName, testid: el.getAttribute?.('data-testid'), opacity: op });
-      if (!Number.isFinite(op) || op < 0.99) {
+      if (!Number.isFinite(op) || op < 0.999) {
         return { ok: false, reason: `opacity=${op}`, chain };
       }
       if (el === document.documentElement) break;
@@ -1033,19 +1064,22 @@ async function runBrowseRetry(browser, report) {
     result.assertions.push('error_ui_then_retry_ok');
     finalizeCase(result, bag, {
       strict: STRICT_API,
+      // Intentional abort of /api/movies surfaces as requestfailed and/or console net::ERR_FAILED.
       ignoreFailedPred: (item) =>
-        item.startsWith('requestfailed:') &&
-        /\/api\/movies/i.test(item) &&
-        /(aborted|failed|net::ERR_FAILED|NS_ERROR_FAILURE)/i.test(item),
+        (item.startsWith('requestfailed:') &&
+          /\/api\/movies/i.test(item) &&
+          /(aborted|failed|net::ERR_FAILED|NS_ERROR_FAILURE)/i.test(item)) ||
+        (item.startsWith('console:') && /net::ERR_FAILED/i.test(item)),
     });
   } catch (err) {
     result.error = String(err?.message || err);
     finalizeCase(result, bag, {
       strict: STRICT_API,
       ignoreFailedPred: (item) =>
-        item.startsWith('requestfailed:') &&
-        /\/api\/movies/i.test(item) &&
-        /(aborted|failed|net::ERR_FAILED|NS_ERROR_FAILURE)/i.test(item),
+        (item.startsWith('requestfailed:') &&
+          /\/api\/movies/i.test(item) &&
+          /(aborted|failed|net::ERR_FAILED|NS_ERROR_FAILURE)/i.test(item)) ||
+        (item.startsWith('console:') && /net::ERR_FAILED/i.test(item)),
     });
   } finally {
     await context.close().catch(() => {});
@@ -1630,6 +1664,11 @@ async function runPlayback(browser, report) {
       return;
     }
     result.assertions.push(`currentTime_advanced:${t0}->${t1}`);
+    // Drop collectors from the first session before reload/start-over: revoked
+    // stream token 404s are expected and must not fail an otherwise green run.
+    bag.http404.length = 0;
+    bag.consoleErrors = bag.consoleErrors.filter((e) => !/status of 404/i.test(e));
+    bag.failedRequests = bag.failedRequests.filter((e) => !/\/api\/stream\//i.test(e.url || ''));
 
     // Wait past WATCH_PROGRESS_MIN_SECONDS.
     const waitMs = Math.max(0, (minSeconds + 1) * 1000);
@@ -1642,6 +1681,10 @@ async function runPlayback(browser, report) {
     }
     const savedAt = await video.evaluate((v) => v.currentTime);
     result.assertions.push(`watched_past_min:${savedAt}>=${minSeconds}`);
+    // Reset stream noise before resume/start-over exercises a new session.
+    bag.http404.length = 0;
+    bag.consoleErrors = bag.consoleErrors.filter((e) => !/status of 404/i.test(e));
+    bag.failedRequests = bag.failedRequests.filter((e) => !/\/api\/stream\//i.test(e.url || ''));
 
     // Reload player and assert resume near saved position OR resume dialog.
     await page.reload({ waitUntil: 'domcontentloaded', timeout: PAGE_TIMEOUT_MS });
@@ -1653,17 +1696,29 @@ async function runPlayback(browser, report) {
     if (await page.locator('[data-testid="resume-dialog"]').isVisible().catch(() => false)) {
       result.assertions.push('resume_dialog_shown');
       await page.locator('[data-testid="resume-continue"]').click();
-      resumed = true;
-    } else {
       await page.waitForTimeout(1500);
+      const afterDialog = await page.locator('video').evaluate((v) => v.currentTime);
+      // After Continue, position should be near saved (not near zero).
+      if (afterDialog >= Math.max(1, savedAt - 20) && afterDialog > 1) {
+        result.assertions.push(`resume_near_saved_after_dialog:${afterDialog}~${savedAt}`);
+        resumed = true;
+      } else {
+        throw new Error(`resume dialog Continue left currentTime=${afterDialog}, saved=${savedAt}`);
+      }
+    } else {
+      await page.waitForTimeout(2000);
       const after = await page.locator('video').evaluate((v) => v.currentTime);
-      if (Math.abs(after - savedAt) <= Math.max(15, minSeconds) || after >= Math.max(1, savedAt - 15)) {
+      // Require a real near-resume: within 20s of saved and not stuck at ~0 when saved>>0.
+      if (savedAt >= 3 && after >= Math.max(1, savedAt - 20) && Math.abs(after - savedAt) <= 20) {
         result.assertions.push(`resume_near_saved:${after}~${savedAt}`);
+        resumed = true;
+      } else if (savedAt < 3 && after <= savedAt + 5) {
+        result.assertions.push(`resume_early_position:${after}~${savedAt}`);
         resumed = true;
       }
     }
     if (!resumed) {
-      result.assertions.push('resume_not_detected_continuing');
+      throw new Error(`resume not detected near saved position (saved=${savedAt})`);
     }
 
     // Start Over from beginning if control exists.
@@ -1671,16 +1726,34 @@ async function runPlayback(browser, report) {
     if ((await startOverCtrl.count()) > 0) {
       // Reveal controls
       await page.mouse.move(400, 400);
-      await startOverCtrl.first().click().catch(() => {});
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(200);
+      await startOverCtrl.first().click();
+      await page.waitForTimeout(800);
       const at = await page.locator('video').evaluate((v) => v.currentTime);
       result.assertions.push(`start_over_time:${at}`);
+      if (at > 2.5) {
+        throw new Error(`Start Over did not reset near beginning (currentTime=${at})`);
+      }
+    } else if (await page.locator('[data-testid="resume-dialog"]').isVisible().catch(() => false)) {
+      await page.locator('[data-testid="resume-start-over"]').click();
+      await page.waitForTimeout(800);
+      const at = await page.locator('video').evaluate((v) => v.currentTime);
+      result.assertions.push(`start_over_from_dialog:${at}`);
+      if (at > 2.5) {
+        throw new Error(`Start Over from dialog did not reset near beginning (currentTime=${at})`);
+      }
     } else {
       result.assertions.push('start_over_control_absent');
     }
 
     result.status = 'PASS';
-    finalizeCase(result, bag, { strict: STRICT_API });
+    finalizeCase(result, bag, {
+      strict: STRICT_API,
+      // After progress is saved, session reload can 404 prior stream tokens.
+      ignoreFailedPred: (item) =>
+        (item.startsWith('http404:') || item.startsWith('requestfailed:')) &&
+        /\/api\/stream\//i.test(item),
+    });
   } catch (err) {
     result.status = 'FAIL';
     result.error = String(err?.message || err);
