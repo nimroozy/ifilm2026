@@ -135,7 +135,7 @@ docker compose config | grep -A6 ifilm_media_packages
 ## Migration
 
 ```bash
-alembic upgrade head   # 007_streaming_service
+alembic upgrade head   # PostgreSQL; streaming tables are 007_streaming_service, current head is later
 ```
 
 Round-trip: `006 → 007 → 006 → 007`.

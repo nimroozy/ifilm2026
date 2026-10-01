@@ -7,7 +7,7 @@ Official repository for the iFilm streaming platform.
 | Path | Description |
 | --- | --- |
 | [`app/frontend`](./app/frontend) | Customer + admin UI (Vite / React) |
-| [`app/backend`](./app/backend) | FastAPI backend (catalog + local media pipeline) |
+| [`app/backend`](./app/backend) | FastAPI backend (catalog, media pipeline, recommendations) |
 
 ## Catalog administration
 
@@ -46,9 +46,25 @@ Frontend data mode:
 
 **Important:** The full `MEDIA_ROOT` is **not** publicly mounted. Anonymous `/media/**` access was removed. HLS packages are delivered only via protected `/api/stream/{token}/…` routes. Optional artwork may be served from `ARTWORK_ROOT` at `/artwork`.
 
-Alembic head: `007_streaming_service`.
+Schema migrations target **PostgreSQL**. Current Alembic head: `029_cdn_security_hardening_v1`. `alembic upgrade head` is a PostgreSQL operation; the unit-test suite does not use that migration chain.
 
-Uploads, ffprobe processing, local HLS encoding, protected streaming, and the adaptive customer HLS video player are implemented. Persistent watch history, CDN, DRM, and payments remain deferred.
+Uploads, ffprobe, FFmpeg HLS encoding (H.264/AAC ladder on the media-processing worker), protected streaming, and the adaptive customer player are implemented. Those flags default off. See the linked docs before treating any of them as production operations.
+
+## Recommendations
+
+Deterministic recommendations and What-to-Watch. No ML or external AI. Authenticated shelves use watch history, watchlist, and catalog features. Anonymous home uses popular, new-release, and top-rated shelves.
+
+- [docs/recommendations-v1.md](./docs/recommendations-v1.md)
+
+## CDN and storage
+
+Implemented behind flags that default off. Full movies stay on the authorized streaming path.
+
+- Hybrid CDN / object storage and branch-cache phases: [docs/media/HYBRID_CDN_FOUNDATION.md](./docs/media/HYBRID_CDN_FOUNDATION.md)
+- Admin CDN management (R2 settings, nodes, prefix routes): [docs/media/CDN_MANAGEMENT_V1.md](./docs/media/CDN_MANAGEMENT_V1.md)
+- Optional public artwork and trailer publishing to Cloudflare R2: [docs/media/ARTWORK_CDN_R2.md](./docs/media/ARTWORK_CDN_R2.md)
+
+Legacy `ENABLE_CDN_SYNC` is a separate experimental flag and stays off in production.
 
 ## Security and readiness
 
@@ -66,7 +82,7 @@ cd app/backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
 cp .env.example .env
-# Set DATABASE_URL and JWT_SECRET before starting.
+# DATABASE_URL must be PostgreSQL. Set JWT_SECRET before starting.
 alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
@@ -89,9 +105,16 @@ pnpm dev
 
 The Vite dev server proxies `/api` to `BACKEND_PORT` (default `8000`).
 
-## Explicitly deferred
+## Still out of scope
 
-Cloudflare Stream / CDN / R2 / S3, DRM, live SAS Radius entitlement rules, customer player integration, binary artwork upload productization, watch-history sync, recommendations, payments/subscriptions, and production deployment hardening remain out of scope for the current local media phases.
+These are not implemented as product features:
+
+- DRM
+- Payments and subscriptions
+- Cloudflare Stream as the movie playback backend
+- Live SAS Radius entitlement verification (fixture/mock login exists; live mode is unverified)
+
+CDN control plane, optional R2 artwork, watch history, recommendations, and the customer player do exist. They are not a production sign-off. See [docs/backend/PRODUCTION_READINESS.md](./docs/backend/PRODUCTION_READINESS.md).
 
 ## CI
 
