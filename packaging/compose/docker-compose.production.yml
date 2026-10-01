@@ -85,7 +85,9 @@ services:
       ENABLE_CDN_SYNC: "false"
       ENABLE_OBJECT_STORAGE: "false"
       ENABLE_R2_HOT_TIER: "false"
-      ENABLE_ARTWORK_CDN_SYNC: "false"
+      # Operator-configurable host kill-switch (default OFF). Do not hard-code false —
+      # production Admin artwork CDN stays blocked until env is explicitly true.
+      ENABLE_ARTWORK_CDN_SYNC: ${ENABLE_ARTWORK_CDN_SYNC:-false}
       ENABLE_ORIGIN_PACKAGE_SYNC: "false"
       ENABLE_ORIGIN_HLS_READ_FALLBACK: "false"
       ENABLE_BRANCH_CACHE_CONTROL_PLANE: "false"

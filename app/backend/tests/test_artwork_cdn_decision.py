@@ -233,6 +233,40 @@ def test_h_no_sdk_when_effective_false(db_session, encryption_key, tmp_path: Pat
     store.put_file.assert_not_called()
 
 
+def test_settings_env_unset_defaults_host_capability_false(monkeypatch):
+    monkeypatch.delenv("ENABLE_ARTWORK_CDN_SYNC", raising=False)
+    get_settings.cache_clear()
+    try:
+        settings = Settings(
+            app_env="test",
+            database_url="sqlite://",
+            jwt_secret="unit-test-jwt-secret-value-32chars-min",
+        )
+        assert settings.enable_artwork_cdn_sync is False
+    finally:
+        get_settings.cache_clear()
+
+
+def test_settings_env_false_host_capability_false(monkeypatch):
+    monkeypatch.setenv("ENABLE_ARTWORK_CDN_SYNC", "false")
+    get_settings.cache_clear()
+    try:
+        settings = get_settings()
+        assert settings.enable_artwork_cdn_sync is False
+    finally:
+        get_settings.cache_clear()
+
+
+def test_settings_env_true_host_capability_true(monkeypatch):
+    monkeypatch.setenv("ENABLE_ARTWORK_CDN_SYNC", "true")
+    get_settings.cache_clear()
+    try:
+        settings = get_settings()
+        assert settings.enable_artwork_cdn_sync is True
+    finally:
+        get_settings.cache_clear()
+
+
 def test_get_r2_reports_effective_status(client, admin_headers, encryption_key, monkeypatch):
     monkeypatch.setenv("ENABLE_ARTWORK_CDN_SYNC", "false")
     get_settings.cache_clear()
@@ -259,3 +293,35 @@ def test_get_r2_reports_effective_status(client, admin_headers, encryption_key, 
     assert body["artwork_cdn_effective"] is False
     assert body["artwork_publishing_status"] == "blocked_by_server_capability"
     get_settings.cache_clear()
+
+
+def test_get_r2_host_true_admin_true_effective_true(
+    client, admin_headers, encryption_key, monkeypatch
+):
+    monkeypatch.setenv("ENABLE_ARTWORK_CDN_SYNC", "true")
+    get_settings.cache_clear()
+    try:
+        put = client.put(
+            "/api/admin/cdn-management/r2",
+            headers=admin_headers,
+            json={
+                "enabled": False,  # private/hot-tier independent of artwork
+                "provider": "cloudflare_r2",
+                "account_id": "acct",
+                "bucket": "ifilm-art",
+                "region": "auto",
+                "public_base_url": "https://cdn.example.com",
+                "artwork_cdn_enabled": True,
+                "access_key_id": "k",
+                "secret_access_key": "s",
+            },
+        )
+        assert put.status_code == 200, put.text
+        body = put.json()
+        assert body["artwork_cdn_requested"] is True
+        assert body["artwork_cdn_host_capability"] is True
+        assert body["artwork_cdn_effective"] is True
+        assert body["artwork_publishing_status"] == "active"
+        assert body.get("enabled") is False
+    finally:
+        get_settings.cache_clear()
