@@ -59,6 +59,7 @@ __all__ = [
     "MediaTrack",
     "Movie",
     "MovieCastCredit",
+    "RemoteMediaImport",
     "Season",
     "Series",
     "SeriesCastCredit",
