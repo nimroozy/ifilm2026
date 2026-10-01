@@ -12,10 +12,10 @@ importers:
         specifier: ^3.9.0
         version: 3.10.0(react-hook-form@7.83.0(react@18.3.1))
       '@metagptx/vite-plugin-source-locator':
-        specifier: latest
+        specifier: 0.0.19
         version: 0.0.19(rollup@4.62.3)(vite@5.4.21(@types/node@22.20.1)(terser@5.49.0))
       '@metagptx/web-sdk':
-        specifier: latest
+        specifier: 0.0.77
         version: 0.0.77(@babel/parser@7.29.7)(@babel/traverse@7.29.7)(@babel/types@7.29.7)(eslint@9.39.5(jiti@1.21.7))(prettier@3.9.6)(vite@5.4.21(@types/node@22.20.1)(terser@5.49.0))
       '@playwright/mcp':
         specifier: ^0.0.36
@@ -105,8 +105,8 @@ importers:
         specifier: ^5.56.2
         version: 5.101.4(react@18.3.1)
       axios:
-        specifier: 1.6.0
-        version: 1.6.0
+        specifier: 1.19.0
+        version: 1.19.0
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -1971,9 +1971,6 @@ packages:
   axios@1.19.0:
     resolution: {integrity: sha512-ht/iuYZXEjFxLH/Hkezgd7m6JKlHHXEUSneaDz8uZe1Gj5QZtCnpyDsckvAiEnT89OEbCLmnte4R4sn7P0EKFw==}
 
-  axios@1.6.0:
-    resolution: {integrity: sha512-EZ1DYihju9pwVB+jg67ogm+Tmqc6JmhamRN6I4Zt8DfZu5lbcQGw3ozH9lFejSJgs/ibaef3A9PMXPLeefFGJg==}
-
   balanced-match@1.0.2:
     resolution: {integrity: sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==}
 
@@ -3162,9 +3159,6 @@ packages:
   proxy-addr@2.0.7:
     resolution: {integrity: sha512-llQsMLSUDUPT44jdrU/O37qlnifitDP+ZwrmmZcoSKyLKvtZxpyV0n2/bD/N4tBAAZ/gJEdZU7KMraoK1+XYAg==}
     engines: {node: '>= 0.10'}
-
-  proxy-from-env@1.1.0:
-    resolution: {integrity: sha512-D+zkORCbA9f1tdWRK0RaCR3GPv50cMxcrz4X8k5LTSUD1Dkw47mKJEZQNunItRTkWwgtaUSo1RVFRIG9ZXiFYg==}
 
   proxy-from-env@2.1.0:
     resolution: {integrity: sha512-cJ+oHTW1VAEa8cJslgmUZrc+sjRKgAKl3Zyse6+PV38hZe/V6Z14TbCuXcan9F9ghlz4QrFr2c92TNF82UkYHA==}
@@ -5438,14 +5432,6 @@ snapshots:
       - debug
       - supports-color
 
-  axios@1.6.0:
-    dependencies:
-      follow-redirects: 1.16.0
-      form-data: 4.0.6
-      proxy-from-env: 1.1.0
-    transitivePeerDependencies:
-      - debug
-
   balanced-match@1.0.2: {}
 
   balanced-match@4.0.4: {}
@@ -6587,8 +6573,6 @@ snapshots:
     dependencies:
       forwarded: 0.2.0
       ipaddr.js: 1.9.1
-
-  proxy-from-env@1.1.0: {}
 
   proxy-from-env@2.1.0: {}
 
